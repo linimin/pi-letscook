@@ -7,10 +7,10 @@
 ### Changed
 
 - relaxed the pre-`/cook` ordinary-chat boundary so the primary agent can keep discussing and refining requirements before explicit `/cook` instead of switching into a hard handoff-only refusal mode as soon as workflow-worthiness is detected
-- kept `/cook` as the only explicit workflow boundary, while teaching the pre-`/cook` prompt surfaces to recommend `/cook` advisory-first and only emit implementation-ready capsules once the first bounded slice is concrete enough
-- made fresh explicit `/cook` handoffs reusable from recent ordinary-chat discussion instead of requiring the immediately preceding turn, so Cancel can return users cleanly to ordinary discussion before they rerun `/cook`
-- kept bare `/cook` startup and done-workflow next-round entry fail-closed on missing or non-startable explicit handoffs, while active workflows still resume from canonical `.agent/**` state unless a fresh explicit handoff proposes replacement
-- updated public parity and shipped package contents so the tracked `.agent` contract files are included in package tarballs and packaged smoke/release verification can scaffold canonical state truthfully
+- kept `/cook` as the only explicit workflow boundary, while moving default startup and done-workflow next-round synthesis to bare `/cook` from recent ordinary-chat discussion behind the existing **Start** / **Cancel** approval gate
+- kept pre-`/cook` previews or `cook_handoff` capsules opt-in only, non-canonical, and advisory until the user explicitly runs `/cook`; bare `/cook` no longer depends on a default prebuilt capsule for new-workflow startup
+- kept active workflows resuming from canonical `.agent/**` state unless a fresh explicit handoff proposes a replacement, so discussion-only context does not silently rewrite an in-progress workflow
+- updated public parity and packaged release verification so README/help/changelog/release-check all describe and gate the shipped mixed model truthfully, while still packaging the tracked `.agent` contract files
 
 ## 0.1.58
 

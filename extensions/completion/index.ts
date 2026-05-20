@@ -209,7 +209,7 @@ function maybeWriteTestSnapshot(targetPath: string | undefined, content: string)
 
 const COOK_MAIN_CHAT_RERUN_GUIDANCE = "Discuss changes in the main chat and rerun /cook.";
 const COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL =
-	"/cook failed closed because recent discussion did not produce a clear execution-ready startup brief with Mission/Scope/Constraints/Acceptance for concrete repo changes. Clarify the concrete repo changes in the main chat and rerun /cook.";
+	"/cook failed closed because recent discussion did not produce a clear execution-ready startup brief for bare /cook with Mission/Scope/Constraints/Acceptance for concrete repo changes. Clarify the concrete repo changes in the main chat and rerun /cook; canonical workflow state is still only written after Start.";
 
 function isWorkflowDone(snapshot: CompletionStateSnapshot | undefined): boolean {
 	return asString(snapshot?.state?.continuation_policy) === "done";
@@ -929,7 +929,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: derive a startup brief from recent discussion for new-workflow or next-round entry, resume the current workflow from canonical state, or confirm an explicit active-workflow replacement",
+			description: "/cook workflow: synthesize an approval-gated startup brief from recent discussion for new-workflow or next-round entry, resume the current workflow from canonical state, or confirm an explicit active-workflow replacement",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,
