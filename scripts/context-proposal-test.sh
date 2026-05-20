@@ -1554,9 +1554,87 @@ output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
 assert not snapshot.exists(), 'fresh non-startable handoff should not emit a startup proposal snapshot'
 assert not Path('.agent').exists(), 'fresh non-startable handoff should fail closed without writing canonical state'
 assert 'fresh explicit primary-agent handoff exists' in output, 'fresh non-startable handoff should explain that the explicit capsule blocked startup'
-assert 'acceptance is not anchored to concrete repo changes' in output, 'fresh non-startable handoff should explain the workflow-only acceptance failure'
+assert 'acceptance is not anchored to concrete repo changes or verification' in output, 'fresh non-startable handoff should explain the workflow-only acceptance failure'
 assert 'implementation_surfaces is empty' in output, 'fresh non-startable handoff should explain the missing implementation_surfaces requirement'
 assert 'verification_commands is empty' in output, 'fresh non-startable handoff should explain the missing verification_commands requirement'
+PY
+
+# Fresh explicit handoff with complete first-slice fields but vague acceptance: /cook should still fail closed
+# with the dedicated explicit-handoff message instead of bootstrapping canonical state.
+HANDOFF_ROOT_VAGUE_ACCEPTANCE="$TMPDIR/handoff-root-vague-acceptance"
+mkdir -p "$HANDOFF_ROOT_VAGUE_ACCEPTANCE"
+cd "$HANDOFF_ROOT_VAGUE_ACCEPTANCE"
+git init -q
+
+HANDOFF_SESSION_VAGUE_ACCEPTANCE="$TMPDIR/handoff-session-vague-acceptance.jsonl"
+HANDOFF_SNAPSHOT_VAGUE_ACCEPTANCE="$TMPDIR/handoff-proposal-vague-acceptance.json"
+HANDOFF_MESSAGES_VAGUE_ACCEPTANCE="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Fix login redirect callback behavior.",
+    "scope": [
+        "Update the callback redirect decision logic.",
+        "Preserve the broader auth flow."
+    ],
+    "constraints": [
+        "Do not refactor the broader auth flow."
+    ],
+    "acceptance": [
+        "Current behavior stays understandable."
+    ],
+    "risks": [
+        "Broad recent context could be reused if the vague explicit handoff is ignored."
+    ],
+    "notes": [
+        "This handoff includes first-slice fields but still lacks concrete acceptance."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Land the redirect callback fix and its regression coverage.",
+    "first_slice_non_goals": [
+        "Do not refactor the broader auth flow."
+    ],
+    "implementation_surfaces": [
+        "src/auth/redirect.ts",
+        "tests/auth/redirect.spec.ts"
+    ],
+    "verification_commands": [
+        "npm test -- redirect.spec.ts"
+    ],
+    "why_this_slice_first": "The redirect callback bug is already bounded enough to start implementation safely once acceptance is concrete.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The task is workflow-worthy, but the acceptance still needs concrete repo-change detail."
+}
+recent_discussion = "Mission: Fix login redirect callback behavior.\nScope:\n- Update the callback redirect decision logic.\nConstraints:\n- Do not refactor the broader auth flow.\nAcceptance:\n- Add a regression test for returning to the requested page."
+messages = [
+    {"role": "user", "content": recent_discussion},
+    {"role": "assistant", "content": "This follow-up might soon be ready for /cook.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$HANDOFF_SESSION_VAGUE_ACCEPTANCE" "$HANDOFF_ROOT_VAGUE_ACCEPTANCE" "$HANDOFF_MESSAGES_VAGUE_ACCEPTANCE"
+
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_VAGUE_ACCEPTANCE" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$HANDOFF_SESSION_VAGUE_ACCEPTANCE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-vague-acceptance.out" 2>"$TMPDIR/pi-completion-handoff-vague-acceptance.err"
+
+python3 - "$HANDOFF_SNAPSHOT_VAGUE_ACCEPTANCE" "$TMPDIR/pi-completion-handoff-vague-acceptance.out" "$TMPDIR/pi-completion-handoff-vague-acceptance.err" <<'PY'
+import sys
+from pathlib import Path
+
+snapshot = Path(sys.argv[1])
+output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
+
+assert not snapshot.exists(), 'fresh explicit handoff with vague acceptance should not emit a startup proposal snapshot'
+assert not Path('.agent').exists(), 'fresh explicit handoff with vague acceptance should fail closed without writing canonical state'
+assert 'fresh explicit primary-agent handoff exists' in output, 'fresh explicit handoff with vague acceptance should use the dedicated explicit-handoff fail-closed message'
+assert 'acceptance is not anchored to concrete repo changes or verification' in output, 'fresh explicit handoff with vague acceptance should explain the vague acceptance failure'
 PY
 
 # Done workflow + fresh handoff: the fresh explicit handoff should override done-state suppression and start the new round.

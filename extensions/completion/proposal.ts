@@ -1251,6 +1251,10 @@ const COOK_HANDOFF_NEGATIVE_MISSION_REGEX =
 	/(?:\b(?:do not|don't|dont|not|never|avoid|skip|refuse|recognize that|suppress|ignore|block|prevent)\b|(?:不要|別|别|勿|禁止|避免|忽略|阻止))/iu;
 const COOK_HANDOFF_WORKFLOW_ONLY_ACCEPTANCE_REGEX =
 	/(?:\b(?:confirm|discuss|clarify|decide|review|align(?: on)?|agree(?: on)?|explain|summari(?:s|z)e|describe|plan|proposal|spec(?:ification)?|design(?: doc(?:ument)?)?|next step|handoff|workflow|readiness)\b|(?:確認|确认|討論|讨论|釐清|厘清|決定|决定|審查|审查|對齊|对齐|同意|说明|說明|總結|总结|描述|規劃|规划|提案|方案|工作流|就緒|就绪))/iu;
+const COOK_HANDOFF_VERIFICATION_ACCEPTANCE_REGEX =
+	/(?:\b(?:test|tests|testing|verify|verification|validated?|regression|coverage|assert(?:ion)?s?|check|checks|smoke|snapshot(?:s)?)\b|(?:測試|测试|驗證|验证|回歸|回归|覆蓋|覆盖|斷言|断言|檢查|检查|快照))/iu;
+const COOK_HANDOFF_VERIFICATION_ACTION_REGEX =
+	/(?:\b(?:add|update|keep|run|rerun|cover|verify|validate|check|assert|exercise|prove)\b|(?:新增|更新|保持|執行|执行|重跑|覆蓋|覆盖|驗證|验证|檢查|检查|斷言|断言|證明|证明))/iu;
 
 function parseCookHandoffCapsulesFromText(
 	text: string,
@@ -1331,18 +1335,19 @@ function buildCookHandoffBasisPreview(capsule: CookHandoffCapsule): string {
 	return parts.join("\n").trim();
 }
 
+function cookHandoffAcceptanceItemIsRepoChangeOrVerificationOriented(item: string): boolean {
+	const normalized = normalizeProposalLine(item);
+	if (!normalized) return false;
+	if (hasExplicitPlanningOnlyDeliverable([normalized])) return false;
+	if (hasClearNoImplementationSignal([normalized])) return false;
+	if (implementationMissionSourceCandidateText(normalized)) return true;
+	if (COOK_HANDOFF_WORKFLOW_ONLY_ACCEPTANCE_REGEX.test(normalized)) return false;
+	return COOK_HANDOFF_VERIFICATION_ACCEPTANCE_REGEX.test(normalized) && COOK_HANDOFF_VERIFICATION_ACTION_REGEX.test(normalized);
+}
+
 function cookHandoffAcceptanceIsRepoChangeOriented(capsule: CookHandoffCapsule): boolean {
 	if (capsule.acceptance.length === 0) return false;
-	return capsule.acceptance.some((item) => {
-		const normalized = normalizeProposalLine(item);
-		if (!normalized) return false;
-		if (hasExplicitPlanningOnlyDeliverable([normalized])) return false;
-		if (hasClearNoImplementationSignal([normalized])) return false;
-		if (COOK_HANDOFF_WORKFLOW_ONLY_ACCEPTANCE_REGEX.test(normalized) && !implementationMissionSourceCandidateText(normalized)) {
-			return false;
-		}
-		return true;
-	});
+	return capsule.acceptance.some((item) => cookHandoffAcceptanceItemIsRepoChangeOrVerificationOriented(item));
 }
 
 function cookHandoffStartabilityFailures(
@@ -1356,7 +1361,7 @@ function cookHandoffStartabilityFailures(
 	if (capsule.scope.length === 0) failures.push("scope is empty");
 	if (capsule.acceptance.length === 0) failures.push("acceptance is empty");
 	else if (!cookHandoffAcceptanceIsRepoChangeOriented(capsule)) {
-		failures.push("acceptance is not anchored to concrete repo changes");
+		failures.push("acceptance is not anchored to concrete repo changes or verification");
 	}
 	const firstSliceGoal = deps.normalizeMissionAnchorText(capsule.first_slice_goal);
 	if (!firstSliceGoal || deps.isWeakMissionAnchor(firstSliceGoal) || COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(firstSliceGoal)) {
