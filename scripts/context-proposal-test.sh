@@ -1200,6 +1200,85 @@ assert 'Why this slice first: The redirect callback bug is already bounded enoug
 assert 'Primary-agent /cook handoff rationale: The implementation plan is concrete and ready for repo changes.' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve why_cook_now as notes'
 PY
 
+# Fresh explicit handoff: later ordinary-chat follow-up before /cook should not invalidate startup.
+HANDOFF_ROOT_FOLLOWUP="$TMPDIR/handoff-root-followup"
+mkdir -p "$HANDOFF_ROOT_FOLLOWUP"
+cd "$HANDOFF_ROOT_FOLLOWUP"
+git init -q
+
+HANDOFF_SESSION_FOLLOWUP="$TMPDIR/handoff-session-followup.jsonl"
+HANDOFF_SNAPSHOT_FOLLOWUP="$TMPDIR/handoff-proposal-followup.json"
+HANDOFF_MESSAGES_FOLLOWUP="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Fix login redirect callback behavior.",
+    "scope": [
+        "Update the callback redirect decision logic.",
+        "Preserve the broader auth flow."
+    ],
+    "constraints": [
+        "Do not refactor the broader auth flow."
+    ],
+    "acceptance": [
+        "Add a regression test for returning to the requested page."
+    ],
+    "risks": [
+        "Late ordinary-chat clarifications should not force the user into a fresh handoff-only retry loop."
+    ],
+    "notes": [
+        "Keep the startup brief anchored to the explicit primary-agent handoff until a later assistant reply replaces it."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Land the redirect callback fix and its regression coverage.",
+    "first_slice_non_goals": [
+        "Do not refactor the broader auth flow."
+    ],
+    "implementation_surfaces": [
+        "src/auth/redirect.ts",
+        "tests/auth/redirect.spec.ts"
+    ],
+    "verification_commands": [
+        "npm test -- redirect.spec.ts"
+    ],
+    "why_this_slice_first": "The redirect callback bug is already bounded enough to start implementation safely.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The implementation plan is concrete and ready for repo changes."
+}
+messages = [
+    {"role": "user", "content": "Please think through the login redirect fix and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "This task is now ready for /cook whenever you want to start implementation.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+    {"role": "user", "content": "Before I run /cook, one more clarification: keep the broader auth flow unchanged and keep the later verification focused on the redirect regression."},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$HANDOFF_SESSION_FOLLOWUP" "$HANDOFF_ROOT_FOLLOWUP" "$HANDOFF_MESSAGES_FOLLOWUP"
+
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_FOLLOWUP" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$HANDOFF_SESSION_FOLLOWUP" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-followup.out" 2>"$TMPDIR/pi-completion-handoff-followup.err"
+
+python3 - "$HANDOFF_SNAPSHOT_FOLLOWUP" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+snapshot = json.loads(Path(sys.argv[1]).read_text())
+state = json.loads(Path('.agent/state.json').read_text())
+
+assert snapshot['source'] == 'handoff_capsule', 'later ordinary-chat follow-up should still use the explicit handoff capsule as startup source'
+assert snapshot['mission'] == 'Fix login redirect callback behavior.', 'later ordinary-chat follow-up should preserve the handoff mission'
+assert state['mission_anchor'] == 'Fix login redirect callback behavior.', 'later ordinary-chat follow-up should still start from the explicit handoff mission'
+assert state['advisory_startup_brief']['source'] == 'primary_agent_handoff', 'later ordinary-chat follow-up should keep the advisory intake source as the explicit handoff'
+assert 'Verification commands: npm test -- redirect.spec.ts' in state['advisory_startup_brief']['notes'], 'later ordinary-chat follow-up should preserve the handoff verification commands'
+PY
+
 # Fresh but non-startable explicit handoff: /cook should fail closed instead of falling back
 # to a broad recent-discussion startup brief when the explicit capsule is still too vague.
 HANDOFF_ROOT_VAGUE="$TMPDIR/handoff-root-vague"
@@ -1466,7 +1545,7 @@ assert 'First slice goal: Patch the callback edge case and cover it with a focus
 assert 'Verification commands: npm test -- redirect-edge.spec.ts' in state['advisory_startup_brief']['notes'], 'done-workflow handoff should preserve verification_commands in advisory notes'
 PY
 
-# Stale handoff: later discussion should invalidate the older handoff capsule and fail closed instead of falling back to newer discussion.
+# Stale handoff: an aged-out capsule should fail closed even if later discussion exists.
 HANDOFF_ROOT_STALE="$TMPDIR/handoff-root-stale"
 mkdir -p "$HANDOFF_ROOT_STALE"
 cd "$HANDOFF_ROOT_STALE"
@@ -1479,7 +1558,7 @@ import json
 capsule = {
     "kind": "cook_handoff",
     "source": "primary_agent",
-    "captured_at": "2026-01-01T00:00:02.000Z",
+    "captured_at": "2025-12-31T22:00:02.000Z",
     "source_turn_id": "m0002",
     "mission": "Fix the original login redirect callback behavior.",
     "scope": ["Update the original callback redirect logic."],
@@ -1492,7 +1571,7 @@ capsule = {
     "first_slice_non_goals": ["Do not refactor the auth stack."],
     "implementation_surfaces": ["src/auth/login-redirect.ts"],
     "verification_commands": ["npm test -- login-redirect.spec.ts"],
-    "why_this_slice_first": "The original callback follow-up was the first bounded implementation slice before later discussion replaced it."
+    "why_this_slice_first": "The original callback follow-up was the first bounded implementation slice before it aged out."
 }
 newer_discussion = "Mission: Ship logout redirect consistency instead.\nScope:\n- Update the logout redirect path.\nConstraints:\n- Leave the login callback flow unchanged.\nAcceptance:\n- Add a logout redirect regression test."
 messages = [
@@ -1518,9 +1597,9 @@ from pathlib import Path
 snapshot = Path(sys.argv[1])
 output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
 
-assert not snapshot.exists(), 'stale handoff should not emit a startup proposal snapshot'
-assert not Path('.agent').exists(), 'stale handoff should fail closed without writing canonical state'
-assert 'fresh valid explicit primary-agent handoff' in output, 'stale handoff should explain that a fresh valid explicit handoff is required'
+assert not snapshot.exists(), 'aged-out handoff should not emit a startup proposal snapshot'
+assert not Path('.agent').exists(), 'aged-out handoff should fail closed without writing canonical state'
+assert 'fresh valid explicit primary-agent handoff' in output, 'aged-out handoff should explain that a fresh valid explicit handoff is required'
 PY
 
 # Negative handoff rationale: a non-startable capsule must not become the startup mission.

@@ -14,9 +14,10 @@ This skill governs the boundary between:
 
 ## Core Contract
 
-- Ordinary chat may be used to clarify requirements, discuss tradeoffs, and propose implementation approaches.
+- Ordinary chat may be used to clarify requirements, discuss tradeoffs, propose implementation approaches, and refine scope with the user.
 - `/cook` is the only explicit entrypoint into long-running completion workflow.
-- When the primary agent judges that a task has matured into completion-workflow scope, it must stop short of implementation and direct the user to `/cook`.
+- When the primary agent judges that a task has matured into completion-workflow scope, it must stop short of long-running implementation and treat `/cook` as the workflow boundary.
+- Before the user explicitly runs `/cook`, ordinary chat remains ordinary chat: the agent may still answer follow-up questions and refine requirements instead of switching into a handoff-only refusal mode.
 
 ## When To Hand Off To `/cook`
 
@@ -34,10 +35,11 @@ When the task is judged ready for completion workflow, the primary agent must:
 
 - stop before long-running implementation
 - not edit tracked product files in ordinary chat for that workflow-level task
-- tell the user to run `/cook`
-- explain that `/cook` will first look for a fresh explicit primary-agent handoff and otherwise fall back to recent discussion before asking for confirmation
+- recommend bare `/cook` as the explicit workflow boundary once the task is implementation-ready
+- explain that `/cook` starts a new workflow or next round only from a fresh valid explicit primary-agent handoff capsule from recent ordinary-chat discussion, while active workflows resume from canonical state unless a fresh valid explicit handoff proposes replacement
 - distinguish a workflow-worthy handoff from an implementation-ready handoff
 - only append an implementation-ready `/cook` handoff capsule when the first bounded implementation slice is concrete enough to start immediately
+- if the user asks follow-up questions or refines requirements before running `/cook`, continue ordinary-chat discussion normally without acting as though workflow already started
 
 Required capsule format:
 
@@ -71,13 +73,15 @@ Required capsule format:
 Notes:
 
 - `constraints` may be replaced or supplemented by `non_goals` when clearer.
-- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are required only for implementation-ready handoffs; if the work is workflow-worthy but that first slice is still vague, tell the user to run `/cook` without emitting this implementation-ready capsule.
+- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are required only for implementation-ready handoffs.
+- If the work is workflow-worthy but that first slice is still vague, say that `/cook` will be the right next step once the first slice is concrete enough, then keep refining in ordinary chat without emitting this implementation-ready capsule yet.
+- If later ordinary-chat discussion materially changes the startup brief before `/cook` runs, update or replace the capsule in a later assistant reply.
 - The mission must be positively startable implementation work; do not use rejection or suppression text as the mission.
 - The capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
 
 Suggested wording:
 
-> This task is now mature enough for the `/cook` workflow. If you want me to start implementation, run `/cook`. I’ve also attached an explicit `/cook` handoff capsule so `/cook` can confirm this plan directly before the workflow begins.
+> This task now looks like `/cook` workflow work, but we are still in ordinary chat until you explicitly run `/cook`. If you want to keep refining the first slice first, we can do that here. Once you want to start implementation workflow, run bare `/cook`. I’ve also attached an explicit `/cook` handoff capsule so `/cook` can confirm this startup brief directly before the workflow begins.
 
 A short recap may include mission, scope, or acceptance, but that recap must not be presented as canonical plan state.
 
@@ -89,6 +93,7 @@ Once the task is judged ready for completion workflow, the primary agent must no
 - modify tracked product files as part of that workflow-level task
 - act as though `/cook` had already been invoked
 - silently rewrite ordinary-chat discussion into active workflow state
+- refuse ordinary-chat clarification or requirement-refinement turns solely because `/cook` would now be appropriate
 
 ## Relationship To `completion-protocol`
 

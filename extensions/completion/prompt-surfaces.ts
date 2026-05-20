@@ -27,15 +27,17 @@ export type AdvisoryStartupBrief = {
 export function buildCookHandoffBoundaryReminder(): string {
 	return [
 		"You are still in ordinary main chat before any explicit /cook workflow entry.",
-		"Use ordinary chat to clarify requirements, discuss tradeoffs, and propose implementation approaches.",
+		"Use ordinary chat to clarify requirements, discuss tradeoffs, propose implementation approaches, and refine scope with the user.",
 		"/cook is the only explicit entrypoint into long-running completion workflow.",
-		"When you judge that the task has matured into completion-workflow scope — for example the user has clearly shifted from exploration into implementation intent, you have just produced a concrete plan or proposal whose next step would naturally be implementation, or the task spans multiple files, steps, or verification surfaces — stop short of long-running implementation and tell the user to run /cook.",
-		"At that handoff point, do not begin long-running product implementation in ordinary chat, do not edit tracked product files for that workflow-level task, and do not act as though /cook had already been invoked.",
+		"When you judge that the task has matured into completion-workflow scope — for example the user has clearly shifted from exploration into implementation intent, you have just produced a concrete plan or proposal whose next step would naturally be implementation, or the task spans multiple files, steps, or verification surfaces — do not begin long-running product implementation in ordinary chat and do not edit tracked product files for that workflow-level task.",
+		"Instead, recommend /cook as the workflow boundary while keeping the conversation in ordinary chat until the user explicitly runs /cook.",
+		"If the user keeps asking follow-up questions or refining requirements before /cook, continue that ordinary-chat discussion normally instead of switching into a handoff-only refusal mode, but do not act as though /cook had already been invoked.",
 		"Distinguish a workflow-worthy handoff from an implementation-ready handoff: only emit the implementation-ready capsule when the first bounded implementation slice is concrete enough to start immediately.",
-		"When handing off, explain that /cook can start a new workflow or next round only from a fresh valid explicit primary-agent handoff capsule; otherwise it fails closed, while already-active workflows resume from canonical .agent state unless a fresh valid explicit handoff proposes replacement.",
-		"If the task is workflow-worthy but that first slice is still vague, tell the user to run /cook without emitting an implementation-ready capsule yet.",
-		"Otherwise append one exact fenced block in the same assistant reply using ```cook_handoff ... ``` JSON with kind/source/handoff_kind plus mission, scope, constraints or non_goals, acceptance, risks, notes, captured_at, source_turn_id, first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first, and optional task_type/evaluation_profile/why_cook_now.",
+		"If the task is workflow-worthy but that first slice is still vague, say that /cook will be the right next step once the first bounded slice is concrete enough, then keep refining in ordinary chat without emitting an implementation-ready capsule yet.",
+		"When handing off, explain that /cook can start a new workflow or next round only from a fresh valid explicit primary-agent handoff capsule from recent ordinary-chat discussion; otherwise it fails closed, while already-active workflows resume from canonical .agent state unless a fresh valid explicit handoff proposes replacement.",
+		"Once the task is implementation-ready, append one exact fenced block in the same assistant reply using ```cook_handoff ... ``` JSON with kind/source/handoff_kind plus mission, scope, constraints or non_goals, acceptance, risks, notes, captured_at, source_turn_id, first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first, and optional task_type/evaluation_profile/why_cook_now.",
 		"Use handoff_kind implementation_workflow_handoff for that implementation-ready capsule.",
+		"If later ordinary-chat discussion materially changes the startup brief before /cook runs, update or replace the capsule in a later assistant reply instead of pretending the workflow already started.",
 		"The capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
 		"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook.",
 	].join(" ");

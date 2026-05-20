@@ -30,7 +30,7 @@ Then run `/reload` in Pi.
 1. Install the package:
    `pi install npm:@linimin/pi-letscook`
 2. Run `/reload` in Pi.
-3. In the main chat, describe the concrete repo change you want and let the primary agent hand you off to `/cook` when the first slice is ready.
+3. In the main chat, describe the concrete repo change you want and let the primary agent help refine it until the first slice is ready for `/cook`.
 4. Run `/cook`.
 5. Review the startup brief and choose **Start** or **Cancel**.
 6. Later, run `/cook` again to resume from canonical state or confirm an explicit replacement or next-round handoff.
@@ -49,7 +49,7 @@ Then run `/reload` in Pi.
 
 ## What `/cook` expects
 
-- a fresh valid explicit primary-agent `/cook` handoff capsule from the immediately preceding ordinary-chat turn whenever `/cook` is starting a new workflow or the next round after a completed workflow
+- a fresh valid explicit primary-agent `/cook` handoff capsule from recent ordinary-chat discussion whenever `/cook` is starting a new workflow or the next round after a completed workflow
 - for that handoff capsule to start workflow immediately, it must already be implementation-startable: a bounded `first_slice_goal`, repo-change-oriented acceptance, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first`
 - enough detail in the main chat for the primary agent to form that bounded handoff capsule before you run `/cook`
 - README/CHANGELOG updates still count as concrete repo changes
@@ -66,9 +66,11 @@ If you pass inline arguments to `/cook`, it also fails closed and tells you to m
 
 Only explicit `/cook` enters the workflow. Ordinary prompts stay in the main chat and go straight to the primary agent.
 
-If a task has clearly matured into completion-workflow scope, the primary agent should hand you off to `/cook` instead of starting long-running implementation directly in ordinary chat.
+If a task has clearly matured into completion-workflow scope, the primary agent should recommend `/cook` instead of starting long-running implementation directly in ordinary chat.
 
-That handoff should include an explicit structured `/cook` capsule in the assistant reply so `/cook` can confirm the already-formed mission instead of re-deriving it from broad ambient context.
+Before you explicitly run `/cook`, the conversation can still stay in ordinary chat: the primary agent may keep answering follow-up questions and refining requirements rather than switching into a hard handoff-only refusal mode.
+
+That handoff should include an explicit structured `/cook` capsule in the assistant reply once the first slice is implementation-ready, so `/cook` can confirm the already-formed mission instead of re-deriving it from broad ambient context.
 
 The capsule is still advisory startup intake, not canonical workflow state, and new-workflow or next-round entry only proceeds when it already names the first bounded slice, repo-change-oriented acceptance, implementation surfaces, and verification commands.
 
@@ -91,7 +93,7 @@ I want to add login redirect handling and tests.
 
 ## What happens when you run `/cook`
 
-`/cook` first looks for a fresh explicit primary-agent handoff capsule. New-workflow entry and done-workflow next-round entry start only when that capsule is fresh, valid, and implementation-startable; otherwise `/cook` fails closed instead of deriving startup from recent discussion. When a workflow is already active and no fresh valid explicit handoff is present, `/cook` resumes from canonical `.agent/**` state instead of deriving replacement startup from recent discussion.
+`/cook` first looks for a fresh explicit primary-agent handoff capsule from recent ordinary-chat discussion. New-workflow entry and done-workflow next-round entry start only when that capsule is fresh, valid, and implementation-startable; otherwise `/cook` fails closed instead of deriving startup from recent discussion. When a workflow is already active and no fresh valid explicit handoff is present, `/cook` resumes from canonical `.agent/**` state instead of deriving replacement startup from recent discussion.
 
 | Repo state | What you'll see |
 |---|---|
@@ -105,7 +107,7 @@ I want to add login redirect handling and tests.
 
 - startup, next-round, and refocus proposals are approval-only
 - actions are **Start** and **Cancel**
-- **Cancel** is side-effect free: discuss changes in the main chat and rerun `/cook`
+- **Cancel** is side-effect free: canonical workflow state stays unchanged, so you can discuss changes in the main chat and rerun `/cook`
 - weak, ambiguous, stale, invalid, assistant-produced, or planning-only intake does not start a workflow
 - when a fresh explicit handoff suggests replacing an active workflow, `/cook` shows a chooser before any canonical state rewrite
 

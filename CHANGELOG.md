@@ -4,8 +4,10 @@
 
 ### Changed
 
-- made bare `/cook` startup and done-workflow next-round entry require a fresh valid explicit primary-agent handoff instead of falling back to recent discussion
-- kept active-workflow bare `/cook` resumable from canonical `.agent/**` state when no fresh explicit handoff is present, while still allowing explicit handoff replacement confirmation
+- relaxed the pre-`/cook` ordinary-chat boundary so the primary agent can keep discussing and refining requirements before explicit `/cook` instead of switching into a hard handoff-only refusal mode as soon as workflow-worthiness is detected
+- kept `/cook` as the only explicit workflow boundary, while teaching the pre-`/cook` prompt surfaces to recommend `/cook` advisory-first and only emit implementation-ready capsules once the first bounded slice is concrete enough
+- made fresh explicit `/cook` handoffs reusable from recent ordinary-chat discussion instead of requiring the immediately preceding turn, so Cancel can return users cleanly to ordinary discussion before they rerun `/cook`
+- kept bare `/cook` startup and done-workflow next-round entry fail-closed on missing or non-startable explicit handoffs, while active workflows still resume from canonical `.agent/**` state unless a fresh explicit handoff proposes replacement
 - updated public parity and shipped package contents so the tracked `.agent` contract files are included in package tarballs and packaged smoke/release verification can scaffold canonical state truthfully
 
 ## 0.1.58

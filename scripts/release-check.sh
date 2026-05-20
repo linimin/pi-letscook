@@ -17,28 +17,30 @@ checks = {
     "README.md": [
         "`/cook` is the explicit workflow boundary for starting, continuing, refocusing, or beginning the next round of long-running repo work.",
         "Only explicit `/cook` enters the workflow. Ordinary prompts stay in the main chat and go straight to the primary agent.",
-        "That handoff should include an explicit structured `/cook` capsule in the assistant reply so `/cook` can confirm the already-formed mission instead of re-deriving it from broad ambient context.",
+        "Before you explicitly run `/cook`, the conversation can still stay in ordinary chat: the primary agent may keep answering follow-up questions and refining requirements rather than switching into a hard handoff-only refusal mode.",
+        "That handoff should include an explicit structured `/cook` capsule in the assistant reply once the first slice is implementation-ready, so `/cook` can confirm the already-formed mission instead of re-deriving it from broad ambient context.",
         "The capsule is still advisory startup intake, not canonical workflow state, and new-workflow or next-round entry only proceeds when it already names the first bounded slice, repo-change-oriented acceptance, implementation surfaces, and verification commands.",
         "- startup and next-round entry stay confirm-first and require a fresh valid explicit primary-agent handoff",
         "- active workflows resume from canonical `.agent/**` state unless a fresh valid explicit handoff proposes a replacement",
-        "`/cook` first looks for a fresh explicit primary-agent handoff capsule. New-workflow entry and done-workflow next-round entry start only when that capsule is fresh, valid, and implementation-startable; otherwise `/cook` fails closed instead of deriving startup from recent discussion.",
+        "`/cook` first looks for a fresh explicit primary-agent handoff capsule from recent ordinary-chat discussion. New-workflow entry and done-workflow next-round entry start only when that capsule is fresh, valid, and implementation-startable; otherwise `/cook` fails closed instead of deriving startup from recent discussion.",
         "When a workflow is already active and no fresh valid explicit handoff is present, `/cook` resumes from canonical `.agent/**` state instead of deriving replacement startup from recent discussion.",
         "Without one, `/cook` fails closed instead of deriving the next round from recent discussion.",
         "when a fresh explicit handoff suggests replacing an active workflow, `/cook` shows a chooser before any canonical state rewrite",
     ],
     "CHANGELOG.md": [
-        "made bare `/cook` startup and done-workflow next-round entry require a fresh valid explicit primary-agent handoff instead of falling back to recent discussion",
-        "kept active-workflow bare `/cook` resumable from canonical `.agent/**` state when no fresh explicit handoff is present, while still allowing explicit handoff replacement confirmation",
-        "updated public parity and shipped package contents so the tracked `.agent` contract files are included in package tarballs and packaged smoke/release verification can scaffold canonical state truthfully",
+        "relaxed the pre-`/cook` ordinary-chat boundary so the primary agent can keep discussing and refining requirements before explicit `/cook` instead of switching into a hard handoff-only refusal mode as soon as workflow-worthiness is detected",
+        "made fresh explicit `/cook` handoffs reusable from recent ordinary-chat discussion instead of requiring the immediately preceding turn, so Cancel can return users cleanly to ordinary discussion before they rerun `/cook`",
+        "kept bare `/cook` startup and done-workflow next-round entry fail-closed on missing or non-startable explicit handoffs, while active workflows still resume from canonical `.agent/**` state unless a fresh explicit handoff proposes replacement",
     ],
     "extensions/completion/prompt-surfaces.ts": [
         '"/cook is the only explicit entrypoint into long-running completion workflow."',
-        '"When handing off, explain that /cook can start a new workflow or next round only from a fresh valid explicit primary-agent handoff capsule; otherwise it fails closed, while already-active workflows resume from canonical .agent state unless a fresh valid explicit handoff proposes replacement."',
+        '"If the user keeps asking follow-up questions or refining requirements before /cook, continue that ordinary-chat discussion normally instead of switching into a handoff-only refusal mode, but do not act as though /cook had already been invoked."',
+        '"When handing off, explain that /cook can start a new workflow or next round only from a fresh valid explicit primary-agent handoff capsule from recent ordinary-chat discussion; otherwise it fails closed, while already-active workflows resume from canonical .agent state unless a fresh valid explicit handoff proposes replacement."',
         '"The capsule is startup intake for /cook only: do not present it as canonical .agent state',
     ],
     "extensions/completion/index.ts": [
-        '"/cook failed closed because new-workflow startup now requires a fresh valid explicit primary-agent handoff from the immediately preceding ordinary-chat turn; recent discussion alone no longer starts a workflow. Ask the primary agent to hand off explicitly in the main chat, then rerun /cook."',
-        'description: "/cook workflow: start a new workflow or next round only from a fresh explicit primary-agent handoff, resume the current workflow from canonical state, or confirm an explicit replacement from the explicit /cook command"',
+        '"/cook failed closed because new-workflow startup now requires a fresh valid explicit primary-agent handoff from recent ordinary-chat discussion; recent discussion alone no longer starts a workflow. Ask the primary agent to hand off explicitly in the main chat, then rerun /cook."',
+        'description: "/cook workflow: start a new workflow or next round only from a fresh recent explicit primary-agent handoff, resume the current workflow from canonical state, or confirm an explicit replacement from the explicit /cook command"',
     ],
 }
 
