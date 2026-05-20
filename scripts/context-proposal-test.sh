@@ -347,23 +347,25 @@ assert 'task_type=completion-workflow' in state['continuation_reason'], 'initial
 assert 'evaluation_profile=completion-rubric-v1' in state['continuation_reason'], 'initial startup should persist the selected evaluation_profile in continuation_reason'
 PY
 
-# Active workflow: bare /cook with matching structured discussion should classify as continue
-# and resume the current workflow without opening the chooser or rewriting canonical state.
+# Active workflow: bare /cook should resume from canonical state when no fresh explicit handoff exists,
+# even if recent discussion restates the current mission in a structured way.
 SESSION_ONE_CONTINUE="$TMPDIR/session-one-continue.jsonl"
 DISCUSSION_ONE_CONTINUE=$'Mission: Remove the completion status line while keeping the completion widget.\nScope:\n- Keep the current mission focused on the non-running completion widget.\nConstraints:\n- Do not start a different workflow from this discussion.\nAcceptance:\n- Resume the current workflow from canonical state without rewriting it.'
 CONTINUE_ROUTING_ONE="$TMPDIR/active-continue-routing.json"
 CONTINUE_RESUME_PROMPT_ONE="$TMPDIR/active-continue-resume.txt"
 CONTINUE_CHOOSER_ONE="$TMPDIR/unexpected-active-continue-chooser.json"
+CONTINUE_PROPOSAL_ONE="$TMPDIR/unexpected-active-continue-proposal.json"
 write_session "$SESSION_ONE_CONTINUE" "$ROOT" "$DISCUSSION_ONE_CONTINUE"
 
 PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$CONTINUE_ROUTING_ONE" \
 PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$CONTINUE_RESUME_PROMPT_ONE" \
 PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$CONTINUE_CHOOSER_ONE" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$CONTINUE_PROPOSAL_ONE" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$SESSION_ONE_CONTINUE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-active-continue.out" 2>"$TMPDIR/pi-completion-context-proposal-active-continue.err"
 
-python3 - "$CONTINUE_ROUTING_ONE" "$CONTINUE_RESUME_PROMPT_ONE" "$CONTINUE_CHOOSER_ONE" <<'PY'
+python3 - "$CONTINUE_ROUTING_ONE" "$CONTINUE_RESUME_PROMPT_ONE" "$CONTINUE_CHOOSER_ONE" "$CONTINUE_PROPOSAL_ONE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -372,26 +374,73 @@ mission = 'Remove the completion status line while keeping the completion widget
 routing = json.loads(Path(sys.argv[1]).read_text())
 resume = Path(sys.argv[2]).read_text()
 chooser_path = Path(sys.argv[3])
+proposal_path = Path(sys.argv[4])
 state = json.loads(Path('.agent/state.json').read_text())
 plan = json.loads(Path('.agent/plan.json').read_text())
 active = json.loads(Path('.agent/active-slice.json').read_text())
 
-assert routing['mode'] == 'bare', 'active bare /cook continue regression should snapshot bare routing mode'
-assert 'explicitGoal' not in routing, 'active bare /cook continue routing should not expose removed explicit-goal shim fields'
-assert 'explicitGoalProvided' not in routing, 'active bare /cook continue routing should not expose removed explicit-goal shim fields'
-assert routing['action'] == 'continue', 'matching structured discussion should classify active bare /cook as continue'
-assert routing['reason'] == 'matching_mission', 'matching structured discussion should keep the current mission rather than refocus'
-assert routing['currentMissionAnchor'] == mission, 'continue routing should preserve the current mission anchor'
-assert routing['proposedMissionAnchor'] == mission, 'continue routing should keep the proposed mission anchored to the current mission'
-assert 'Resume the completion workflow from canonical state.' in resume, 'active bare /cook continue should still use the canonical resume prompt'
-assert not chooser_path.exists(), 'active bare /cook continue should not open the refocus chooser'
-assert state['mission_anchor'] == mission, 'active bare /cook continue should keep state.json unchanged'
-assert plan['mission_anchor'] == mission, 'active bare /cook continue should keep plan.json unchanged'
-assert active['mission_anchor'] == mission, 'active bare /cook continue should keep active-slice.json unchanged'
+assert routing['mode'] == 'bare', 'active bare /cook resume regression should snapshot bare routing mode'
+assert 'explicitGoal' not in routing, 'active bare /cook resume routing should not expose removed explicit-goal shim fields'
+assert 'explicitGoalProvided' not in routing, 'active bare /cook resume routing should not expose removed explicit-goal shim fields'
+assert routing['action'] == 'continue', 'active bare /cook should resume when no fresh explicit handoff exists'
+assert routing['reason'] == 'missing_explicit_handoff', 'active bare /cook should explain that resume happened because no fresh explicit handoff existed'
+assert routing['currentMissionAnchor'] == mission, 'resume routing should preserve the current mission anchor'
+assert routing['proposedMissionAnchor'] is None, 'resume routing should not derive a replacement mission from recent discussion'
+assert 'Resume the completion workflow from canonical state.' in resume, 'active bare /cook resume should still use the canonical resume prompt'
+assert not chooser_path.exists(), 'active bare /cook resume should not open the replacement chooser without a fresh explicit handoff'
+assert not proposal_path.exists(), 'active bare /cook resume should not open replacement proposal confirmation without a fresh explicit handoff'
+assert state['mission_anchor'] == mission, 'active bare /cook resume should keep state.json unchanged'
+assert plan['mission_anchor'] == mission, 'active bare /cook resume should keep plan.json unchanged'
+assert active['mission_anchor'] == mission, 'active bare /cook resume should keep active-slice.json unchanged'
 PY
 
-# Active workflow: summary-only replacement artifacts should fail closed and keep the current
-# workflow instead of opening the refocus chooser.
+# Active workflow: even strongly different recent discussion should no longer open chooser/refocus startup
+# when no fresh valid explicit handoff is present.
+SESSION_ONE_DISCUSSION_REFOCUS="$TMPDIR/session-one-discussion-refocus.jsonl"
+DISCUSSION_ONE_DISCUSSION_REFOCUS=$'Mission: Normalize bare /cook planning phrasing into implementation-result missions.\nScope:\n- Replace the current workflow from recent discussion only.\n- Keep the approval-only Start/Cancel gate before rewriting canonical state.\nConstraints:\n- Do not require a fresh explicit handoff.\nAcceptance:\n- Rewrite canonical state from recent discussion.'
+DISCUSSION_REFOCUS_ROUTING_ONE="$TMPDIR/active-discussion-refocus-routing.json"
+DISCUSSION_REFOCUS_RESUME_ONE="$TMPDIR/active-discussion-refocus-resume.txt"
+DISCUSSION_REFOCUS_CHOOSER_ONE="$TMPDIR/unexpected-active-discussion-refocus-chooser.json"
+DISCUSSION_REFOCUS_PROPOSAL_ONE="$TMPDIR/unexpected-active-discussion-refocus-proposal.json"
+write_session "$SESSION_ONE_DISCUSSION_REFOCUS" "$ROOT" "$DISCUSSION_ONE_DISCUSSION_REFOCUS"
+
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$DISCUSSION_REFOCUS_ROUTING_ONE" \
+PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$DISCUSSION_REFOCUS_RESUME_ONE" \
+PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$DISCUSSION_REFOCUS_CHOOSER_ONE" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_REFOCUS_PROPOSAL_ONE" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$SESSION_ONE_DISCUSSION_REFOCUS" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-active-discussion-refocus.out" 2>"$TMPDIR/pi-completion-context-proposal-active-discussion-refocus.err"
+
+python3 - "$DISCUSSION_REFOCUS_ROUTING_ONE" "$DISCUSSION_REFOCUS_RESUME_ONE" "$DISCUSSION_REFOCUS_CHOOSER_ONE" "$DISCUSSION_REFOCUS_PROPOSAL_ONE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+mission = 'Remove the completion status line while keeping the completion widget.'
+routing = json.loads(Path(sys.argv[1]).read_text())
+resume = Path(sys.argv[2]).read_text()
+chooser_path = Path(sys.argv[3])
+proposal_path = Path(sys.argv[4])
+state = json.loads(Path('.agent/state.json').read_text())
+plan = json.loads(Path('.agent/plan.json').read_text())
+active = json.loads(Path('.agent/active-slice.json').read_text())
+
+assert routing['mode'] == 'bare', 'discussion-driven refocus removal should snapshot bare routing mode'
+assert routing['action'] == 'continue', 'bare /cook should resume instead of deriving a replacement workflow from recent discussion'
+assert routing['reason'] == 'missing_explicit_handoff', 'discussion-driven refocus removal should explain that no fresh explicit handoff existed'
+assert routing['currentMissionAnchor'] == mission, 'discussion-driven refocus removal should preserve the current mission anchor'
+assert routing['proposedMissionAnchor'] is None, 'discussion-driven refocus removal should not preserve a replacement mission from recent discussion'
+assert 'Resume the completion workflow from canonical state.' in resume, 'discussion-driven refocus removal should still queue the canonical resume prompt'
+assert not chooser_path.exists(), 'discussion-driven refocus removal should not open the chooser'
+assert not proposal_path.exists(), 'discussion-driven refocus removal should not open final proposal confirmation'
+assert state['mission_anchor'] == mission, 'discussion-driven refocus removal should keep state.json unchanged'
+assert plan['mission_anchor'] == mission, 'discussion-driven refocus removal should keep plan.json unchanged'
+assert active['mission_anchor'] == mission, 'discussion-driven refocus removal should keep active-slice.json unchanged'
+PY
+
+# Active workflow: summary-only replacement artifacts should also resume the current workflow when no fresh
+# explicit handoff exists.
 SESSION_ONE_SUMMARY_ONLY="$TMPDIR/session-one-summary-only.jsonl"
 SUMMARY_ROUTING_ONE="$TMPDIR/active-summary-only-routing.json"
 SUMMARY_RESUME_PROMPT_ONE="$TMPDIR/active-summary-only-resume.txt"
@@ -452,8 +501,8 @@ plan = json.loads(Path('.agent/plan.json').read_text())
 active = json.loads(Path('.agent/active-slice.json').read_text())
 
 assert routing['mode'] == 'bare', 'summary-only active bare /cook regression should snapshot bare routing mode'
-assert routing['action'] == 'unclear', 'summary-only active bare /cook should fail closed instead of refocusing'
-assert routing['reason'] == 'missing_proposal', 'summary-only active bare /cook should treat the summary artifact as unreadiness, not a new proposal'
+assert routing['action'] == 'continue', 'summary-only active bare /cook should resume rather than derive replacement startup'
+assert routing['reason'] == 'missing_explicit_handoff', 'summary-only active bare /cook should explain that no fresh explicit handoff existed'
 assert routing['currentMissionAnchor'] == mission, 'summary-only active bare /cook should preserve the current mission anchor'
 assert routing['proposedMissionAnchor'] is None, 'summary-only active bare /cook should not derive a replacement mission from summary artifacts alone'
 assert 'Resume the completion workflow from canonical state.' in resume, 'summary-only active bare /cook should still resume the canonical workflow'
@@ -464,146 +513,108 @@ assert plan['mission_anchor'] == mission, 'summary-only active bare /cook should
 assert active['mission_anchor'] == mission, 'summary-only active bare /cook should keep active-slice.json unchanged'
 PY
 
-# Active workflow: when recent discussion suggests a different implementation goal but the proposal is
-# still incomplete, bare /cook should surface the chooser instead of silently resuming the current workflow.
-SESSION_ONE_AMBIGUOUS_CHOOSER="$TMPDIR/session-one-ambiguous-chooser.jsonl"
-DISCUSSION_ONE_AMBIGUOUS_CHOOSER=$'Mission: Fix login redirect callback behavior.\nScope:\n- Update the callback redirect decision logic for the current auth flow.'
-AMBIGUOUS_ROUTING_ONE="$TMPDIR/active-ambiguous-routing.json"
-AMBIGUOUS_CHOOSER_ONE="$TMPDIR/active-ambiguous-chooser.json"
-AMBIGUOUS_RESUME_PROMPT_ONE="$TMPDIR/unexpected-active-ambiguous-resume.txt"
-AMBIGUOUS_PROPOSAL_ONE="$TMPDIR/unexpected-active-ambiguous-proposal.json"
-write_session "$SESSION_ONE_AMBIGUOUS_CHOOSER" "$ROOT" "$DISCUSSION_ONE_AMBIGUOUS_CHOOSER"
+# Active workflow: a fresh explicit handoff that is not implementation-startable should still fail closed
+# without rewriting canonical state.
+SESSION_ONE_NON_STARTABLE_ACTIVE="$TMPDIR/session-one-non-startable-active.jsonl"
+NON_STARTABLE_ACTIVE_ROUTING="$TMPDIR/active-non-startable-routing.json"
+NON_STARTABLE_ACTIVE_RESUME="$TMPDIR/unexpected-active-non-startable-resume.txt"
+NON_STARTABLE_ACTIVE_CHOOSER="$TMPDIR/unexpected-active-non-startable-chooser.json"
+NON_STARTABLE_ACTIVE_PROPOSAL="$TMPDIR/unexpected-active-non-startable-proposal.json"
+NON_STARTABLE_ACTIVE_MESSAGES="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Replace the current widget mission from a vague explicit handoff.",
+    "scope": [
+        "Replace the active workflow from a fresh explicit handoff."
+    ],
+    "constraints": [
+        "Do not rely on recent discussion to fill in missing implementation details."
+    ],
+    "acceptance": [
+        "Current behavior stays understandable."
+    ],
+    "risks": [],
+    "notes": [
+        "This capsule is intentionally non-startable for active-workflow fail-closed coverage."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Attempt to replace the active workflow from a vague capsule.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "extensions/completion/driver.ts"
+    ],
+    "verification_commands": [
+        "npm run context-proposal-test"
+    ],
+    "why_this_slice_first": "Active-workflow replacement should fail closed when the capsule is fresh but not startable.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1"
+}
+messages = [
+    {"role": "user", "content": "We may need a different active workflow, but only if there is a fresh explicit handoff."},
+    {"role": "assistant", "content": "Only use this capsule if it is concrete enough.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$SESSION_ONE_NON_STARTABLE_ACTIVE" "$ROOT" "$NON_STARTABLE_ACTIVE_MESSAGES"
 
-PI_COMPLETION_EXISTING_WORKFLOW_ACTION=cancel \
-PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT='{"mission":"Fix login redirect callback behavior.","scope":["Update the callback redirect decision logic for the current auth flow."],"constraints":[],"acceptance":[],"task_type":"completion-workflow","evaluation_profile":"completion-rubric-v1","confidence":0.72,"possible_noise":["older completion widget cleanup"]}' \
-PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$AMBIGUOUS_ROUTING_ONE" \
-PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$AMBIGUOUS_CHOOSER_ONE" \
-PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$AMBIGUOUS_RESUME_PROMPT_ONE" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$AMBIGUOUS_PROPOSAL_ONE" \
+python3 - "$TMPDIR/active-non-startable-before.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+tracked = {
+    'mission.md': Path('.agent/mission.md').read_text(),
+    'profile.json': Path('.agent/profile.json').read_text(),
+    'state.json': Path('.agent/state.json').read_text(),
+    'plan.json': Path('.agent/plan.json').read_text(),
+    'active-slice.json': Path('.agent/active-slice.json').read_text(),
+    'verification-evidence.json': Path('.agent/verification-evidence.json').read_text(),
+}
+Path(sys.argv[1]).write_text(json.dumps(tracked, indent=2) + '\n')
+PY
+
+PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$NON_STARTABLE_ACTIVE_ROUTING" \
+PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$NON_STARTABLE_ACTIVE_RESUME" \
+PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$NON_STARTABLE_ACTIVE_CHOOSER" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$NON_STARTABLE_ACTIVE_PROPOSAL" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ONE_AMBIGUOUS_CHOOSER" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-active-ambiguous-chooser.out" 2>"$TMPDIR/pi-completion-context-proposal-active-ambiguous-chooser.err"
+pi --session "$SESSION_ONE_NON_STARTABLE_ACTIVE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-active-non-startable.out" 2>"$TMPDIR/pi-completion-context-proposal-active-non-startable.err"
 
-python3 - "$AMBIGUOUS_ROUTING_ONE" "$AMBIGUOUS_CHOOSER_ONE" "$AMBIGUOUS_RESUME_PROMPT_ONE" "$AMBIGUOUS_PROPOSAL_ONE" "$TMPDIR/pi-completion-context-proposal-active-ambiguous-chooser.out" "$TMPDIR/pi-completion-context-proposal-active-ambiguous-chooser.err" <<'PY'
+python3 - "$NON_STARTABLE_ACTIVE_ROUTING" "$NON_STARTABLE_ACTIVE_RESUME" "$NON_STARTABLE_ACTIVE_CHOOSER" "$NON_STARTABLE_ACTIVE_PROPOSAL" "$TMPDIR/pi-completion-context-proposal-active-non-startable.out" "$TMPDIR/pi-completion-context-proposal-active-non-startable.err" "$TMPDIR/active-non-startable-before.json" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-mission = 'Remove the completion status line while keeping the completion widget.'
 routing = json.loads(Path(sys.argv[1]).read_text())
-chooser = json.loads(Path(sys.argv[2]).read_text())
-resume_path = Path(sys.argv[3])
+resume_path = Path(sys.argv[2])
+chooser_path = Path(sys.argv[3])
 proposal_path = Path(sys.argv[4])
 output = Path(sys.argv[5]).read_text() + Path(sys.argv[6]).read_text()
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+before = json.loads(Path(sys.argv[7]).read_text())
+after = {
+    'mission.md': Path('.agent/mission.md').read_text(),
+    'profile.json': Path('.agent/profile.json').read_text(),
+    'state.json': Path('.agent/state.json').read_text(),
+    'plan.json': Path('.agent/plan.json').read_text(),
+    'active-slice.json': Path('.agent/active-slice.json').read_text(),
+    'verification-evidence.json': Path('.agent/verification-evidence.json').read_text(),
+}
 
-assert routing['mode'] == 'bare', 'ambiguous active bare /cook should snapshot bare routing mode'
-assert routing['action'] == 'unclear', 'incomplete replacement discussion should stay ambiguous until the chooser resolves it'
-assert routing['reason'] == 'ambiguous_discussion', 'incomplete replacement discussion should record the ambiguous-discussion reason'
-assert routing['currentMissionAnchor'] == mission, 'ambiguous chooser routing should preserve the current mission anchor'
-assert routing['proposedMissionAnchor'] == 'Fix login redirect callback behavior.', 'ambiguous chooser routing should expose the latest inferred mission'
-assert chooser['title'].startswith('Existing completion workflow found'), 'ambiguous active bare /cook should still open the existing-workflow chooser'
-assert chooser['choices'][0].startswith('Continue current workflow'), 'ambiguous chooser should keep the continue option'
-assert chooser['choices'][1].startswith('Start new workflow from recent discussion'), 'ambiguous chooser should offer the recent-discussion replacement option'
-assert not resume_path.exists(), 'ambiguous active bare /cook should not silently queue a resume prompt before the chooser resolves it'
-assert not proposal_path.exists(), 'ambiguous chooser cancel should not open the final proposal confirmation'
-assert 'Discuss changes in the main chat and rerun /cook.' in output, 'ambiguous chooser cancel should redirect users back to the main chat and rerun /cook'
-assert state['mission_anchor'] == mission, 'ambiguous chooser cancel should keep state.json unchanged'
-assert plan['mission_anchor'] == mission, 'ambiguous chooser cancel should keep plan.json unchanged'
-assert active['mission_anchor'] == mission, 'ambiguous chooser cancel should keep active-slice.json unchanged'
-PY
-
-# Active workflow: when recent discussion contains multiple complete replacement missions, bare /cook should
-# surface all candidates and allow the chooser to select a non-primary alternate mission.
-SESSION_ONE_MULTI_CANDIDATE="$TMPDIR/session-one-multi-candidate.jsonl"
-DISCUSSION_ONE_MULTI_CANDIDATE=$'Mission: Fix login redirect callback behavior.\nScope:\n- Update the callback redirect decision logic for the current auth flow.\nConstraints:\n- Do not refactor the broader auth flow.\nAcceptance:\n- Add a regression test for returning to the requested page.\nMission: Add logout redirect regression coverage.\nScope:\n- Add coverage for logout redirect behavior.\nConstraints:\n- Do not change login redirect behavior in this pass.\nAcceptance:\n- Land a dedicated logout redirect regression test.'
-MULTI_ROUTING_ONE="$TMPDIR/active-multi-routing.json"
-MULTI_CHOOSER_ONE="$TMPDIR/active-multi-chooser.json"
-MULTI_PROPOSAL_ONE="$TMPDIR/active-multi-proposal.json"
-write_session "$SESSION_ONE_MULTI_CANDIDATE" "$ROOT" "$DISCUSSION_ONE_MULTI_CANDIDATE"
-
-PI_COMPLETION_EXISTING_WORKFLOW_MISSION='Fix login redirect callback behavior.' \
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$MULTI_ROUTING_ONE" \
-PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$MULTI_CHOOSER_ONE" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$MULTI_PROPOSAL_ONE" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ONE_MULTI_CANDIDATE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-active-multi.out" 2>"$TMPDIR/pi-completion-context-proposal-active-multi.err"
-
-python3 - "$MULTI_ROUTING_ONE" "$MULTI_CHOOSER_ONE" "$MULTI_PROPOSAL_ONE" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-selected = 'Fix login redirect callback behavior.'
-routing = json.loads(Path(sys.argv[1]).read_text())
-chooser = json.loads(Path(sys.argv[2]).read_text())
-proposal = json.loads(Path(sys.argv[3]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
-
-assert routing['action'] == 'unclear', 'multi-candidate replacement discussion should stay ambiguous until the chooser selects one mission'
-assert routing['reason'] == 'ambiguous_discussion', 'multi-candidate replacement discussion should record ambiguous-discussion routing'
-assert routing['alternateMissions'] == ['Fix login redirect callback behavior.'], 'routing snapshot should preserve alternate candidate missions'
-assert chooser['candidateMissions'] == ['Add logout redirect regression coverage.', 'Fix login redirect callback behavior.'], 'chooser snapshot should list the primary and alternate candidate missions'
-assert len(chooser['choices']) == 4, 'chooser should expose continue, primary, alternate, and cancel choices'
-assert 'Scope\n- Add coverage for logout redirect behavior.' in chooser['choices'][1], 'primary chooser option should summarize the candidate scope'
-assert 'Acceptance\n- Add a regression test for returning to the requested page.' in chooser['choices'][2], 'alternate chooser option should summarize the candidate acceptance'
-assert proposal['mission'] == selected, 'selected alternate mission should flow into the final proposal confirmation'
-assert state['mission_anchor'] == selected, 'selected alternate mission should rewrite state.json after approval'
-assert plan['mission_anchor'] == selected, 'selected alternate mission should rewrite plan.json after approval'
-assert active['mission_anchor'] == selected, 'selected alternate mission should rewrite active-slice.json after approval'
-PY
-
-# Active workflow: bare /cook with a placeholder planning mission should still route through the existing
-# refocus chooser and final Start/Cancel gate before canonical state is rewritten.
-SESSION_ONE_REFOCUS_NORMALIZED="$TMPDIR/session-one-refocus-normalized.jsonl"
-DISCUSSION_ONE_REFOCUS_NORMALIZED=$'Mission: 開始實作這個方案\nScope:\n- Normalize bare /cook planning phrasing into implementation-result missions.\n- Keep the approval-only Start/Cancel gate before rewriting canonical state.\nConstraints:\n- Do not resume the current widget mission.\nAcceptance:\n- Route through chooser-driven refocus before rewriting canonical state.'
-REFOCUS_ROUTING_ONE="$TMPDIR/active-refocus-routing.json"
-REFOCUS_CHOOSER_ONE="$TMPDIR/active-refocus-chooser.json"
-REFOCUS_PROPOSAL_ONE="$TMPDIR/active-refocus-proposal.json"
-REFOCUS_UI_ONE="$TMPDIR/active-refocus-ui.json"
-write_session "$SESSION_ONE_REFOCUS_NORMALIZED" "$ROOT" "$DISCUSSION_ONE_REFOCUS_NORMALIZED"
-
-PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_UI_ACTION=start \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$REFOCUS_ROUTING_ONE" \
-PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$REFOCUS_CHOOSER_ONE" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$REFOCUS_PROPOSAL_ONE" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_UI_PATH="$REFOCUS_UI_ONE" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ONE_REFOCUS_NORMALIZED" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-active-refocus-normalized.out" 2>"$TMPDIR/pi-completion-context-proposal-active-refocus-normalized.err"
-
-python3 - "$REFOCUS_ROUTING_ONE" "$REFOCUS_CHOOSER_ONE" "$REFOCUS_PROPOSAL_ONE" "$REFOCUS_UI_ONE" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Normalize bare /cook planning phrasing into implementation-result missions.'
-routing = json.loads(Path(sys.argv[1]).read_text())
-chooser = json.loads(Path(sys.argv[2]).read_text())
-proposal = json.loads(Path(sys.argv[3]).read_text())
-ui = json.loads(Path(sys.argv[4]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
-
-assert routing['mode'] == 'bare', 'active bare /cook refocus normalization should snapshot bare routing mode'
-assert 'explicitGoal' not in routing, 'active bare /cook refocus routing should not expose removed explicit-goal shim fields'
-assert 'explicitGoalProvided' not in routing, 'active bare /cook refocus routing should not expose removed explicit-goal shim fields'
-assert routing['action'] == 'refocus', 'placeholder planning mission should still classify active bare /cook as refocus when the normalized mission changes'
-assert routing['reason'] == 'clear_refocus', 'active bare /cook refocus normalization should keep the clear_refocus routing reason'
-assert routing['proposedMissionAnchor'] == mission, 'active bare /cook refocus should normalize the proposed mission before canonical rewrite'
-assert chooser['choices'][1].startswith('Start new workflow from recent discussion'), 'active bare /cook refocus should still route through the existing chooser copy before rewrite'
-assert [action['id'] for action in ui['actions']] == ['start', 'cancel'], 'active bare /cook refocus should still end at the approval-only Start/Cancel gate'
-assert proposal['mission'] == mission, 'active bare /cook refocus proposal snapshot should expose the normalized implementation mission'
-assert state['mission_anchor'] == mission, 'active bare /cook refocus should rewrite canonical state to the normalized mission only after approval'
-assert plan['mission_anchor'] == mission, 'active bare /cook refocus should rewrite plan.json only after approval'
-assert active['mission_anchor'] == mission, 'active bare /cook refocus should rewrite active-slice.json only after approval'
+assert routing['mode'] == 'bare', 'fresh non-startable explicit handoff should snapshot bare routing mode'
+assert routing['action'] == 'blocked', 'fresh non-startable explicit handoff should fail closed for active bare /cook'
+assert routing['reason'] == 'fresh_explicit_handoff_not_startable', 'fresh non-startable explicit handoff should keep the dedicated explicit-handoff fail-closed reason'
+assert 'fresh explicit primary-agent handoff exists' in routing['blockedFailureMessage'], 'fresh non-startable explicit handoff should surface the dedicated fail-closed message'
+assert 'acceptance is not anchored to concrete repo changes or verification' in routing['blockedFailureMessage'], 'fresh non-startable explicit handoff should explain why the capsule is not startable'
+assert not resume_path.exists(), 'fresh non-startable explicit handoff should not queue a resume prompt'
+assert not chooser_path.exists(), 'fresh non-startable explicit handoff should not open the replacement chooser'
+assert not proposal_path.exists(), 'fresh non-startable explicit handoff should not open final proposal confirmation'
+assert 'fresh explicit primary-agent handoff exists' in output, 'fresh non-startable explicit handoff should explain that the explicit capsule blocked active-workflow replacement'
+assert before == after, 'fresh non-startable explicit handoff should leave canonical state unchanged'
 PY
 
 # Completed workflow: bare /cook should suppress proposals that simply restate the completed mission

@@ -25,7 +25,6 @@ import {
 	missionAnchorsStrictlyEquivalent,
 	normalizeMissionAnchorText,
 	resolveContextProposalConfirmationAction,
-	shouldTreatBareActiveWorkflowProposalAsClearRefocus,
 	stripCodeBlocks,
 } from "./proposal";
 import type {
@@ -128,15 +127,14 @@ type CookContextProposalResult = {
 };
 
 type ActiveWorkflowProposalAssessment = {
-	action: "continue" | "refocus" | "unclear" | "blocked";
+	action: "continue" | "refocus" | "blocked";
 	currentMissionAnchor: string;
 	proposal?: ContextProposal;
 	blockedFailureMessage?: string;
 	reason:
 		| "matching_mission"
-		| "clear_refocus"
-		| "missing_proposal"
-		| "ambiguous_discussion"
+		| "missing_explicit_handoff"
+		| "fresh_explicit_handoff"
 		| "fresh_explicit_handoff_not_startable";
 };
 
@@ -959,7 +957,6 @@ export default function completionExtension(pi: ExtensionAPI) {
 		scaffoldCompletionFiles,
 		shouldSkipDriverKickoffForTests,
 		shouldTestAutoContinueOnSessionStart,
-		shouldTreatBareActiveWorkflowProposalAsClearRefocus,
 	};
 
 

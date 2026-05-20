@@ -223,11 +223,51 @@ assert before == after, 'active /cook inline-args rejection should leave canonic
 PY
 
 SESSION_INITIAL_REFOCUS="$TMPDIR/session-initial-bare-refocus.jsonl"
-INITIAL_REFOCUS_DISCUSSION=$'Mission: Remove completion status line, keep widget.\nScope:\n- Replace the initial smoke-test workflow with the widget mission.\nConstraints:\n- Keep the approval-only Start/Cancel refocus gate.\nAcceptance:\n- Rewrite canonical state only after the replacement mission is approved.'
 INITIAL_REFOCUS_ROUTING="$TMPDIR/initial-bare-refocus-routing.json"
-write_session "$SESSION_INITIAL_REFOCUS" "$TMPDIR" "$INITIAL_REFOCUS_DISCUSSION"
+INITIAL_REFOCUS_MESSAGES="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Remove completion status line, keep widget.",
+    "scope": [
+        "Replace the initial smoke-test workflow with the widget mission."
+    ],
+    "constraints": [
+        "Keep the approval-only Start/Cancel refocus gate."
+    ],
+    "acceptance": [
+        "Rewrite canonical state only after the replacement mission is approved."
+    ],
+    "risks": [],
+    "notes": [
+        "Use a fresh explicit primary-agent handoff for the active-workflow replacement."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Replace the initial smoke-test workflow with the widget mission.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "scripts/refocus-test.sh"
+    ],
+    "verification_commands": [
+        "npm run refocus-test"
+    ],
+    "why_this_slice_first": "The fresh explicit handoff is the only supported replacement entry while a workflow is active.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "A different active workflow is ready and explicitly handed off by the primary agent."
+}
+messages = [
+    {"role": "user", "content": "The smoke-test workflow is active, but a different replacement workflow may now be ready."},
+    {"role": "assistant", "content": "Use this fresh explicit handoff if you want /cook to replace the active workflow.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$SESSION_INITIAL_REFOCUS" "$TMPDIR" "$INITIAL_REFOCUS_MESSAGES"
 
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$INITIAL_REFOCUS_ROUTING" \
@@ -272,9 +312,10 @@ assert active['status'] == 'idle', 'active-slice.json status should reset to idl
 assert routing['mode'] == 'bare', 'supported refocus should use bare active-workflow routing mode'
 assert 'explicitGoal' not in routing, 'supported bare refocus should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'supported bare refocus should not expose removed explicit-goal shim fields'
-assert routing['action'] == 'refocus', 'supported bare /cook should classify as refocus when the mission changes'
-assert routing['reason'] == 'clear_refocus', 'supported bare /cook should record the clear-refocus routing reason'
-assert routing['proposedMissionAnchor'] == new_anchor, 'bare refocus routing snapshot should expose the replacement mission anchor'
+assert routing['action'] == 'refocus', 'supported bare /cook should classify as refocus when a fresh explicit handoff proposes a different mission'
+assert routing['reason'] == 'fresh_explicit_handoff', 'supported bare /cook should record the explicit-handoff replacement reason'
+assert routing['proposedMissionAnchor'] == new_anchor, 'explicit handoff routing snapshot should expose the replacement mission anchor'
+assert routing['proposalSource'] == 'handoff_capsule', 'explicit handoff routing snapshot should preserve the handoff source'
 PY
 
 UPDATED_MISSION="$(python3 - <<'PY'
@@ -290,16 +331,58 @@ if [[ "$INITIAL_MISSION" == "$UPDATED_MISSION" ]]; then
   exit 1
 fi
 
-# Negated replacement missions that contain the current anchor must still reach the conservative chooser and final Start/Cancel gate.
-BARE_REFOCUS_MISSION='Do not remove completion status line, keep widget.'
-BARE_REFOCUS_DISCUSSION=$'Mission: Do not remove completion status line, keep widget.\nScope:\n- Treat the active bare /cook discussion as a replacement workflow rather than a resume.\n- Keep the replacement behind the existing approval-only Start/Cancel gate.\nConstraints:\n- Do not rewrite canonical state before the final Start confirmation.\nAcceptance:\n- Add deterministic coverage proving the chooser and final approval path for this negated replacement mission.'
+# Fresh explicit handoff replacements must still reach the chooser and final Start/Cancel gate while the
+# workflow is active.
+BARE_REFOCUS_MISSION='Exercise explicit active-workflow replacement coverage.'
+BARE_REFOCUS_MESSAGES="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Exercise explicit active-workflow replacement coverage.",
+    "scope": [
+        "Treat the active bare /cook request as an explicit replacement workflow.",
+        "Keep the replacement behind the existing approval-only Start/Cancel gate."
+    ],
+    "constraints": [
+        "Do not rewrite canonical state before the final Start confirmation."
+    ],
+    "acceptance": [
+        "Add deterministic coverage proving the chooser and final approval path for this explicit replacement mission."
+    ],
+    "risks": [],
+    "notes": [
+        "This replacement should come only from the fresh explicit handoff, not recent discussion inference."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Exercise the active-workflow explicit-handoff replacement path.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "scripts/refocus-test.sh"
+    ],
+    "verification_commands": [
+        "npm run refocus-test"
+    ],
+    "why_this_slice_first": "The active workflow should only replace from a fresh explicit handoff.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The primary agent explicitly handed off a replacement workflow while the current one is active."
+}
+messages = [
+    {"role": "user", "content": "The current workflow is active, but there is a fresh explicit replacement handoff ready."},
+    {"role": "assistant", "content": "Use this fresh explicit handoff if you want /cook to replace the active workflow.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
 
 SESSION_BARE_CHOOSER_CANCEL="$TMPDIR/session-bare-chooser-cancel.jsonl"
 BARE_CHOOSER_SNAPSHOT="$TMPDIR/bare-existing-workflow-chooser.json"
 BARE_ROUTING_CHOOSER_CANCEL="$TMPDIR/bare-routing-chooser-cancel.json"
-write_session "$SESSION_BARE_CHOOSER_CANCEL" "$TMPDIR" "$BARE_REFOCUS_DISCUSSION"
+write_session_messages "$SESSION_BARE_CHOOSER_CANCEL" "$TMPDIR" "$BARE_REFOCUS_MESSAGES"
 
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_EXISTING_WORKFLOW_ACTION=cancel \
 PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$BARE_CHOOSER_SNAPSHOT" \
 PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$BARE_ROUTING_CHOOSER_CANCEL" \
@@ -327,13 +410,14 @@ assert active['mission_anchor'] == updated_mission, 'chooser cancel should keep 
 assert routing['mode'] == 'bare', 'bare /cook should snapshot bare active-workflow routing mode'
 assert 'explicitGoal' not in routing, 'bare chooser routing should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'bare chooser routing should not expose removed explicit-goal shim fields'
-assert routing['action'] == 'refocus', 'clear structured discussion should classify active bare /cook as refocus'
-assert routing['reason'] == 'clear_refocus', 'clear structured discussion should record the clear-refocus routing reason'
-assert routing['currentMissionAnchor'] == updated_mission, 'clear-refocus routing should keep the current mission anchor until the user approves replacement'
-assert routing['proposedMissionAnchor'] == replacement_mission, 'clear-refocus routing should expose the proposed replacement mission'
+assert routing['action'] == 'refocus', 'fresh explicit replacement handoff should classify active bare /cook as refocus'
+assert routing['reason'] == 'fresh_explicit_handoff', 'fresh explicit replacement handoff should record the explicit-handoff reason'
+assert routing['currentMissionAnchor'] == updated_mission, 'explicit-handoff routing should keep the current mission anchor until the user approves replacement'
+assert routing['proposedMissionAnchor'] == replacement_mission, 'explicit-handoff routing should expose the proposed replacement mission'
+assert routing['proposalSource'] == 'handoff_capsule', 'explicit-handoff routing should preserve the handoff source'
 assert chooser['title'].startswith('Existing completion workflow found'), 'bare chooser snapshot should describe the existing-workflow prompt'
 assert chooser['choices'][0].startswith('Continue current workflow'), 'bare chooser should keep the continue option'
-assert chooser['choices'][1].startswith('Start new workflow from recent discussion'), 'bare chooser should offer the recent-discussion refocus option'
+assert chooser['choices'][1].startswith('Start new workflow from explicit primary-agent handoff'), 'bare chooser should offer the explicit-handoff replacement option'
 assert 'Start/Cancel confirmation' in chooser['choices'][1], 'bare chooser should mention the approval-only replacement confirmation'
 assert chooser['choices'][2].startswith('Cancel'), 'bare chooser should keep the cancel option'
 assert 'Discuss changes in the main chat and rerun /cook.' in output, 'bare chooser cancel should redirect users back to the main chat and rerun /cook'
@@ -342,9 +426,8 @@ PY
 SESSION_BARE_FINAL_CANCEL="$TMPDIR/session-bare-final-cancel.jsonl"
 BARE_ROUTING_FINAL_CANCEL="$TMPDIR/bare-routing-final-cancel.json"
 BARE_PROPOSAL_CANCEL="$TMPDIR/bare-replacement-proposal-cancel.json"
-write_session "$SESSION_BARE_FINAL_CANCEL" "$TMPDIR" "$BARE_REFOCUS_DISCUSSION"
+write_session_messages "$SESSION_BARE_FINAL_CANCEL" "$TMPDIR" "$BARE_REFOCUS_MESSAGES"
 
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=cancel \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$BARE_PROPOSAL_CANCEL" \
@@ -370,19 +453,19 @@ active = json.loads(Path('.agent/active-slice.json').read_text())
 assert state['mission_anchor'] == updated_mission, 'final Start/Cancel cancel should keep the current mission anchor'
 assert plan['mission_anchor'] == updated_mission, 'final Start/Cancel cancel should keep plan.json unchanged'
 assert active['mission_anchor'] == updated_mission, 'final Start/Cancel cancel should keep active-slice.json unchanged'
-assert routing['action'] == 'refocus', 'final Start/Cancel cancel should still come from a clear-refocus classification'
-assert routing['reason'] == 'clear_refocus', 'final Start/Cancel cancel should preserve the clear-refocus reason'
+assert routing['action'] == 'refocus', 'final Start/Cancel cancel should still come from an explicit-handoff refocus classification'
+assert routing['reason'] == 'fresh_explicit_handoff', 'final Start/Cancel cancel should preserve the explicit-handoff reason'
 assert routing['currentMissionAnchor'] == updated_mission, 'final Start/Cancel cancel should keep the current mission anchor until the user approves replacement'
 assert proposal['mission'] == replacement_mission, 'final Start/Cancel cancel should still prepare the replacement proposal before rewriting state'
+assert proposal['source'] == 'handoff_capsule', 'final Start/Cancel cancel should preserve the explicit-handoff proposal source'
 assert 'Discuss changes in the main chat and rerun /cook.' in output, 'final Start/Cancel cancel should redirect users back to the main chat and rerun /cook'
 PY
 
 SESSION_BARE_ACCEPT="$TMPDIR/session-bare-accept.jsonl"
 BARE_ROUTING_ACCEPT="$TMPDIR/bare-routing-accept.json"
 BARE_PROPOSAL_ACCEPT="$TMPDIR/bare-replacement-proposal-accept.json"
-write_session "$SESSION_BARE_ACCEPT" "$TMPDIR" "$BARE_REFOCUS_DISCUSSION"
+write_session_messages "$SESSION_BARE_ACCEPT" "$TMPDIR" "$BARE_REFOCUS_MESSAGES"
 
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$BARE_PROPOSAL_ACCEPT" \
@@ -396,7 +479,7 @@ import json
 import sys
 from pathlib import Path
 
-new_anchor = 'Do not remove completion status line, keep widget.'
+new_anchor = 'Exercise explicit active-workflow replacement coverage.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 proposal = json.loads(Path(sys.argv[1]).read_text())
@@ -411,9 +494,10 @@ assert proposal['mission'] == new_anchor, 'accepted bare refocus should preserve
 assert routing['mode'] == 'bare', 'accepted bare refocus should keep bare routing mode'
 assert 'explicitGoal' not in routing, 'accepted bare refocus should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'accepted bare refocus should not expose removed explicit-goal shim fields'
-assert routing['action'] == 'refocus', 'accepted bare refocus should keep the clear-refocus classification'
-assert routing['reason'] == 'clear_refocus', 'accepted bare refocus should keep the clear-refocus reason'
+assert routing['action'] == 'refocus', 'accepted bare refocus should keep the explicit-handoff refocus classification'
+assert routing['reason'] == 'fresh_explicit_handoff', 'accepted bare refocus should keep the explicit-handoff reason'
 assert routing['currentMissionAnchor'] == 'Remove completion status line, keep widget.', 'accepted bare refocus should expose the original mission until Start is accepted'
+assert routing['proposalSource'] == 'handoff_capsule', 'accepted bare refocus should preserve the explicit-handoff source'
 assert new_anchor in mission_text, '.agent/mission.md did not update to the bare refocus mission anchor'
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after bare refocus'
 assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after bare refocus'
