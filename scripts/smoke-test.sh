@@ -47,6 +47,49 @@ with session_path.open('w', encoding='utf-8') as fh:
 PY
 }
 
+write_session_messages() {
+  local session_path="$1"
+  local cwd="$2"
+  local messages_json="$3"
+  python3 - "$session_path" "$cwd" "$messages_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+session_path = Path(sys.argv[1])
+cwd = sys.argv[2]
+messages = json.loads(sys.argv[3])
+session_path.parent.mkdir(parents=True, exist_ok=True)
+entries = [
+    {
+        "type": "session",
+        "version": 3,
+        "id": "11111111-1111-4111-8111-111111111111",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "cwd": cwd,
+    },
+]
+parent_id = None
+for index, message in enumerate(messages, start=1):
+    entry_id = f"m{index:04d}"
+    entries.append({
+        "type": "message",
+        "id": entry_id,
+        "parentId": parent_id,
+        "timestamp": f"2026-01-01T00:00:{index:02d}.000Z",
+        "message": {
+            "role": message["role"],
+            "content": message["content"],
+            "timestamp": 1767225600000 + index * 1000,
+        },
+    })
+    parent_id = entry_id
+with session_path.open('w', encoding='utf-8') as fh:
+    for entry in entries:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+PY
+}
+
 ROOT="$TMPDIR/repo"
 KICKOFF_PROMPT="$TMPDIR/kickoff-prompt.txt"
 RESUME_PROMPT="$TMPDIR/resume-prompt.txt"
@@ -60,7 +103,55 @@ INLINE_REJECTION_ROUTING_SNAPSHOT="$TMPDIR/inline-arg-routing.json"
 INLINE_REJECTION_PROPOSAL_SNAPSHOT="$TMPDIR/inline-arg-proposal.json"
 INLINE_REJECTION_CHOOSER_SNAPSHOT="$TMPDIR/inline-arg-chooser.json"
 BOOTSTRAP_SESSION="$TMPDIR/session-smoke-bootstrap.jsonl"
-BOOTSTRAP_DISCUSSION=$'Mission: Exercise smoke-test bootstrap.\nScope:\n- Materialize the canonical completion control-plane files.\n- Keep the smoke test on supported /cook startup behavior.\nConstraints:\n- Keep startup proposal confirmation approval-only.\nAcceptance:\n- Scaffold canonical files and kickoff prompts for the smoke fixture.'
+BOOTSTRAP_MESSAGES="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Exercise smoke-test bootstrap.",
+    "scope": [
+        "Materialize the canonical completion control-plane files.",
+        "Keep the smoke test on supported /cook startup behavior."
+    ],
+    "constraints": [
+        "Keep startup proposal confirmation approval-only."
+    ],
+    "acceptance": [
+        "Scaffold .agent/profile.json, .agent/state.json, .agent/plan.json, .agent/active-slice.json, and .agent/verification-evidence.json for the smoke fixture.",
+        "Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap."
+    ],
+    "risks": [
+        "Smoke-test bootstrap should stay anchored to the fresh explicit handoff."
+    ],
+    "notes": [
+        "Keep the smoke fixture aligned with the shipped explicit-handoff-only startup contract."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Scaffold canonical completion files and verify the packaged startup contract.",
+    "first_slice_non_goals": [
+        "Do not broaden the smoke fixture beyond the packaged startup surfaces."
+    ],
+    "implementation_surfaces": [
+        ".agent/README.md",
+        "scripts/smoke-test.sh"
+    ],
+    "verification_commands": [
+        "npm run smoke-test"
+    ],
+    "why_this_slice_first": "The packaged explicit-handoff startup path must work before later workflow verification can run.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The startup handoff is concrete enough to bootstrap canonical workflow files."
+}
+messages = [
+    {"role": "user", "content": "Please prepare the packaged smoke-test bootstrap path and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "This bootstrap path is ready for /cook. Run /cook to confirm the startup brief.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
 
 mkdir -p "$ROOT"
 cd "$ROOT"
@@ -89,7 +180,7 @@ assert not chooser.exists(), 'startup /cook inline-args rejection should not ope
 assert '/cook no longer accepts inline arguments.' in output, 'startup /cook inline-args rejection should explain the bare-only entry contract'
 PY
 
-write_session "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_DISCUSSION"
+write_session_messages "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_MESSAGES"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
@@ -133,11 +224,17 @@ assert active['implementation_surfaces'] == [], 'active-slice.json should scaffo
 assert active['verification_commands'] == [], 'active-slice.json should scaffold empty verification_commands'
 brief = state['advisory_startup_brief']
 assert brief['kind'] == 'startup_brief', 'state.json should preserve the confirmed startup brief as advisory intake'
+assert brief['source'] == 'primary_agent_handoff', 'smoke bootstrap should record the explicit handoff source in advisory intake'
 assert brief['mission'] == state['mission_anchor'], 'advisory startup brief mission should match the canonical mission anchor after bootstrap'
 assert brief['scope'] == ['Materialize the canonical completion control-plane files.', 'Keep the smoke test on supported /cook startup behavior.'], 'advisory startup brief should preserve scope items'
 assert brief['constraints'] == ['Keep startup proposal confirmation approval-only.'], 'advisory startup brief should preserve constraints'
-assert brief['acceptance'] == ['Scaffold canonical files and kickoff prompts for the smoke fixture.'], 'advisory startup brief should preserve acceptance'
-assert brief['notes'] == ['No additional operator notes were derived from recent discussion.'], 'advisory startup brief should still preserve operator-note structure when no explicit notes exist'
+assert brief['acceptance'] == [
+    'Scaffold .agent/profile.json, .agent/state.json, .agent/plan.json, .agent/active-slice.json, and .agent/verification-evidence.json for the smoke fixture.',
+    'Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap.'
+], 'advisory startup brief should preserve acceptance'
+assert brief['risks'] == ['Smoke-test bootstrap should stay anchored to the fresh explicit handoff.'], 'advisory startup brief should preserve handoff risks'
+assert 'First slice goal: Scaffold canonical completion files and verify the packaged startup contract.' in brief['notes'], 'advisory startup brief should preserve the first_slice_goal in notes'
+assert 'Verification commands: npm run smoke-test' in brief['notes'], 'advisory startup brief should preserve verification_commands in notes'
 assert evidence['artifact_type'] == 'completion-verification-evidence', 'verification-evidence.json artifact_type mismatch after bootstrap'
 assert evidence['subject_type'] == 'none', 'verification-evidence.json should scaffold idle subject_type'
 assert evidence['verification_commands'] == [], 'verification-evidence.json should scaffold empty verification_commands'
@@ -174,6 +271,10 @@ assert '```cook_handoff ... ``` JSON' in handoff_text, 'ordinary handoff reminde
 assert 'implementation_workflow_handoff' in handoff_text, 'ordinary handoff reminder should require the implementation-ready handoff kind'
 assert 'first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first' in handoff_text, 'ordinary handoff reminder should require first-slice startability fields'
 assert 'The capsule is startup intake for /cook only' in handoff_text, 'ordinary handoff reminder should keep the capsule non-canonical'
+assert 'start a new workflow or next round only from a fresh valid explicit primary-agent handoff capsule' in handoff_text, 'ordinary handoff reminder should describe explicit-handoff-only startup truthfully'
+assert 'fails closed' in handoff_text, 'ordinary handoff reminder should describe fail-closed startup when no fresh valid handoff exists'
+assert 'resume from canonical .agent state' in handoff_text, 'ordinary handoff reminder should preserve active-workflow canonical resume wording'
+assert 'fall back to recent discussion' not in handoff_text, 'ordinary handoff reminder should no longer promise recent-discussion startup fallback'
 assert not auto_resume.exists(), 'ordinary non-/cook turn should not queue auto-resume before /cook activation'
 assert 'Skipped completion workflow auto-resume prompt (test mode)' not in output, 'ordinary non-/cook turn should not attempt auto-resume'
 PY
@@ -201,11 +302,11 @@ assert 'Canonical routing profile:' in resume, 'resume prompt should expose cano
 assert f'- task_type: {expected_task_type}' in resume, 'resume prompt missing canonical task_type'
 assert f'- evaluation_profile: {expected_eval_profile}' in resume, 'resume prompt missing canonical evaluation_profile'
 assert routing['mode'] == 'bare', 'active bare /cook should snapshot bare routing mode'
-assert routing['action'] == 'unclear', 'no-discussion active bare /cook should classify as unclear'
-assert routing['reason'] == 'missing_proposal', 'no-discussion active bare /cook should fail closed because no replacement proposal was derived'
-assert routing['currentMissionAnchor'] == state['mission_anchor'], 'unclear routing snapshot should keep the current mission anchor'
-assert routing['proposedMissionAnchor'] is None, 'unclear no-discussion routing should not propose a replacement mission'
-assert not chooser_path.exists(), 'unclear active bare /cook should fall back to resume without opening the chooser'
+assert routing['action'] == 'continue', 'no-discussion active bare /cook should resume from canonical state without a fresh explicit handoff'
+assert routing['reason'] == 'missing_explicit_handoff', 'no-discussion active bare /cook should explain that resume happened because no fresh explicit handoff existed'
+assert routing['currentMissionAnchor'] == state['mission_anchor'], 'resume routing snapshot should keep the current mission anchor'
+assert routing['proposedMissionAnchor'] is None, 'no-discussion active bare /cook should not propose a replacement mission'
+assert not chooser_path.exists(), 'active bare /cook resume should not open the chooser without a fresh explicit handoff'
 PY
 
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \

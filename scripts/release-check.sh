@@ -11,51 +11,49 @@ git ls-files --error-unmatch .agent/README.md .agent/mission.md .agent/profile.j
 
 echo "[release-check] verifying public /cook parity and explicit-entry docs/help"
 python3 - <<'PY'
-import re
 from pathlib import Path
 
 checks = {
     "README.md": [
         "`/cook` is the explicit workflow boundary for starting, continuing, refocusing, or beginning the next round of long-running repo work.",
         "Only explicit `/cook` enters the workflow. Ordinary prompts stay in the main chat and go straight to the primary agent.",
-        "If a task has clearly matured into completion-workflow scope, the primary agent should hand you off to `/cook` instead of starting long-running implementation directly in ordinary chat.",
         "That handoff should include an explicit structured `/cook` capsule in the assistant reply so `/cook` can confirm the already-formed mission instead of re-deriving it from broad ambient context.",
-        "for that handoff capsule to start workflow immediately, it must already be implementation-startable: a bounded `first_slice_goal`, repo-change-oriented acceptance, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first`",
-        "The preferred capsule is still advisory startup intake, not canonical workflow state, and it only counts as implementation-ready when it already names the first bounded slice, repo-change-oriented acceptance, implementation surfaces, and verification commands.",
-        "`/cook` first looks for a fresh explicit primary-agent handoff capsule. If one is valid and implementation-startable, `/cook` builds the startup brief from that handoff and only uses recent discussion as validation or supplemental notes.",
-        "`/cook` falls back to deriving a startup brief from recent discussion only when no fresh explicit handoff is blocking startup—for example, when there is no fresh capsule or only stale or invalidated capsules—before showing the existing approval-only Start/Cancel gate.",
-        "The pre-`/cook` handoff capsule itself is not canonical workflow state. It is only startup intake for `/cook`.",
+        "The capsule is still advisory startup intake, not canonical workflow state, and new-workflow or next-round entry only proceeds when it already names the first bounded slice, repo-change-oriented acceptance, implementation surfaces, and verification commands.",
+        "- startup and next-round entry stay confirm-first and require a fresh valid explicit primary-agent handoff",
+        "- active workflows resume from canonical `.agent/**` state unless a fresh valid explicit handoff proposes a replacement",
+        "`/cook` first looks for a fresh explicit primary-agent handoff capsule. New-workflow entry and done-workflow next-round entry start only when that capsule is fresh, valid, and implementation-startable; otherwise `/cook` fails closed instead of deriving startup from recent discussion.",
+        "When a workflow is already active and no fresh valid explicit handoff is present, `/cook` resumes from canonical `.agent/**` state instead of deriving replacement startup from recent discussion.",
+        "Without one, `/cook` fails closed instead of deriving the next round from recent discussion.",
+        "when a fresh explicit handoff suggests replacing an active workflow, `/cook` shows a chooser before any canonical state rewrite",
     ],
     "CHANGELOG.md": [
-        "made explicit primary-agent `/cook` handoff the preferred startup-intake path by teaching ordinary-chat handoff turns to emit a structured `cook_handoff` capsule and letting `/cook` prefer that capsule over broad context re-inference when it is fresh, valid, and implementation-startable",
-        "tightened implementation-ready explicit handoffs so the structured capsule must already carry a bounded `first_slice_goal`, repo-change-oriented acceptance, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` before `/cook` will start workflow from it",
-        "kept the pre-`/cook` handoff capsule as advisory startup intake only, not canonical `.agent/**` workflow state, while still using context-derived startup as the fallback only when no fresh explicit handoff is blocking startup",
-        "kept context-derived startup as a fallback only when there is no fresh explicit handoff blocking startup, so stale or invalidated capsules can still fall back to recent discussion while fresh non-startable handoffs fail closed instead of silently rewriting canonical state",
-        "made finished-workflow suppression stay a safety layer instead of a replacement mission when a fresh explicit `/cook` handoff exists, and blocked negative rejection/suppression text from becoming a Startable startup mission",
+        "made bare `/cook` startup and done-workflow next-round entry require a fresh valid explicit primary-agent handoff instead of falling back to recent discussion",
+        "kept active-workflow bare `/cook` resumable from canonical `.agent/**` state when no fresh explicit handoff is present, while still allowing explicit handoff replacement confirmation",
+        "updated public parity and shipped package contents so the tracked `.agent` contract files are included in package tarballs and packaged smoke/release verification can scaffold canonical state truthfully",
     ],
     "extensions/completion/prompt-surfaces.ts": [
         '"/cook is the only explicit entrypoint into long-running completion workflow."',
-        '"When you judge that the task has matured into completion-workflow scope',
-        '"Distinguish a workflow-worthy handoff from an implementation-ready handoff: only emit the implementation-ready capsule when the first bounded implementation slice is concrete enough to start immediately."',
-        '"Otherwise append one exact fenced block in the same assistant reply using ```cook_handoff ... ``` JSON with kind/source/handoff_kind plus mission, scope, constraints or non_goals, acceptance, risks, notes, captured_at, source_turn_id, first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first, and optional task_type/evaluation_profile/why_cook_now."',
+        '"When handing off, explain that /cook can start a new workflow or next round only from a fresh valid explicit primary-agent handoff capsule; otherwise it fails closed, while already-active workflows resume from canonical .agent state unless a fresh valid explicit handoff proposes replacement."',
         '"The capsule is startup intake for /cook only: do not present it as canonical .agent state',
+    ],
+    "extensions/completion/index.ts": [
+        '"/cook failed closed because new-workflow startup now requires a fresh valid explicit primary-agent handoff from the immediately preceding ordinary-chat turn; recent discussion alone no longer starts a workflow. Ask the primary agent to hand off explicitly in the main chat, then rerun /cook."',
+        'description: "/cook workflow: start a new workflow or next round only from a fresh explicit primary-agent handoff, resume the current workflow from canonical state, or confirm an explicit replacement from the explicit /cook command"',
     ],
 }
 
 forbidden = {
     "README.md": [
-        "`/cook <hint>`",
-        "Natural-language routing is optional and shipped in two modes",
-        "PI_COMPLETION_TRIGGER_MODE",
-        "workflow-aware router",
-        "Send as normal chat",
-        "bash ./scripts/cook-trigger-routing-test.sh",
+        "Start a new workflow from recent discussion:",
+        "`/cook` falls back to deriving a startup brief from recent discussion only when no fresh explicit handoff is blocking startup",
+        "Without a fresh explicit handoff blocking startup, `/cook` can fall back to recent discussion.",
     ],
-    "CHANGELOG.md": ["compatibility" + " shim"],
+    "extensions/completion/prompt-surfaces.ts": [
+        '"When handing off, explain that /cook will first look for a fresh explicit primary-agent handoff capsule and otherwise fall back to recent discussion."',
+    ],
     "extensions/completion/index.ts": [
-        'description: "/cook workflow: start, continue, refocus, or start the next round from an explicit /cook command"',
-        '"/cook failed closed because recent discussion did not produce a clear execution-ready Mission/Scope/Constraints/Acceptance proposal for concrete repo changes. Clarify the concrete repo changes in the main chat and rerun /cook."',
-        'handleCookNaturalLanguageTrigger',
+        'description: "/cook workflow: derive a startup brief from recent discussion, then start, continue, refocus, or start the next round from the explicit /cook command"',
+        '"/cook failed closed because recent discussion did not produce a clear execution-ready startup brief with Mission/Scope/Constraints/Acceptance for concrete repo changes. Clarify the concrete repo changes in the main chat and rerun /cook."',
     ],
 }
 
@@ -69,7 +67,7 @@ for path, needles in forbidden.items():
     text = Path(path).read_text()
     for needle in needles:
         if needle in text:
-            raise SystemExit(f"[release-check] found stale compatibility wording in {path}: {needle}")
+            raise SystemExit(f"[release-check] found stale /cook parity text in {path}: {needle}")
 PY
 
 npm run smoke-test
@@ -82,6 +80,28 @@ npm run observability-status-test
 bash ./scripts/legacy-cleanup-test.sh
 npm run evaluator-calibration-test
 npm run rubric-contract-test
-npm pack --dry-run >/dev/null
+
+echo "[release-check] verifying packaged .agent contract files in npm pack output"
+PACK_JSON="$(npm pack --dry-run --json)"
+python3 - "$PACK_JSON" <<'PY'
+import json
+import sys
+
+required = {
+    '.agent/README.md',
+    '.agent/mission.md',
+    '.agent/profile.json',
+    '.agent/verify_completion_stop.sh',
+    '.agent/verify_completion_control_plane.sh',
+}
+
+payload = json.loads(sys.argv[1])
+if not isinstance(payload, list) or not payload:
+    raise SystemExit('[release-check] npm pack --dry-run --json returned no package payload')
+files = {item.get('path') for item in payload[0].get('files', []) if isinstance(item, dict)}
+missing = sorted(required - files)
+if missing:
+    raise SystemExit(f"[release-check] npm pack --dry-run is missing tracked .agent contract files: {', '.join(missing)}")
+PY
 
 echo "release check passed"

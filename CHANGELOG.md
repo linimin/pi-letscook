@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- made bare `/cook` startup and done-workflow next-round entry require a fresh valid explicit primary-agent handoff instead of falling back to recent discussion
+- kept active-workflow bare `/cook` resumable from canonical `.agent/**` state when no fresh explicit handoff is present, while still allowing explicit handoff replacement confirmation
+- updated public parity and shipped package contents so the tracked `.agent` contract files are included in package tarballs and packaged smoke/release verification can scaffold canonical state truthfully
+
 ## 0.1.58
 
 ### Changed

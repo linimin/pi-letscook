@@ -47,6 +47,49 @@ with session_path.open('w', encoding='utf-8') as fh:
 PY
 }
 
+write_session_messages() {
+  local session_path="$1"
+  local cwd="$2"
+  local messages_json="$3"
+  python3 - "$session_path" "$cwd" "$messages_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+session_path = Path(sys.argv[1])
+cwd = sys.argv[2]
+messages = json.loads(sys.argv[3])
+session_path.parent.mkdir(parents=True, exist_ok=True)
+entries = [
+    {
+        "type": "session",
+        "version": 3,
+        "id": "11111111-1111-4111-8111-111111111111",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "cwd": cwd,
+    },
+]
+parent_id = None
+for index, message in enumerate(messages, start=1):
+    entry_id = f"m{index:04d}"
+    entries.append({
+        "type": "message",
+        "id": entry_id,
+        "parentId": parent_id,
+        "timestamp": f"2026-01-01T00:00:{index:02d}.000Z",
+        "message": {
+            "role": message["role"],
+            "content": message["content"],
+            "timestamp": 1767225600000 + index * 1000,
+        },
+    })
+    parent_id = entry_id
+with session_path.open('w', encoding='utf-8') as fh:
+    for entry in entries:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+PY
+}
+
 cleanup() {
   if [[ -n "$CURRENT_EVIDENCE_BACKUP" && -f "$CURRENT_EVIDENCE_BACKUP" ]]; then
     cp "$CURRENT_EVIDENCE_BACKUP" "$PKG_ROOT/.agent/verification-evidence.json"
@@ -139,11 +182,59 @@ bash .agent/verify_completion_control_plane.sh >/dev/null
 ROOT="$TMPDIR/repo"
 SYSTEM_REMINDER="$TMPDIR/system-reminder.txt"
 BOOTSTRAP_SESSION="$TMPDIR/session-canonical-evidence-bootstrap.jsonl"
-BOOTSTRAP_DISCUSSION=$'Mission: Exercise canonical evidence fixture bootstrap.\nScope:\n- Materialize canonical completion files for the evidence artifact fixture.\nConstraints:\n- Use supported bare /cook startup only.\nAcceptance:\n- Scaffold canonical files before the fixture rewrites them.'
+BOOTSTRAP_MESSAGES="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Exercise canonical evidence fixture bootstrap.",
+    "scope": [
+        "Materialize canonical completion files for the evidence artifact fixture.",
+        "Keep the verification-evidence bootstrap on the supported explicit-handoff startup path."
+    ],
+    "constraints": [
+        "Use supported bare /cook startup only."
+    ],
+    "acceptance": [
+        "Scaffold .agent/profile.json, .agent/state.json, .agent/plan.json, .agent/active-slice.json, and .agent/verification-evidence.json before the fixture rewrites them.",
+        "Keep scripts/canonical-evidence-artifact-test.sh aligned with packaged bootstrap behavior."
+    ],
+    "risks": [
+        "Evidence-artifact bootstrap must stay anchored to the fresh explicit handoff."
+    ],
+    "notes": [
+        "This fixture exists only to scaffold canonical files before rewriting them for evidence parity coverage."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Scaffold canonical evidence-artifact fixture files before rewriting them for parity checks.",
+    "first_slice_non_goals": [
+        "Do not broaden the bootstrap fixture beyond the evidence-artifact surfaces."
+    ],
+    "implementation_surfaces": [
+        ".agent/verification-evidence.json",
+        "scripts/canonical-evidence-artifact-test.sh"
+    ],
+    "verification_commands": [
+        "bash ./scripts/canonical-evidence-artifact-test.sh"
+    ],
+    "why_this_slice_first": "The evidence-artifact fixture cannot validate fail-closed parity until canonical files exist.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The fixture bootstrap is concrete enough to create canonical control-plane files."
+}
+messages = [
+    {"role": "user", "content": "Prepare the canonical evidence bootstrap fixture and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "The canonical evidence bootstrap fixture is ready for /cook. Run /cook to confirm it.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
 mkdir -p "$ROOT"
 cd "$ROOT"
 git init -q
-write_session "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_DISCUSSION"
+write_session_messages "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_MESSAGES"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \

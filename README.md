@@ -30,10 +30,10 @@ Then run `/reload` in Pi.
 1. Install the package:
    `pi install npm:@linimin/pi-letscook`
 2. Run `/reload` in Pi.
-3. In the main chat, describe the concrete repo change you want.
+3. In the main chat, describe the concrete repo change you want and let the primary agent hand you off to `/cook` when the first slice is ready.
 4. Run `/cook`.
 5. Review the startup brief and choose **Start** or **Cancel**.
-6. Later, run `/cook` again to continue, refocus, or start the next round.
+6. Later, run `/cook` again to resume from canonical state or confirm an explicit replacement or next-round handoff.
 
 ```text
 /cook
@@ -43,20 +43,20 @@ Then run `/reload` in Pi.
 
 | If you want to... | Do this |
 |---|---|
-| Start a long-running task | Discuss the concrete repo change in the main chat, then run `/cook` |
+| Start a long-running task | Discuss the concrete repo change in the main chat, wait for a fresh primary-agent handoff, then run `/cook` |
 | Continue the current workflow | Run `/cook` |
-| Refocus or start the next round | Discuss the new concrete repo change in the main chat, then run `/cook` |
+| Refocus or start the next round | Discuss the new concrete repo change in the main chat, wait for a fresh primary-agent handoff, then run `/cook` |
 
 ## What `/cook` expects
 
-- preferably a fresh explicit primary-agent `/cook` handoff capsule from the immediately preceding ordinary-chat turn
+- a fresh valid explicit primary-agent `/cook` handoff capsule from the immediately preceding ordinary-chat turn whenever `/cook` is starting a new workflow or the next round after a completed workflow
 - for that handoff capsule to start workflow immediately, it must already be implementation-startable: a bounded `first_slice_goal`, repo-change-oriented acceptance, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first`
-- otherwise, when no fresh explicit handoff is blocking startup, recent main-chat discussion about concrete repo changes
-- enough detail to derive a startup brief with mission, scope, constraints or non-goals, acceptance, and notes or risks
+- enough detail in the main chat for the primary agent to form that bounded handoff capsule before you run `/cook`
 - README/CHANGELOG updates still count as concrete repo changes
 - assistant-produced summaries and plan/spec/design-doc/proposal-only artifacts still do not count unless they include the explicit structured `/cook` handoff capsule
+- recent main-chat discussion can still validate or supplement an accepted explicit handoff, but it no longer starts a new workflow by itself
 
-If no fresh valid handoff exists and recent discussion is missing, weak, ambiguous, assistant-produced, or only describes planning artifacts instead of concrete repo changes, `/cook` fails closed, leaves canonical `.agent/**` state unchanged, and tells you to clarify the mission in the main chat before rerunning `/cook`.
+If no fresh valid handoff exists for new-workflow or next-round entry, `/cook` fails closed, leaves canonical `.agent/**` state unchanged, and tells you to get an explicit primary-agent handoff in the main chat before rerunning `/cook`.
 
 If a fresh explicit handoff exists but is still workflow-worthy rather than implementation-startable, `/cook` also fails closed instead of silently treating that capsule as planning support or canonical workflow state.
 
@@ -70,32 +70,34 @@ If a task has clearly matured into completion-workflow scope, the primary agent 
 
 That handoff should include an explicit structured `/cook` capsule in the assistant reply so `/cook` can confirm the already-formed mission instead of re-deriving it from broad ambient context.
 
-The preferred capsule is still advisory startup intake, not canonical workflow state, and it only counts as implementation-ready when it already names the first bounded slice, repo-change-oriented acceptance, implementation surfaces, and verification commands.
+The capsule is still advisory startup intake, not canonical workflow state, and new-workflow or next-round entry only proceeds when it already names the first bounded slice, repo-change-oriented acceptance, implementation surfaces, and verification commands.
 
 Important behavior:
 - `/cook` is the canonical workflow boundary and manual entry point
-- startup, refocus, and next-round routing stay confirm-first; nothing silently starts a workflow
+- startup and next-round entry stay confirm-first and require a fresh valid explicit primary-agent handoff
+- active workflows resume from canonical `.agent/**` state unless a fresh valid explicit handoff proposes a replacement
 - explicit slash commands other than `/cook` continue normally in the main chat
 - ordinary main-chat discussion may clarify or propose, but mature long-running implementation should be handed off to `/cook`
 
 ## Typical examples
 
-Start a new workflow from recent discussion:
+Start a new workflow after a fresh primary-agent handoff:
 
 ```text
 I want to add login redirect handling and tests.
+# let the primary agent hand you off to /cook
 /cook
 ```
 
 ## What happens when you run `/cook`
 
-`/cook` first looks for a fresh explicit primary-agent handoff capsule. If one is valid and implementation-startable, `/cook` builds the startup brief from that handoff and only uses recent discussion as validation or supplemental notes. `/cook` falls back to deriving a startup brief from recent discussion only when no fresh explicit handoff is blocking startup—for example, when there is no fresh capsule or only stale or invalidated capsules—before showing the existing approval-only Start/Cancel gate.
+`/cook` first looks for a fresh explicit primary-agent handoff capsule. New-workflow entry and done-workflow next-round entry start only when that capsule is fresh, valid, and implementation-startable; otherwise `/cook` fails closed instead of deriving startup from recent discussion. When a workflow is already active and no fresh valid explicit handoff is present, `/cook` resumes from canonical `.agent/**` state instead of deriving replacement startup from recent discussion.
 
 | Repo state | What you'll see |
 |---|---|
-| No workflow yet | If a fresh explicit handoff capsule exists and is implementation-startable, a startup brief built from that handoff. Otherwise, when no fresh explicit handoff is blocking startup, a startup brief built from recent main-chat discussion. You choose **Start** or **Cancel**. Weak, unreliable, stale, planning-only, or non-startable explicit-handoff intake fails closed. |
-| Active workflow exists | Usually a resume of the current workflow. If a fresh explicit handoff capsule or recent discussion clearly points to a different concrete repo change, `/cook` shows a chooser first and only rewrites canonical state after you confirm the new startup brief. Ambiguous intake stays conservative. |
-| Previous workflow is `done` | A fresh explicit handoff capsule can still start the next implementation round behind **Start** or **Cancel**. Without a fresh explicit handoff blocking startup, `/cook` can fall back to recent discussion. Discussion that only restates already-finished work still fails closed. |
+| No workflow yet | If a fresh explicit handoff capsule exists and is implementation-startable, you get a startup brief built from that handoff and choose **Start** or **Cancel**. Otherwise `/cook` fails closed, leaves canonical state unchanged, and tells you to get a fresh explicit primary-agent handoff. Weak, unreliable, stale, planning-only, or non-startable explicit-handoff intake also fails closed. |
+| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If a fresh explicit handoff capsule points to a different concrete repo change, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous intake stays conservative. |
+| Previous workflow is `done` | A fresh explicit handoff capsule can still start the next implementation round behind **Start** or **Cancel**. Without one, `/cook` fails closed instead of deriving the next round from recent discussion. |
 
 ## Confirmation and fail-closed behavior
 
@@ -105,7 +107,7 @@ I want to add login redirect handling and tests.
 - actions are **Start** and **Cancel**
 - **Cancel** is side-effect free: discuss changes in the main chat and rerun `/cook`
 - weak, ambiguous, stale, invalid, assistant-produced, or planning-only intake does not start a workflow
-- when recent discussion suggests a different workflow, `/cook` shows a chooser before any canonical state rewrite
+- when a fresh explicit handoff suggests replacing an active workflow, `/cook` shows a chooser before any canonical state rewrite
 
 When you accept startup or refocus, `/cook` persists the chosen workflow state in canonical `.agent/**` files before the re-ground round begins.
 
