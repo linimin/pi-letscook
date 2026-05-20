@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.59
+
 ### Changed
 
 - relaxed the pre-`/cook` ordinary-chat boundary so the primary agent can keep discussing and refining requirements before explicit `/cook` instead of switching into a hard handoff-only refusal mode as soon as workflow-worthiness is detected
