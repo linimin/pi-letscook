@@ -36,12 +36,13 @@ When the task is judged ready for completion workflow, the primary agent must:
 - stop before long-running implementation
 - not edit tracked product files in ordinary chat for that workflow-level task
 - recommend bare `/cook` as the explicit workflow boundary once the task is implementation-ready
-- explain that `/cook` starts a new workflow or next round only from a fresh valid explicit primary-agent handoff capsule from recent ordinary-chat discussion, while active workflows resume from canonical state unless a fresh valid explicit handoff proposes replacement
-- distinguish a workflow-worthy handoff from an implementation-ready handoff
-- only append an implementation-ready `/cook` handoff capsule when the first bounded implementation slice is concrete enough to start immediately
+- explain that bare `/cook` synthesizes a startup brief from recent ordinary-chat discussion for a new workflow or next round, while active workflows resume from canonical state unless the user explicitly chooses a replacement path backed by a fresh valid explicit handoff
+- distinguish a workflow-worthy handoff from an opt-in preview request
+- not append an implementation-ready `/cook` handoff capsule by default once the task becomes concrete enough; ordinary chat stays advisory-first until explicit `/cook`
+- only provide a `/cook` startup preview or `cook_handoff` capsule when the user explicitly asks for that preview behavior in ordinary chat
 - if the user asks follow-up questions or refines requirements before running `/cook`, continue ordinary-chat discussion normally without acting as though workflow already started
 
-Required capsule format:
+Optional preview capsule format when the user explicitly asks for it:
 
 ````text
 ```cook_handoff
@@ -73,15 +74,15 @@ Required capsule format:
 Notes:
 
 - `constraints` may be replaced or supplemented by `non_goals` when clearer.
-- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are required only for implementation-ready handoffs.
-- If the work is workflow-worthy but that first slice is still vague, say that `/cook` will be the right next step once the first slice is concrete enough, then keep refining in ordinary chat without emitting this implementation-ready capsule yet.
-- If later ordinary-chat discussion materially changes the startup brief before `/cook` runs, update or replace the capsule in a later assistant reply.
+- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are required only for an implementation-ready preview capsule.
+- If the work is workflow-worthy but the first slice still needs refinement, say that `/cook` will be the right next step once the slice is concrete enough, then keep refining in ordinary chat without emitting a preview capsule unless the user explicitly asks for one.
+- If later ordinary-chat discussion materially changes the startup brief before `/cook` runs, update or replace the preview capsule in a later assistant reply.
 - The mission must be positively startable implementation work; do not use rejection or suppression text as the mission.
-- The capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
+- Any preview capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
 
 Suggested wording:
 
-> This task now looks like `/cook` workflow work, but we are still in ordinary chat until you explicitly run `/cook`. If you want to keep refining the first slice first, we can do that here. Once you want to start implementation workflow, run bare `/cook`. I’ve also attached an explicit `/cook` handoff capsule so `/cook` can confirm this startup brief directly before the workflow begins.
+> This task now looks like `/cook` workflow work, but we are still in ordinary chat until you explicitly run `/cook`. If you want to keep refining the first slice first, we can do that here. Once you want to start implementation workflow, run bare `/cook` and it will synthesize the startup brief from our recent discussion before the Start/Cancel gate. If you explicitly want a preview capsule first, ask and I can sketch one here.
 
 A short recap may include mission, scope, or acceptance, but that recap must not be presented as canonical plan state.
 

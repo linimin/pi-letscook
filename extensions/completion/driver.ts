@@ -60,9 +60,9 @@ type CookContextProposalResult = {
 	blockedFailureMessage?: string;
 };
 
-function buildCookExplicitHandoffRequiredMessage(deps: CompletionDriverDeps, prefix?: string): string {
+function buildCookStartupBriefRequiredMessage(deps: CompletionDriverDeps, prefix?: string): string {
 	const requirement =
-		"/cook failed closed because starting a new completion workflow now requires a fresh valid explicit primary-agent handoff. Ask the primary agent to emit a fresh ```cook_handoff``` capsule in the main chat, then rerun /cook.";
+		"/cook failed closed because recent discussion did not produce a clear execution-ready startup brief with Mission/Scope/Constraints/Acceptance for concrete repo changes. Clarify the concrete repo changes in the main chat and rerun /cook.";
 	return prefix ? `${prefix} ${requirement}` : requirement;
 }
 
@@ -536,14 +536,14 @@ export async function runCookEntry(
 	if (!snapshot) {
 		const root = findRepoRoot(cwd) ?? cwd;
 		const projectName = path.basename(root);
-		const derived = await deps.deriveCookStartupProposal(ctx, projectName);
+		const derived = await deps.deriveCookContextProposal(ctx, projectName);
 		if (derived.blockedFailureMessage) {
 			deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
 			return;
 		}
 		const proposal = derived.proposal;
 		if (!proposal) {
-			deps.emitCommandText(ctx, buildCookExplicitHandoffRequiredMessage(deps), "info");
+			deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps), "info");
 			return;
 		}
 		const decision = await deps.confirmContextProposal(ctx, proposal, {
@@ -581,14 +581,14 @@ export async function runCookEntry(
 	if (!goal) {
 		if (workflowDone) {
 			const projectName = path.basename(snapshot.files.root);
-			const derived = await deps.deriveCookStartupProposal(ctx, projectName);
+			const derived = await deps.deriveCookContextProposal(ctx, projectName);
 			if (derived.blockedFailureMessage) {
 				deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
 				return;
 			}
 			const proposal = derived.proposal;
 			if (!proposal) {
-				deps.emitCommandText(ctx, buildCookExplicitHandoffRequiredMessage(deps, "The previous completion workflow is already done."), "info");
+				deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps, "The previous completion workflow is already done."), "info");
 				return;
 			}
 			const decision = await deps.confirmContextProposal(ctx, proposal, {
@@ -610,7 +610,13 @@ export async function runCookEntry(
 				buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis }),
 			);
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
-			deps.emitCommandText(ctx, `Started a new completion workflow round from explicit primary-agent handoff: ${decision.missionAnchor}`, "info");
+			deps.emitCommandText(
+				ctx,
+				proposal.source === "handoff_capsule"
+					? `Started a new completion workflow round from explicit primary-agent handoff: ${decision.missionAnchor}`
+					: `Started a new completion workflow round from recent discussion: ${decision.missionAnchor}`,
+				"info",
+			);
 		} else {
 			const assessment = await assessActiveWorkflowProposalRouting(ctx, snapshot, deps);
 			if (assessment.action === "blocked") {

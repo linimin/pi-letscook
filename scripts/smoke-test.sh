@@ -103,55 +103,8 @@ INLINE_REJECTION_ROUTING_SNAPSHOT="$TMPDIR/inline-arg-routing.json"
 INLINE_REJECTION_PROPOSAL_SNAPSHOT="$TMPDIR/inline-arg-proposal.json"
 INLINE_REJECTION_CHOOSER_SNAPSHOT="$TMPDIR/inline-arg-chooser.json"
 BOOTSTRAP_SESSION="$TMPDIR/session-smoke-bootstrap.jsonl"
-BOOTSTRAP_MESSAGES="$(python3 - <<'PY'
-import json
-capsule = {
-    "kind": "cook_handoff",
-    "source": "primary_agent",
-    "captured_at": "2026-01-01T00:00:02.000Z",
-    "source_turn_id": "m0002",
-    "mission": "Exercise smoke-test bootstrap.",
-    "scope": [
-        "Materialize the canonical completion control-plane files.",
-        "Keep the smoke test on supported /cook startup behavior."
-    ],
-    "constraints": [
-        "Keep startup proposal confirmation approval-only."
-    ],
-    "acceptance": [
-        "Scaffold .agent/profile.json, .agent/state.json, .agent/plan.json, .agent/active-slice.json, and .agent/verification-evidence.json for the smoke fixture.",
-        "Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap."
-    ],
-    "risks": [
-        "Smoke-test bootstrap should stay anchored to the fresh explicit handoff."
-    ],
-    "notes": [
-        "Keep the smoke fixture aligned with the shipped explicit-handoff-only startup contract."
-    ],
-    "handoff_kind": "implementation_workflow_handoff",
-    "first_slice_goal": "Scaffold canonical completion files and verify the packaged startup contract.",
-    "first_slice_non_goals": [
-        "Do not broaden the smoke fixture beyond the packaged startup surfaces."
-    ],
-    "implementation_surfaces": [
-        ".agent/README.md",
-        "scripts/smoke-test.sh"
-    ],
-    "verification_commands": [
-        "npm run smoke-test"
-    ],
-    "why_this_slice_first": "The packaged explicit-handoff startup path must work before later workflow verification can run.",
-    "task_type": "completion-workflow",
-    "evaluation_profile": "completion-rubric-v1",
-    "why_cook_now": "The startup handoff is concrete enough to bootstrap canonical workflow files."
-}
-messages = [
-    {"role": "user", "content": "Please prepare the packaged smoke-test bootstrap path and tell me when it is ready for /cook."},
-    {"role": "assistant", "content": "This bootstrap path is ready for /cook. Run /cook to confirm the startup brief.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
-]
-print(json.dumps(messages, ensure_ascii=False))
-PY
-)"
+BOOTSTRAP_DISCUSSION=$'Mission: Exercise smoke-test bootstrap.\nScope:\n- Materialize the canonical completion control-plane files.\n- Keep the smoke test on supported /cook startup behavior.\nConstraints:\n- Keep startup proposal confirmation approval-only.\nAcceptance:\n- Scaffold .agent/profile.json, .agent/state.json, .agent/plan.json, .agent/active-slice.json, and .agent/verification-evidence.json for the smoke fixture.\n- Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap.'
+BOOTSTRAP_PROPOSAL="$TMPDIR/bootstrap-proposal.json"
 
 mkdir -p "$ROOT"
 cd "$ROOT"
@@ -180,11 +133,12 @@ assert not chooser.exists(), 'startup /cook inline-args rejection should not ope
 assert '/cook no longer accepts inline arguments.' in output, 'startup /cook inline-args rejection should explain the bare-only entry contract'
 PY
 
-write_session_messages "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_MESSAGES"
+write_session "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_DISCUSSION"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$BOOTSTRAP_PROPOSAL" \
 PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$KICKOFF_PROMPT" \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-completion-smoke-bootstrap.out" 2>"$TMPDIR/pi-completion-smoke-bootstrap.err"
@@ -197,7 +151,7 @@ git ls-files --error-unmatch .agent/README.md .agent/mission.md .agent/profile.j
 bash .agent/verify_completion_control_plane.sh >/dev/null
 bash .agent/verify_completion_stop.sh >/dev/null
 
-python3 - "$KICKOFF_PROMPT" <<'PY'
+python3 - "$KICKOFF_PROMPT" "$BOOTSTRAP_PROPOSAL" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -211,6 +165,7 @@ plan = json.loads(Path('.agent/plan.json').read_text())
 active = json.loads(Path('.agent/active-slice.json').read_text())
 evidence = json.loads(Path('.agent/verification-evidence.json').read_text())
 kickoff = Path(sys.argv[1]).read_text()
+proposal = json.loads(Path(sys.argv[2]).read_text())
 
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after bootstrap'
 assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after bootstrap'
@@ -224,7 +179,7 @@ assert active['implementation_surfaces'] == [], 'active-slice.json should scaffo
 assert active['verification_commands'] == [], 'active-slice.json should scaffold empty verification_commands'
 brief = state['advisory_startup_brief']
 assert brief['kind'] == 'startup_brief', 'state.json should preserve the confirmed startup brief as advisory intake'
-assert brief['source'] == 'primary_agent_handoff', 'smoke bootstrap should record the explicit handoff source in advisory intake'
+assert brief['source'] == 'recent_discussion', 'smoke bootstrap should record recent-discussion synthesis in advisory intake'
 assert brief['mission'] == state['mission_anchor'], 'advisory startup brief mission should match the canonical mission anchor after bootstrap'
 assert brief['scope'] == ['Materialize the canonical completion control-plane files.', 'Keep the smoke test on supported /cook startup behavior.'], 'advisory startup brief should preserve scope items'
 assert brief['constraints'] == ['Keep startup proposal confirmation approval-only.'], 'advisory startup brief should preserve constraints'
@@ -232,9 +187,10 @@ assert brief['acceptance'] == [
     'Scaffold .agent/profile.json, .agent/state.json, .agent/plan.json, .agent/active-slice.json, and .agent/verification-evidence.json for the smoke fixture.',
     'Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap.'
 ], 'advisory startup brief should preserve acceptance'
-assert brief['risks'] == ['Smoke-test bootstrap should stay anchored to the fresh explicit handoff.'], 'advisory startup brief should preserve handoff risks'
-assert 'First slice goal: Scaffold canonical completion files and verify the packaged startup contract.' in brief['notes'], 'advisory startup brief should preserve the first_slice_goal in notes'
-assert 'Verification commands: npm run smoke-test' in brief['notes'], 'advisory startup brief should preserve verification_commands in notes'
+assert brief['risks'] == [], 'recent-discussion smoke bootstrap should not invent handoff-only risks'
+assert brief['notes'] == ['No additional operator notes were derived from recent discussion.'], 'recent-discussion smoke bootstrap should keep advisory notes non-canonical'
+assert proposal['mission'] == state['mission_anchor'], 'recent-discussion smoke bootstrap should persist the synthesized mission in the proposal snapshot'
+assert proposal['source'] == 'session', 'recent-discussion smoke bootstrap should snapshot the structured-session proposal source'
 assert evidence['artifact_type'] == 'completion-verification-evidence', 'verification-evidence.json artifact_type mismatch after bootstrap'
 assert evidence['subject_type'] == 'none', 'verification-evidence.json should scaffold idle subject_type'
 assert evidence['verification_commands'] == [], 'verification-evidence.json should scaffold empty verification_commands'
@@ -269,14 +225,14 @@ assert '/cook is the only explicit entrypoint into long-running completion workf
 assert 'do not begin long-running product implementation in ordinary chat' in handoff_text, 'ordinary handoff reminder should block workflow-level implementation before /cook'
 assert 'recommend /cook as the workflow boundary while keeping the conversation in ordinary chat until the user explicitly runs /cook.' in handoff_text, 'ordinary handoff reminder should keep pre-/cook discussion advisory-first'
 assert 'continue that ordinary-chat discussion normally instead of switching into a handoff-only refusal mode' in handoff_text, 'ordinary handoff reminder should avoid hard refusal mode before explicit /cook'
-assert '```cook_handoff ... ``` JSON' in handoff_text, 'ordinary handoff reminder should require the explicit structured /cook handoff capsule'
-assert 'implementation_workflow_handoff' in handoff_text, 'ordinary handoff reminder should require the implementation-ready handoff kind'
-assert 'first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first' in handoff_text, 'ordinary handoff reminder should require first-slice startability fields'
-assert 'The capsule is startup intake for /cook only' in handoff_text, 'ordinary handoff reminder should keep the capsule non-canonical'
-assert 'fresh valid explicit primary-agent handoff capsule from recent ordinary-chat discussion' in handoff_text, 'ordinary handoff reminder should describe recent explicit-handoff startup truthfully'
-assert 'fails closed' in handoff_text, 'ordinary handoff reminder should describe fail-closed startup when no fresh valid handoff exists'
+assert 'do not emit a structured preview or cook_handoff capsule in ordinary chat once the task is concrete enough' in handoff_text, 'ordinary handoff reminder should keep pre-/cook capsules opt-in instead of default'
+assert 'bare /cook will synthesize a startup brief from recent ordinary-chat discussion' in handoff_text, 'ordinary handoff reminder should describe /cook-time startup synthesis truthfully'
+assert 'If the user explicitly asks for a /cook preview or capsule before running /cook' in handoff_text, 'ordinary handoff reminder should keep previews opt-in'
+assert 'implementation_workflow_handoff' in handoff_text, 'ordinary handoff reminder should preserve the explicit preview handoff kind'
+assert 'first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first' in handoff_text, 'ordinary handoff reminder should preserve first-slice preview fields when explicitly requested'
+assert 'Any preview capsule is startup intake for /cook only' in handoff_text, 'ordinary handoff reminder should keep any preview non-canonical'
 assert 'resume from canonical .agent state' in handoff_text, 'ordinary handoff reminder should preserve active-workflow canonical resume wording'
-assert 'fall back to recent discussion' not in handoff_text, 'ordinary handoff reminder should no longer promise recent-discussion startup fallback'
+assert 'fresh valid explicit primary-agent handoff capsule from recent ordinary-chat discussion' not in handoff_text, 'ordinary handoff reminder should no longer describe explicit capsules as the default startup path'
 assert not auto_resume.exists(), 'ordinary non-/cook turn should not queue auto-resume before /cook activation'
 assert 'Skipped completion workflow auto-resume prompt (test mode)' not in output, 'ordinary non-/cook turn should not attempt auto-resume'
 PY
