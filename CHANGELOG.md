@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.58
+
+### Changed
+
+- tightened implementation-ready explicit `/cook` handoffs so fresh capsules must already carry a bounded first slice, repo-change-oriented acceptance, implementation surfaces, verification commands, and why-that-slice-first structure before workflow startup
+- made fresh explicit but non-startable `/cook` handoffs fail closed with a dedicated operator message instead of falling back to broader recent discussion or silently drifting into planning
+- expanded regressions and public parity so valid, vague, stale, done-workflow, and negative explicit-handoff cases stay truthful across runtime behavior, docs, and `npm run release-check`
+
 ## 0.1.57
 
 ### Changed
