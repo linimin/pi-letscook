@@ -70,6 +70,19 @@ export type CookHandoffCapsule = {
 	why_cook_now?: string;
 };
 
+export type CookHandoffProposalAssessment =
+	| {
+		status: "none";
+	  }
+	| {
+		status: "startable";
+		proposal: ContextProposal;
+	  }
+	| {
+		status: "fresh_but_not_startable";
+		message: string;
+	  };
+
 export type ContextProposalDecision = {
 	missionAnchor: string;
 	goalText: string;
@@ -1236,6 +1249,8 @@ const COOK_HANDOFF_MAX_AGE_MS = 45 * 60 * 1000;
 const COOK_HANDOFF_MAX_LATER_NON_COMMAND_MESSAGES = 2;
 const COOK_HANDOFF_NEGATIVE_MISSION_REGEX =
 	/(?:\b(?:do not|don't|dont|not|never|avoid|skip|refuse|recognize that|suppress|ignore|block|prevent)\b|(?:不要|別|别|勿|禁止|避免|忽略|阻止))/iu;
+const COOK_HANDOFF_WORKFLOW_ONLY_ACCEPTANCE_REGEX =
+	/(?:\b(?:confirm|discuss|clarify|decide|review|align(?: on)?|agree(?: on)?|explain|summari(?:s|z)e|describe|plan|proposal|spec(?:ification)?|design(?: doc(?:ument)?)?|next step|handoff|workflow|readiness)\b|(?:確認|确认|討論|讨论|釐清|厘清|決定|决定|審查|审查|對齊|对齐|同意|说明|說明|總結|总结|描述|規劃|规划|提案|方案|工作流|就緒|就绪))/iu;
 
 function parseCookHandoffCapsulesFromText(
 	text: string,
@@ -1316,15 +1331,57 @@ function buildCookHandoffBasisPreview(capsule: CookHandoffCapsule): string {
 	return parts.join("\n").trim();
 }
 
+function cookHandoffAcceptanceIsRepoChangeOriented(capsule: CookHandoffCapsule): boolean {
+	if (capsule.acceptance.length === 0) return false;
+	return capsule.acceptance.some((item) => {
+		const normalized = normalizeProposalLine(item);
+		if (!normalized) return false;
+		if (hasExplicitPlanningOnlyDeliverable([normalized])) return false;
+		if (hasClearNoImplementationSignal([normalized])) return false;
+		if (COOK_HANDOFF_WORKFLOW_ONLY_ACCEPTANCE_REGEX.test(normalized) && !implementationMissionSourceCandidateText(normalized)) {
+			return false;
+		}
+		return true;
+	});
+}
+
+function cookHandoffStartabilityFailures(
+	capsule: CookHandoffCapsule,
+	deps: Pick<ProposalParseDeps, "normalizeMissionAnchorText" | "isWeakMissionAnchor">,
+): string[] {
+	const failures: string[] = [];
+	const mission = deps.normalizeMissionAnchorText(capsule.mission);
+	if (!mission || deps.isWeakMissionAnchor(mission)) failures.push("mission is missing a concrete implementation anchor");
+	else if (COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(mission)) failures.push("mission is negative or workflow-suppression-only");
+	if (capsule.scope.length === 0) failures.push("scope is empty");
+	if (capsule.acceptance.length === 0) failures.push("acceptance is empty");
+	else if (!cookHandoffAcceptanceIsRepoChangeOriented(capsule)) {
+		failures.push("acceptance is not anchored to concrete repo changes");
+	}
+	const firstSliceGoal = deps.normalizeMissionAnchorText(capsule.first_slice_goal);
+	if (!firstSliceGoal || deps.isWeakMissionAnchor(firstSliceGoal) || COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(firstSliceGoal)) {
+		failures.push("first_slice_goal is not a bounded implementation slice");
+	} else if (hasExplicitPlanningOnlyDeliverable([capsule.first_slice_goal]) || hasClearNoImplementationSignal([capsule.first_slice_goal])) {
+		failures.push("first_slice_goal is planning-only instead of a repo-change slice");
+	}
+	if (capsule.implementation_surfaces.length === 0) failures.push("implementation_surfaces is empty");
+	if (capsule.verification_commands.length === 0) failures.push("verification_commands is empty");
+	return failures;
+}
+
+function buildNonStartableCookHandoffMessage(failures: string[]): string {
+	return [
+		"/cook failed closed because a fresh explicit primary-agent handoff exists, but it is not concrete enough to start implementation workflow yet.",
+		"Tighten the handoff in the main chat so it names a bounded first implementation slice, repo-change-oriented acceptance, implementation_surfaces, and verification_commands, then rerun /cook.",
+		`Blocking details: ${failures.join("; ")}.`,
+	].join(" ");
+}
+
 function isStartableCookHandoffCapsule(
 	capsule: CookHandoffCapsule,
 	deps: Pick<ProposalParseDeps, "normalizeMissionAnchorText" | "isWeakMissionAnchor">,
 ): boolean {
-	const mission = deps.normalizeMissionAnchorText(capsule.mission);
-	if (!mission || deps.isWeakMissionAnchor(mission)) return false;
-	if (COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(mission)) return false;
-	if (capsule.scope.length === 0 || capsule.acceptance.length === 0) return false;
-	return true;
+	return cookHandoffStartabilityFailures(capsule, deps).length === 0;
 }
 
 function laterMessagesInvalidateCookHandoff(
@@ -1408,11 +1465,11 @@ function buildContextProposalFromCookHandoffCapsule(
 	return finalizeContextProposal(proposal, projectName, deps);
 }
 
-export function extractLatestCookHandoffProposal(
+export function assessLatestCookHandoffProposal(
 	recentMessages: RecentSessionMessage[],
 	projectName: string,
 	deps: ProposalParseDeps,
-): ContextProposal | undefined {
+): CookHandoffProposalAssessment {
 	for (let index = 0; index < recentMessages.length; index += 1) {
 		const entry = recentMessages[index];
 		if (entry.role !== "assistant" || entry.isCommand) continue;
@@ -1423,11 +1480,27 @@ export function extractLatestCookHandoffProposal(
 			const laterMessages = recentMessages.slice(0, index);
 			if (!cookHandoffIsFreshEnough(capsule, laterMessages)) continue;
 			if (laterMessagesInvalidateCookHandoff(laterMessages, deps)) continue;
+			const failures = cookHandoffStartabilityFailures(capsule, deps);
+			if (failures.length > 0) {
+				return {
+					status: "fresh_but_not_startable",
+					message: buildNonStartableCookHandoffMessage(failures),
+				};
+			}
 			const proposal = buildContextProposalFromCookHandoffCapsule(capsule, projectName, deps);
-			if (proposal) return proposal;
+			if (proposal) return { status: "startable", proposal };
 		}
 	}
-	return undefined;
+	return { status: "none" };
+}
+
+export function extractLatestCookHandoffProposal(
+	recentMessages: RecentSessionMessage[],
+	projectName: string,
+	deps: ProposalParseDeps,
+): ContextProposal | undefined {
+	const assessment = assessLatestCookHandoffProposal(recentMessages, projectName, deps);
+	return assessment.status === "startable" ? assessment.proposal : undefined;
 }
 
 export async function deriveCookContextProposalFromRecentDiscussion(

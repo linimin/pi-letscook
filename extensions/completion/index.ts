@@ -18,7 +18,7 @@ import {
 	collectRecentDiscussionEntries,
 	collectRecentSessionMessages,
 	deriveCookContextProposalFromRecentDiscussion,
-	extractLatestCookHandoffProposal,
+	assessLatestCookHandoffProposal,
 	finalizeContextProposalAnalysis,
 	isWeakMissionAnchor,
 	missionAnchorsLikelyEquivalent,
@@ -122,11 +122,22 @@ function candidateSlices(plan: JsonRecord | undefined): JsonRecord[] {
 	return Array.isArray(slices) ? slices.filter(isRecord) : [];
 }
 
+type CookContextProposalResult = {
+	proposal?: ContextProposal;
+	blockedFailureMessage?: string;
+};
+
 type ActiveWorkflowProposalAssessment = {
-	action: "continue" | "refocus" | "unclear";
+	action: "continue" | "refocus" | "unclear" | "blocked";
 	currentMissionAnchor: string;
 	proposal?: ContextProposal;
-	reason: "matching_mission" | "clear_refocus" | "missing_proposal" | "ambiguous_discussion";
+	blockedFailureMessage?: string;
+	reason:
+		| "matching_mission"
+		| "clear_refocus"
+		| "missing_proposal"
+		| "ambiguous_discussion"
+		| "fresh_explicit_handoff_not_startable";
 };
 
 function completionTestWorkflowActionOverride(): "continue" | "refocus" | "cancel" | undefined {
@@ -271,6 +282,7 @@ function maybeWriteActiveWorkflowRoutingSnapshot(assessment: ActiveWorkflowPropo
 				action: assessment.action,
 				reason: assessment.reason,
 				currentMissionAnchor: assessment.currentMissionAnchor,
+				blockedFailureMessage: assessment.blockedFailureMessage ?? null,
 				proposedMissionAnchor: assessment.proposal?.mission ?? null,
 				proposalSource: assessment.proposal?.source ?? null,
 				possibleNoise: assessment.proposal?.analysis.possibleNoise ?? [],
@@ -365,7 +377,7 @@ async function promptContextProposalConfirmationAction(
 async function deriveCookContextProposal(
 	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
 	projectName: string,
-): Promise<ContextProposal | undefined> {
+): Promise<CookContextProposalResult> {
 	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
 	const recentEntries = recentMessages
 		.filter((entry) => (entry.role === "user" || entry.role === "custom") && !entry.isCommand)
@@ -384,7 +396,7 @@ async function deriveCookContextProposal(
 			`verification summary: ${asString(snapshot.verificationEvidence?.summary) ?? "(none)"}`,
 		]
 		: [];
-	const explicitHandoff = extractLatestCookHandoffProposal(recentMessages, projectName, {
+	const explicitHandoff = assessLatestCookHandoffProposal(recentMessages, projectName, {
 		asString,
 		asStringArray,
 		assessMissionAnchor,
@@ -393,42 +405,47 @@ async function deriveCookContextProposal(
 		missionAnchorsStrictlyEquivalent,
 		stripCodeBlocks,
 	});
-	if (explicitHandoff) return explicitHandoff;
-	return await deriveCookContextProposalFromRecentDiscussion(projectName, recentEntries, {
-		asString,
-		asStringArray,
-		workflowContext: snapshot
-			? {
-				currentMissionAnchor:
-					asString(snapshot.state?.mission_anchor) ?? asString(snapshot.plan?.mission_anchor) ?? asString(snapshot.active?.mission_anchor),
-				latestCompletedSlice: asString(snapshot.state?.latest_completed_slice),
-				latestVerifiedSlice: asString(snapshot.state?.latest_verified_slice),
-				activeSliceGoal: asString(snapshot.active?.goal),
-				activeSliceWhyNow: asString(snapshot.active?.why_now),
-				verificationGoal: asString(snapshot.verificationEvidence?.goal),
-				verificationSummary: asString(snapshot.verificationEvidence?.summary),
-				continuationPolicy: asString(snapshot.state?.continuation_policy),
-			}
-			: undefined,
-		analyzeContextProposal: async (entries) =>
-			await analyzeContextProposalWithAgent({
-				ctx,
-				projectName,
-				recentEntries: entries,
-				workflowContextLines,
-				liveRoleActivityByRoot,
-				completionStatusKey: COMPLETION_STATUS_KEY,
-				safeUiCall,
-				getCtxCwd,
-				getCtxHasUI,
-				getCtxUi,
-			}),
-		assessMissionAnchor,
-		isWeakMissionAnchor,
-		missionAnchorsStrictlyEquivalent,
-		normalizeMissionAnchorText,
-		stripCodeBlocks,
-	});
+	if (explicitHandoff.status === "startable") return { proposal: explicitHandoff.proposal };
+	if (explicitHandoff.status === "fresh_but_not_startable") {
+		return { blockedFailureMessage: explicitHandoff.message };
+	}
+	return {
+		proposal: await deriveCookContextProposalFromRecentDiscussion(projectName, recentEntries, {
+			asString,
+			asStringArray,
+			workflowContext: snapshot
+				? {
+					currentMissionAnchor:
+						asString(snapshot.state?.mission_anchor) ?? asString(snapshot.plan?.mission_anchor) ?? asString(snapshot.active?.mission_anchor),
+					latestCompletedSlice: asString(snapshot.state?.latest_completed_slice),
+					latestVerifiedSlice: asString(snapshot.state?.latest_verified_slice),
+					activeSliceGoal: asString(snapshot.active?.goal),
+					activeSliceWhyNow: asString(snapshot.active?.why_now),
+					verificationGoal: asString(snapshot.verificationEvidence?.goal),
+					verificationSummary: asString(snapshot.verificationEvidence?.summary),
+					continuationPolicy: asString(snapshot.state?.continuation_policy),
+				}
+				: undefined,
+			analyzeContextProposal: async (entries) =>
+				await analyzeContextProposalWithAgent({
+					ctx,
+					projectName,
+					recentEntries: entries,
+					workflowContextLines,
+					liveRoleActivityByRoot,
+					completionStatusKey: COMPLETION_STATUS_KEY,
+					safeUiCall,
+					getCtxCwd,
+					getCtxHasUI,
+					getCtxUi,
+				}),
+			assessMissionAnchor,
+			isWeakMissionAnchor,
+			missionAnchorsStrictlyEquivalent,
+			normalizeMissionAnchorText,
+			stripCodeBlocks,
+		}),
+	};
 }
 
 async function confirmContextProposal(

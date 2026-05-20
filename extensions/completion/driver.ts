@@ -38,7 +38,7 @@ type ContextProposalAlternate = {
 	analysis: ContextProposalAnalysis;
 	goalText: string;
 	basisPreview: string;
-	source: "session" | "analyst";
+	source: "session" | "analyst" | "handoff_capsule";
 };
 
 type ContextProposal = ContextProposalAlternate & {
@@ -55,11 +55,22 @@ type ExistingWorkflowDecision =
 	| { action: "continue"; currentMissionAnchor: string }
 	| { action: "refocus"; currentMissionAnchor: string; missionAnchor: string; proposal: ContextProposal };
 
+type CookContextProposalResult = {
+	proposal?: ContextProposal;
+	blockedFailureMessage?: string;
+};
+
 type ActiveWorkflowProposalAssessment = {
-	action: "continue" | "refocus" | "unclear";
+	action: "continue" | "refocus" | "unclear" | "blocked";
 	currentMissionAnchor: string;
 	proposal?: ContextProposal;
-	reason: "matching_mission" | "clear_refocus" | "missing_proposal" | "ambiguous_discussion";
+	blockedFailureMessage?: string;
+	reason:
+		| "matching_mission"
+		| "clear_refocus"
+		| "missing_proposal"
+		| "ambiguous_discussion"
+		| "fresh_explicit_handoff_not_startable";
 };
 
 type ExistingWorkflowChooserOptions = {
@@ -110,7 +121,7 @@ export type CompletionDriverDeps = {
 		missionAnchor?: string,
 	) => string;
 	completionResumePrompt: (taskType: string, evaluationProfile: string) => string;
-	deriveCookContextProposal: (ctx: DriverContext, projectName: string) => Promise<ContextProposal | undefined>;
+	deriveCookContextProposal: (ctx: DriverContext, projectName: string) => Promise<CookContextProposalResult>;
 	confirmContextProposal: (
 		ctx: { hasUI: boolean; ui: any },
 		proposal: ContextProposal,
@@ -305,7 +316,18 @@ async function assessActiveWorkflowProposalRouting(
 ): Promise<ActiveWorkflowProposalAssessment> {
 	const currentMission = currentMissionAnchor(snapshot);
 	const projectName = path.basename(snapshot.files.root);
-	const proposal = await deps.deriveCookContextProposal(ctx, projectName);
+	const derived = await deps.deriveCookContextProposal(ctx, projectName);
+	if (derived.blockedFailureMessage) {
+		const assessment: ActiveWorkflowProposalAssessment = {
+			action: "blocked",
+			currentMissionAnchor: currentMission,
+			blockedFailureMessage: derived.blockedFailureMessage,
+			reason: "fresh_explicit_handoff_not_startable",
+		};
+		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
+		return assessment;
+	}
+	const proposal = derived.proposal;
 	if (!proposal) {
 		const assessment: ActiveWorkflowProposalAssessment = {
 			action: "unclear",
@@ -519,7 +541,12 @@ export async function runCookEntry(
 	if (!snapshot) {
 		const root = findRepoRoot(cwd) ?? cwd;
 		const projectName = path.basename(root);
-		const proposal = await deps.deriveCookContextProposal(ctx, projectName);
+		const derived = await deps.deriveCookContextProposal(ctx, projectName);
+		if (derived.blockedFailureMessage) {
+			deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
+			return;
+		}
+		const proposal = derived.proposal;
 		if (!proposal) {
 			deps.emitCommandText(ctx, buildCookStructuredDiscussionFailureMessage(deps), "info");
 			return;
@@ -559,7 +586,12 @@ export async function runCookEntry(
 	if (!goal) {
 		if (workflowDone) {
 			const projectName = path.basename(snapshot.files.root);
-			const proposal = await deps.deriveCookContextProposal(ctx, projectName);
+			const derived = await deps.deriveCookContextProposal(ctx, projectName);
+			if (derived.blockedFailureMessage) {
+				deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
+				return;
+			}
+			const proposal = derived.proposal;
 			if (!proposal) {
 				deps.emitCommandText(ctx, buildCookStructuredDiscussionFailureMessage(deps, "The previous completion workflow is already done."), "info");
 				return;
@@ -586,6 +618,10 @@ export async function runCookEntry(
 			deps.emitCommandText(ctx, `Started a new completion workflow round from recent discussion: ${decision.missionAnchor}`, "info");
 		} else {
 			const assessment = await assessActiveWorkflowProposalRouting(ctx, snapshot, deps);
+			if (assessment.action === "blocked") {
+				deps.emitCommandText(ctx, assessment.blockedFailureMessage ?? buildCookStructuredDiscussionFailureMessage(deps), "info");
+				return;
+			}
 			if (!assessment.proposal || assessment.action === "continue") {
 				await resumeActiveWorkflowFromCanonicalState(pi, ctx, snapshot, deps);
 				return;
