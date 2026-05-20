@@ -170,6 +170,8 @@ assert handoff.exists(), 'ordinary non-/cook turn should inject the /cook handof
 handoff_text = handoff.read_text()
 assert '/cook is the only explicit entrypoint into long-running completion workflow.' in handoff_text, 'ordinary handoff reminder should preserve the explicit /cook workflow boundary'
 assert 'stop short of long-running implementation and tell the user to run /cook.' in handoff_text, 'ordinary handoff reminder should require primary-agent handoff before implementation'
+assert '```cook_handoff ... ``` JSON' in handoff_text, 'ordinary handoff reminder should require the explicit structured /cook handoff capsule'
+assert 'The capsule is startup intake for /cook only' in handoff_text, 'ordinary handoff reminder should keep the capsule non-canonical'
 assert not auto_resume.exists(), 'ordinary non-/cook turn should not queue auto-resume before /cook activation'
 assert 'Skipped completion workflow auto-resume prompt (test mode)' not in output, 'ordinary non-/cook turn should not attempt auto-resume'
 PY

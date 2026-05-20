@@ -27,7 +27,7 @@ export type ContextProposalAlternate = {
 	analysis: ContextProposalAnalysis;
 	goalText: string;
 	basisPreview: string;
-	source: "session" | "analyst";
+	source: "session" | "analyst" | "handoff_capsule";
 };
 
 export type ContextProposal = ContextProposalAlternate & {
@@ -39,6 +39,30 @@ export type ContextProposalSection = "mission" | "scope" | "constraints" | "acce
 export type RecentDiscussionEntry = {
 	role: "user" | "assistant" | "custom" | "summary";
 	text: string;
+};
+
+export type RecentSessionMessage = RecentDiscussionEntry & {
+	messageId?: string;
+	timestampMs?: number;
+	isCommand: boolean;
+};
+
+export type CookHandoffCapsule = {
+	kind: "cook_handoff";
+	source: "primary_agent";
+	captured_at: string;
+	source_turn_id: string;
+	mission: string;
+	scope: string[];
+	constraints: string[];
+	non_goals: string[];
+	acceptance: string[];
+	risks: string[];
+	notes: string[];
+	handoff_kind: "implementation_workflow_ready";
+	task_type?: string;
+	evaluation_profile?: string;
+	why_cook_now?: string;
 };
 
 export type ContextProposalDecision = {
@@ -111,6 +135,10 @@ function localAsStringArray(value: unknown): string[] {
 	return Array.isArray(value)
 		? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim())
 		: [];
+}
+
+function localAsNumber(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function localIsRecord(value: unknown): value is JsonRecord {
@@ -300,11 +328,12 @@ export function missionAnchorsLikelyEquivalent(left: string, right: string): boo
 	return missionAnchorBigramOverlapRatio(leftTokens, rightTokens) >= 0.5;
 }
 
-export function collectRecentDiscussionEntries(ctx: { sessionManager: any }, deps: {
+export function collectRecentSessionMessages(ctx: { sessionManager: any }, deps: {
 	isRecord: (value: unknown) => boolean;
 	asString?: (value: unknown) => string | undefined;
+	asNumber?: (value: unknown) => number | undefined;
 	isStaleContextError?: (error: unknown) => boolean;
-}, limit = 8): RecentDiscussionEntry[] {
+}, limit = 24): RecentSessionMessage[] {
 	let branch: any[] = [];
 	try {
 		branch = ctx.sessionManager?.getBranch?.() ?? [];
@@ -313,25 +342,40 @@ export function collectRecentDiscussionEntries(ctx: { sessionManager: any }, dep
 		throw error;
 	}
 	const asStringValue = deps.asString ?? localAsString;
-	const entries: RecentDiscussionEntry[] = [];
+	const asNumberValue = deps.asNumber ?? localAsNumber;
+	const entries: RecentSessionMessage[] = [];
 	for (let index = branch.length - 1; index >= 0; index -= 1) {
 		const entry = branch[index];
 		if (!deps.isRecord(entry) || entry.type !== "message" || !deps.isRecord(entry.message)) continue;
 		const message = entry.message as JsonRecord;
-		let text = "";
-		let role: RecentDiscussionEntry["role"] | undefined;
 		const messageRole = asStringValue(message.role);
-		if (messageRole === "user" || messageRole === "custom") {
-			text = extractTextFromMessageContent(message.content);
-			role = messageRole;
-		}
-		if (!text || !role) continue;
+		if (messageRole !== "user" && messageRole !== "assistant" && messageRole !== "custom" && messageRole !== "summary") continue;
+		const text = extractTextFromMessageContent(message.content);
+		if (!text) continue;
 		const trimmed = text.trim();
-		if (!trimmed || /^\/(?:cook|complete)\b/i.test(trimmed)) continue;
-		entries.push({ role, text: trimmed });
+		if (!trimmed) continue;
+		entries.push({
+			role: messageRole as RecentDiscussionEntry["role"],
+			text: trimmed,
+			messageId: asStringValue((entry as JsonRecord).id),
+			timestampMs: asNumberValue(message.timestamp),
+			isCommand: /^\//.test(trimmed),
+		});
 		if (entries.length >= limit) break;
 	}
 	return entries;
+}
+
+export function collectRecentDiscussionEntries(ctx: { sessionManager: any }, deps: {
+	isRecord: (value: unknown) => boolean;
+	asString?: (value: unknown) => string | undefined;
+	asNumber?: (value: unknown) => number | undefined;
+	isStaleContextError?: (error: unknown) => boolean;
+}, limit = 8): RecentDiscussionEntry[] {
+	return collectRecentSessionMessages(ctx, deps, Math.max(limit * 3, limit))
+		.filter((entry) => (entry.role === "user" || entry.role === "custom") && !entry.isCommand)
+		.slice(0, limit)
+		.map((entry) => ({ role: entry.role, text: entry.text }));
 }
 
 export function serializeRecentDiscussionEntries(entries: RecentDiscussionEntry[]): string {
@@ -1180,6 +1224,167 @@ export function extractContextProposalFromStructuredSession(
 		.filter((text) => hasStructuredContextProposalSignal(text, deps.stripCodeBlocks));
 	if (structuredTexts.length === 0) return undefined;
 	return parseStrictStructuredSessionProposal(structuredTexts.join("\n\n"), projectName, deps);
+}
+
+const COOK_HANDOFF_BLOCK_REGEX = /```cook_handoff\s*([\s\S]*?)```/giu;
+const COOK_HANDOFF_MAX_AGE_MS = 45 * 60 * 1000;
+const COOK_HANDOFF_MAX_LATER_NON_COMMAND_MESSAGES = 2;
+const COOK_HANDOFF_NEGATIVE_MISSION_REGEX =
+	/(?:\b(?:do not|don't|dont|not|never|avoid|skip|refuse|recognize that|suppress|ignore|block|prevent)\b|(?:不要|別|别|勿|禁止|避免|忽略|阻止))/iu;
+
+function parseCookHandoffCapsulesFromText(
+	text: string,
+	messageId: string | undefined,
+	timestampMs: number | undefined,
+	deps: Pick<ProposalParseDeps, "asString" | "asStringArray">,
+): CookHandoffCapsule[] {
+	const capsules: CookHandoffCapsule[] = [];
+	for (const match of text.matchAll(COOK_HANDOFF_BLOCK_REGEX)) {
+		const rawJson = deps.asString(match[1]);
+		if (!rawJson) continue;
+		let parsed: unknown;
+		try {
+			parsed = JSON.parse(rawJson);
+		} catch {
+			continue;
+		}
+		if (!localIsRecord(parsed)) continue;
+		if (deps.asString(parsed.kind) !== "cook_handoff") continue;
+		if (deps.asString(parsed.source) !== "primary_agent") continue;
+		if (deps.asString(parsed.handoff_kind) !== "implementation_workflow_ready") continue;
+		const mission = deps.asString(parsed.mission);
+		if (!mission) continue;
+		const scope = deps.asStringArray(parsed.scope);
+		const constraints = deps.asStringArray(parsed.constraints);
+		const nonGoals = deps.asStringArray(parsed.non_goals ?? parsed.nonGoals);
+		const acceptance = deps.asStringArray(parsed.acceptance);
+		const risks = deps.asStringArray(parsed.risks);
+		const notes = deps.asStringArray(parsed.notes);
+		const capturedAt = deps.asString(parsed.captured_at) ?? (timestampMs ? new Date(timestampMs).toISOString() : undefined);
+		const sourceTurnId = deps.asString(parsed.source_turn_id) ?? messageId;
+		if (!capturedAt || !sourceTurnId) continue;
+		capsules.push({
+			kind: "cook_handoff",
+			source: "primary_agent",
+			captured_at: capturedAt,
+			source_turn_id: sourceTurnId,
+			mission,
+			scope,
+			constraints,
+			non_goals: nonGoals,
+			acceptance,
+			risks,
+			notes,
+			handoff_kind: "implementation_workflow_ready",
+			task_type: deps.asString(parsed.task_type),
+			evaluation_profile: deps.asString(parsed.evaluation_profile),
+			why_cook_now: deps.asString(parsed.why_cook_now),
+		});
+	}
+	return capsules;
+}
+
+function buildCookHandoffBasisPreview(capsule: CookHandoffCapsule): string {
+	const parts = [capsule.mission, ...capsule.scope, ...capsule.constraints, ...capsule.non_goals, ...capsule.acceptance];
+	if (capsule.why_cook_now) parts.push(`why_cook_now: ${capsule.why_cook_now}`);
+	return parts.join("\n").trim();
+}
+
+function isStartableCookHandoffCapsule(
+	capsule: CookHandoffCapsule,
+	deps: Pick<ProposalParseDeps, "normalizeMissionAnchorText" | "isWeakMissionAnchor">,
+): boolean {
+	const mission = deps.normalizeMissionAnchorText(capsule.mission);
+	if (!mission || deps.isWeakMissionAnchor(mission)) return false;
+	if (COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(mission)) return false;
+	if (capsule.scope.length === 0 || capsule.acceptance.length === 0) return false;
+	return true;
+}
+
+function laterMessagesInvalidateCookHandoff(
+	laterMessages: RecentSessionMessage[],
+	deps: Pick<ProposalParseDeps, "stripCodeBlocks">,
+): boolean {
+	const laterNonCommandMessages = laterMessages.filter((entry) => !entry.isCommand);
+	if (laterNonCommandMessages.length > COOK_HANDOFF_MAX_LATER_NON_COMMAND_MESSAGES) return true;
+	return laterNonCommandMessages.some((entry) => {
+		if (entry.role === "summary") return false;
+		if (!hasRecentDiscussionImplementationIntent(entry.text, deps.stripCodeBlocks)) return false;
+		return true;
+	});
+}
+
+function cookHandoffIsFreshEnough(capsule: CookHandoffCapsule, laterMessages: RecentSessionMessage[]): boolean {
+	const capturedAtMs = Date.parse(capsule.captured_at);
+	if (!Number.isFinite(capturedAtMs)) return false;
+	const laterTimestamps = laterMessages.map((entry) => entry.timestampMs).filter((value): value is number => value !== undefined);
+	if (laterTimestamps.length === 0) return true;
+	return Math.max(...laterTimestamps) - capturedAtMs <= COOK_HANDOFF_MAX_AGE_MS;
+}
+
+function buildContextProposalFromCookHandoffCapsule(
+	capsule: CookHandoffCapsule,
+	projectName: string,
+	deps: ProposalParseDeps,
+): ContextProposal | undefined {
+	if (!isStartableCookHandoffCapsule(capsule, deps)) return undefined;
+	const constraints = uniqueProposalItems([...capsule.constraints, ...capsule.non_goals]);
+	const mission = deps.assessMissionAnchor(capsule.mission, projectName).derived;
+	const goalText = buildContextProposalGoalText({
+		mission,
+		scope: capsule.scope,
+		constraints,
+		acceptance: capsule.acceptance,
+	});
+	const proposal: ContextProposal = {
+		mission,
+		scope: [...capsule.scope],
+		constraints,
+		acceptance: [...capsule.acceptance],
+		analysis: finalizeContextProposalAnalysis(
+			{
+				taskType: capsule.task_type,
+				evaluationProfile: capsule.evaluation_profile,
+				critique: [
+					...capsule.notes,
+					...(capsule.why_cook_now ? [`Primary-agent /cook handoff rationale: ${capsule.why_cook_now}`] : []),
+				],
+				risks: capsule.risks,
+				possibleNoise: [],
+				alternateMissions: [],
+				suppressedCompletedTopics: [],
+				suppressedNegatedTopics: [],
+			},
+			[mission, goalText, capsule.mission, ...capsule.scope, ...constraints, ...capsule.acceptance],
+		),
+		goalText,
+		basisPreview: buildCookHandoffBasisPreview(capsule),
+		source: "handoff_capsule",
+		alternateProposals: [],
+	};
+	return finalizeContextProposal(proposal, projectName, deps);
+}
+
+export function extractLatestCookHandoffProposal(
+	recentMessages: RecentSessionMessage[],
+	projectName: string,
+	deps: ProposalParseDeps,
+): ContextProposal | undefined {
+	for (let index = 0; index < recentMessages.length; index += 1) {
+		const entry = recentMessages[index];
+		if (entry.role !== "assistant" || entry.isCommand) continue;
+		const capsules = parseCookHandoffCapsulesFromText(entry.text, entry.messageId, entry.timestampMs, deps);
+		if (capsules.length === 0) continue;
+		for (let capsuleIndex = capsules.length - 1; capsuleIndex >= 0; capsuleIndex -= 1) {
+			const capsule = capsules[capsuleIndex];
+			const laterMessages = recentMessages.slice(0, index);
+			if (!cookHandoffIsFreshEnough(capsule, laterMessages)) continue;
+			if (laterMessagesInvalidateCookHandoff(laterMessages, deps)) continue;
+			const proposal = buildContextProposalFromCookHandoffCapsule(capsule, projectName, deps);
+			if (proposal) return proposal;
+		}
+	}
+	return undefined;
 }
 
 export async function deriveCookContextProposalFromRecentDiscussion(

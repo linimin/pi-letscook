@@ -16,7 +16,9 @@ import {
 import {
 	assessMissionAnchor,
 	collectRecentDiscussionEntries,
+	collectRecentSessionMessages,
 	deriveCookContextProposalFromRecentDiscussion,
+	extractLatestCookHandoffProposal,
 	finalizeContextProposalAnalysis,
 	isWeakMissionAnchor,
 	missionAnchorsLikelyEquivalent,
@@ -364,7 +366,11 @@ async function deriveCookContextProposal(
 	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
 	projectName: string,
 ): Promise<ContextProposal | undefined> {
-	const recentEntries = collectRecentDiscussionEntries(ctx, { isRecord, asString, isStaleContextError });
+	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
+	const recentEntries = recentMessages
+		.filter((entry) => (entry.role === "user" || entry.role === "custom") && !entry.isCommand)
+		.slice(0, 8)
+		.map((entry) => ({ role: entry.role, text: entry.text }));
 	const snapshot = await loadCompletionSnapshot(getCtxCwd(ctx));
 	const workflowContextLines = snapshot
 		? [
@@ -378,6 +384,16 @@ async function deriveCookContextProposal(
 			`verification summary: ${asString(snapshot.verificationEvidence?.summary) ?? "(none)"}`,
 		]
 		: [];
+	const explicitHandoff = extractLatestCookHandoffProposal(recentMessages, projectName, {
+		asString,
+		asStringArray,
+		assessMissionAnchor,
+		normalizeMissionAnchorText,
+		isWeakMissionAnchor,
+		missionAnchorsStrictlyEquivalent,
+		stripCodeBlocks,
+	});
+	if (explicitHandoff) return explicitHandoff;
 	return await deriveCookContextProposalFromRecentDiscussion(projectName, recentEntries, {
 		asString,
 		asStringArray,

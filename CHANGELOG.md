@@ -4,7 +4,9 @@
 
 ### Changed
 
-- made `/cook` derive a confirmable startup brief from recent discussion before any canonical workflow rewrite, then preserve the confirmed brief in canonical state as advisory intake for later re-grounding
+- made explicit primary-agent `/cook` handoff the preferred startup-intake path by teaching ordinary-chat handoff turns to emit a structured `cook_handoff` capsule and letting `/cook` prefer that capsule over broad context re-inference when it is fresh and valid
+- kept context-derived startup as a fallback only, so stale, drifted, or non-startable handoff capsules still fail closed or fall back to recent discussion instead of silently rewriting canonical state
+- made finished-workflow suppression stay a safety layer instead of a replacement mission when a fresh explicit `/cook` handoff exists, and blocked negative rejection/suppression text from becoming a Startable startup mission
 - removed inline `/cook` arguments from the shipped entry path again so explicit bare `/cook` is the only public command, and fail closed when recent discussion is insufficient or unreliable
 - added a pre-`/cook` ordinary-chat handoff boundary so the primary agent is instructed to stop at `/cook` once a task has matured into completion-workflow scope instead of starting long-running implementation directly in ordinary chat
 

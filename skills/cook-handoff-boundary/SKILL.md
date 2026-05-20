@@ -35,11 +35,41 @@ When the task is judged ready for completion workflow, the primary agent must:
 - stop before long-running implementation
 - not edit tracked product files in ordinary chat for that workflow-level task
 - tell the user to run `/cook`
-- explain that `/cook` will derive a startup brief from recent discussion and ask for confirmation before workflow start
+- explain that `/cook` will first look for a fresh explicit primary-agent handoff and otherwise fall back to recent discussion before asking for confirmation
+- append one exact structured `/cook` handoff capsule in the same assistant reply
+
+Required capsule format:
+
+````text
+```cook_handoff
+{
+  "kind": "cook_handoff",
+  "source": "primary_agent",
+  "captured_at": "<ISO-8601 timestamp>",
+  "source_turn_id": "<current assistant turn id>",
+  "mission": "<startable implementation mission>",
+  "scope": ["..."],
+  "constraints": ["..."],
+  "acceptance": ["..."],
+  "risks": ["..."],
+  "notes": ["..."],
+  "handoff_kind": "implementation_workflow_ready",
+  "task_type": "completion-workflow",
+  "evaluation_profile": "completion-rubric-v1",
+  "why_cook_now": "<why the task is ready for /cook now>"
+}
+```
+````
+
+Notes:
+
+- `constraints` may be replaced or supplemented by `non_goals` when clearer.
+- The mission must be positively startable implementation work; do not use rejection or suppression text as the mission.
+- The capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
 
 Suggested wording:
 
-> This task is now mature enough for the `/cook` workflow. If you want me to start implementation, run `/cook`. I’ll use our recent discussion to generate a startup brief for confirmation before the workflow begins.
+> This task is now mature enough for the `/cook` workflow. If you want me to start implementation, run `/cook`. I’ve also attached an explicit `/cook` handoff capsule so `/cook` can confirm this plan directly before the workflow begins.
 
 A short recap may include mission, scope, or acceptance, but that recap must not be presented as canonical plan state.
 

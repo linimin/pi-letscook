@@ -47,6 +47,49 @@ with session_path.open('w', encoding='utf-8') as fh:
 PY
 }
 
+write_session_messages() {
+  local session_path="$1"
+  local cwd="$2"
+  local messages_json="$3"
+  python3 - "$session_path" "$cwd" "$messages_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+session_path = Path(sys.argv[1])
+cwd = sys.argv[2]
+messages = json.loads(sys.argv[3])
+session_path.parent.mkdir(parents=True, exist_ok=True)
+entries = [
+    {
+        "type": "session",
+        "version": 3,
+        "id": "11111111-1111-4111-8111-111111111111",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "cwd": cwd,
+    },
+]
+parent_id = None
+for index, message in enumerate(messages, start=1):
+    entry_id = f"m{index:04d}"
+    entries.append({
+        "type": "message",
+        "id": entry_id,
+        "parentId": parent_id,
+        "timestamp": f"2026-01-01T00:00:{index:02d}.000Z",
+        "message": {
+            "role": message["role"],
+            "content": message["content"],
+            "timestamp": 1767225600000 + index * 1000,
+        },
+    })
+    parent_id = entry_id
+with session_path.open('w', encoding='utf-8') as fh:
+    for entry in entries:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+PY
+}
+
 mark_done() {
   python3 - <<'PY'
 import json
@@ -1358,7 +1401,253 @@ assert 'Discuss changes in the main chat and rerun /cook.' in output, 'cancel co
 assert not Path('.agent').exists(), 'cancel action should not write canonical workflow state'
 PY
 
+# Explicit primary-agent handoff: /cook should prefer the structured handoff capsule over broad context re-inference.
+HANDOFF_ROOT_START="$TMPDIR/handoff-root-start"
+mkdir -p "$HANDOFF_ROOT_START"
+cd "$HANDOFF_ROOT_START"
+git init -q
+
+HANDOFF_SESSION_START="$TMPDIR/handoff-session-start.jsonl"
+HANDOFF_SNAPSHOT_START="$TMPDIR/handoff-proposal-start.json"
+HANDOFF_MESSAGES_START="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Fix login redirect callback behavior.",
+    "scope": [
+        "Update the callback redirect decision logic.",
+        "Preserve the broader auth flow."
+    ],
+    "constraints": [
+        "Do not refactor the broader auth flow."
+    ],
+    "acceptance": [
+        "Add a regression test for returning to the requested page."
+    ],
+    "risks": [
+        "Stale auth discussion could broaden the startup brief if the handoff is ignored."
+    ],
+    "notes": [
+        "Keep the startup brief aligned with the explicit primary-agent plan."
+    ],
+    "handoff_kind": "implementation_workflow_ready",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The implementation plan is concrete and ready for repo changes."
+}
+messages = [
+    {"role": "user", "content": "Please think through the login redirect fix and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "This task is now ready for /cook. Run /cook to confirm the startup brief.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$HANDOFF_SESSION_START" "$HANDOFF_ROOT_START" "$HANDOFF_MESSAGES_START"
+
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_START" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$HANDOFF_SESSION_START" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-start.out" 2>"$TMPDIR/pi-completion-handoff-start.err"
+
+python3 - "$HANDOFF_SNAPSHOT_START" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+snapshot = json.loads(Path(sys.argv[1]).read_text())
+state = json.loads(Path('.agent/state.json').read_text())
+
+assert snapshot['source'] == 'handoff_capsule', 'explicit handoff startup should snapshot the handoff capsule as the proposal source'
+assert snapshot['mission'] == 'Fix login redirect callback behavior.', 'explicit handoff startup should preserve the primary-agent mission'
+assert state['mission_anchor'] == 'Fix login redirect callback behavior.', 'explicit handoff startup should use the handoff mission as canonical mission_anchor'
+assert state['advisory_startup_brief']['source'] == 'primary_agent_handoff', 'explicit handoff startup should preserve the advisory intake source'
+assert state['advisory_startup_brief']['risks'] == ['Stale auth discussion could broaden the startup brief if the handoff is ignored.'], 'explicit handoff startup should preserve handoff risks'
+assert 'Primary-agent /cook handoff rationale: The implementation plan is concrete and ready for repo changes.' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve why_cook_now as notes'
+PY
+
+# Done workflow + fresh handoff: the fresh explicit handoff should override done-state suppression and start the new round.
+HANDOFF_ROOT_DONE="$TMPDIR/handoff-root-done"
+mkdir -p "$HANDOFF_ROOT_DONE"
+cd "$HANDOFF_ROOT_DONE"
+git init -q
+
+DONE_SEED_SESSION="$TMPDIR/handoff-done-seed-session.jsonl"
+DONE_SEED_DISCUSSION=$'Mission: Seed a finished workflow before testing fresh handoff priority.\nScope:\n- Create canonical workflow state.\nConstraints:\n- Keep the seed minimal.\nAcceptance:\n- Mark the workflow done before the next test step.'
+write_session "$DONE_SEED_SESSION" "$HANDOFF_ROOT_DONE" "$DONE_SEED_DISCUSSION"
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$DONE_SEED_SESSION" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-done-seed.out" 2>"$TMPDIR/pi-completion-handoff-done-seed.err"
+mark_done
+
+HANDOFF_SESSION_DONE="$TMPDIR/handoff-session-done.jsonl"
+HANDOFF_SNAPSHOT_DONE="$TMPDIR/handoff-proposal-done.json"
+HANDOFF_MESSAGES_DONE="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Reopen the login redirect work for the callback edge case.",
+    "scope": [
+        "Handle the callback edge case in the redirect logic.",
+        "Keep the finished workflow as historical context only."
+    ],
+    "constraints": [
+        "Do not turn done-state suppression into the startup mission."
+    ],
+    "acceptance": [
+        "Add a regression test for the callback edge case."
+    ],
+    "risks": [
+        "Done-state context could override the new mission if the handoff is ignored."
+    ],
+    "notes": [
+        "This is a fresh implementation round, not a summary of the finished workflow."
+    ],
+    "handoff_kind": "implementation_workflow_ready",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "A new implementation-ready edge case was identified after the previous round closed."
+}
+messages = [
+    {"role": "user", "content": "The previous round is done, but there is a fresh callback edge case to implement."},
+    {"role": "assistant", "content": "The next round is ready for /cook. Run /cook to confirm this fresh implementation mission.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$HANDOFF_SESSION_DONE" "$HANDOFF_ROOT_DONE" "$HANDOFF_MESSAGES_DONE"
+
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_DONE" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$HANDOFF_SESSION_DONE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-done.out" 2>"$TMPDIR/pi-completion-handoff-done.err"
+
+python3 - "$HANDOFF_SNAPSHOT_DONE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+snapshot = json.loads(Path(sys.argv[1]).read_text())
+state = json.loads(Path('.agent/state.json').read_text())
+
+assert snapshot['source'] == 'handoff_capsule', 'done-workflow handoff should still use the explicit handoff capsule'
+assert snapshot['mission'] == 'Reopen the login redirect work for the callback edge case.', 'done-workflow handoff should preserve the fresh mission'
+assert state['mission_anchor'] == 'Reopen the login redirect work for the callback edge case.', 'done-workflow handoff should override done-state suppression with the fresh mission'
+assert state['continuation_policy'] == 'continue', 'done-workflow handoff should reopen canonical workflow state for the new round'
+assert state['advisory_startup_brief']['source'] == 'primary_agent_handoff', 'done-workflow handoff should preserve the handoff advisory source'
+PY
+
+# Stale handoff: later discussion should invalidate the older handoff capsule and fall back to the newer discussion mission.
+HANDOFF_ROOT_STALE="$TMPDIR/handoff-root-stale"
+mkdir -p "$HANDOFF_ROOT_STALE"
+cd "$HANDOFF_ROOT_STALE"
+git init -q
+
+HANDOFF_SESSION_STALE="$TMPDIR/handoff-session-stale.jsonl"
+HANDOFF_SNAPSHOT_STALE="$TMPDIR/handoff-proposal-stale.json"
+HANDOFF_MESSAGES_STALE="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Fix the original login redirect callback behavior.",
+    "scope": ["Update the original callback redirect logic."],
+    "constraints": ["Do not refactor the auth stack."],
+    "acceptance": ["Add the original callback regression test."],
+    "risks": [],
+    "notes": [],
+    "handoff_kind": "implementation_workflow_ready"
+}
+newer_discussion = "Mission: Ship logout redirect consistency instead.\nScope:\n- Update the logout redirect path.\nConstraints:\n- Leave the login callback flow unchanged.\nAcceptance:\n- Add a logout redirect regression test."
+messages = [
+    {"role": "user", "content": "Please plan the login redirect follow-up."},
+    {"role": "assistant", "content": "Run /cook if you want to start the original follow-up.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+    {"role": "user", "content": newer_discussion},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$HANDOFF_SESSION_STALE" "$HANDOFF_ROOT_STALE" "$HANDOFF_MESSAGES_STALE"
+
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_STALE" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$HANDOFF_SESSION_STALE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-stale.out" 2>"$TMPDIR/pi-completion-handoff-stale.err"
+
+python3 - "$HANDOFF_SNAPSHOT_STALE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+snapshot = json.loads(Path(sys.argv[1]).read_text())
+state = json.loads(Path('.agent/state.json').read_text())
+
+assert snapshot['source'] == 'session', 'stale handoff should fall back to the newer user discussion proposal'
+assert snapshot['mission'] == 'Ship logout redirect consistency instead.', 'stale handoff fallback should prefer the newer discussion mission'
+assert state['mission_anchor'] == 'Ship logout redirect consistency instead.', 'stale handoff fallback should not keep the older handoff mission'
+assert state['advisory_startup_brief']['source'] == 'recent_discussion', 'stale handoff fallback should preserve that the accepted startup came from discussion'
+PY
+
+# Negative handoff rationale: a non-startable capsule must not become the startup mission.
+HANDOFF_ROOT_NEGATIVE="$TMPDIR/handoff-root-negative"
+mkdir -p "$HANDOFF_ROOT_NEGATIVE"
+cd "$HANDOFF_ROOT_NEGATIVE"
+git init -q
+
+HANDOFF_SESSION_NEGATIVE="$TMPDIR/handoff-session-negative.jsonl"
+HANDOFF_SNAPSHOT_NEGATIVE="$TMPDIR/handoff-proposal-negative.json"
+HANDOFF_MESSAGES_NEGATIVE="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Do not reopen implementation for the finished workflow.",
+    "scope": ["Keep the old workflow closed."],
+    "constraints": ["Do not start repo changes."],
+    "acceptance": ["Explain that the finished workflow should stay closed."],
+    "risks": [],
+    "notes": [],
+    "handoff_kind": "implementation_workflow_ready"
+}
+messages = [
+    {"role": "user", "content": "Should we reopen the finished workflow?"},
+    {"role": "assistant", "content": "Do not reopen it directly.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$HANDOFF_SESSION_NEGATIVE" "$HANDOFF_ROOT_NEGATIVE" "$HANDOFF_MESSAGES_NEGATIVE"
+
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_NEGATIVE" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$HANDOFF_SESSION_NEGATIVE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-negative.out" 2>"$TMPDIR/pi-completion-handoff-negative.err"
+
+python3 - "$HANDOFF_SNAPSHOT_NEGATIVE" "$TMPDIR/pi-completion-handoff-negative.out" "$TMPDIR/pi-completion-handoff-negative.err" <<'PY'
+import sys
+from pathlib import Path
+
+snapshot = Path(sys.argv[1])
+output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
+
+assert not snapshot.exists(), 'negative handoff rationale should not emit a startup proposal snapshot'
+assert not Path('.agent').exists(), 'negative handoff rationale should fail closed without writing canonical state'
+assert '/cook failed closed' in output, 'negative handoff rationale should fail closed instead of becoming the startup mission'
+PY
+
 grep -q 'export async function deriveCookContextProposalFromRecentDiscussion' "$PKG_ROOT/extensions/completion/proposal.ts"
+grep -q 'export function extractLatestCookHandoffProposal' "$PKG_ROOT/extensions/completion/proposal.ts"
 grep -q 'export function parseContextProposalAnalystOutput' "$PKG_ROOT/extensions/completion/proposal.ts"
 grep -q 'export function buildContextProposalConfirmationLayout' "$PKG_ROOT/extensions/completion/prompt-surfaces.ts"
 grep -q 'export function buildEvaluationRoleContextLines' "$PKG_ROOT/extensions/completion/prompt-surfaces.ts"

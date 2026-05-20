@@ -10,7 +10,7 @@ import type {
 
 export type AdvisoryStartupBrief = {
 	kind: "startup_brief";
-	source: "recent_discussion";
+	source: "recent_discussion" | "primary_agent_handoff";
 	confirmed: true;
 	captured_at: string;
 	goal_text: string;
@@ -31,7 +31,9 @@ export function buildCookHandoffBoundaryReminder(): string {
 		"/cook is the only explicit entrypoint into long-running completion workflow.",
 		"When you judge that the task has matured into completion-workflow scope — for example the user has clearly shifted from exploration into implementation intent, you have just produced a concrete plan or proposal whose next step would naturally be implementation, or the task spans multiple files, steps, or verification surfaces — stop short of long-running implementation and tell the user to run /cook.",
 		"At that handoff point, do not begin long-running product implementation in ordinary chat, do not edit tracked product files for that workflow-level task, and do not act as though /cook had already been invoked.",
-		"When handing off, explain that /cook will derive a startup brief from recent discussion and ask for confirmation before workflow start.",
+		"When handing off, explain that /cook will first look for a fresh explicit primary-agent handoff capsule and otherwise fall back to recent discussion.",
+		"Also append one exact fenced block in the same assistant reply using ```cook_handoff ... ``` JSON with kind/source/handoff_kind plus mission, scope, constraints or non_goals, acceptance, risks, notes, captured_at, source_turn_id, and optional task_type/evaluation_profile/why_cook_now.",
+		"The capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
 		"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook.",
 	].join(" ");
 }
@@ -84,13 +86,13 @@ function buildAdvisoryStartupBriefNotes(analysis: ContextProposalAnalysis): stri
 }
 
 export function buildAdvisoryStartupBrief(args: {
-	proposal: Pick<ContextProposal, "goalText" | "mission" | "scope" | "constraints" | "acceptance">;
+	proposal: Pick<ContextProposal, "goalText" | "mission" | "scope" | "constraints" | "acceptance" | "source">;
 	analysis: ContextProposalAnalysis;
 	capturedAt?: string;
 }): AdvisoryStartupBrief {
 	return {
 		kind: "startup_brief",
-		source: "recent_discussion",
+		source: args.proposal.source === "handoff_capsule" ? "primary_agent_handoff" : "recent_discussion",
 		confirmed: true,
 		captured_at: args.capturedAt ?? new Date().toISOString(),
 		goal_text: args.proposal.goalText,

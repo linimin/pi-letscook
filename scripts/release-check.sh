@@ -18,19 +18,20 @@ checks = {
         "`/cook` is the explicit workflow boundary for starting, continuing, refocusing, or beginning the next round of long-running repo work.",
         "Only explicit `/cook` enters the workflow. Ordinary prompts stay in the main chat and go straight to the primary agent.",
         "If a task has clearly matured into completion-workflow scope, the primary agent should hand you off to `/cook` instead of starting long-running implementation directly in ordinary chat.",
-        "`/cook` is the canonical workflow boundary and manual entry point",
-        "Discuss the concrete repo change in the main chat, then run `/cook`",
-        "The confirmed startup brief is also preserved there as advisory intake for later re-grounding.",
+        "That handoff should include an explicit structured `/cook` capsule in the assistant reply so `/cook` can confirm the already-formed mission instead of re-deriving it from broad ambient context.",
+        "`/cook` first looks for a fresh explicit primary-agent handoff capsule.",
+        "The pre-`/cook` handoff capsule itself is not canonical workflow state. It is only startup intake for `/cook`.",
     ],
     "CHANGELOG.md": [
-        "made `/cook` derive a confirmable startup brief from recent discussion before any canonical workflow rewrite, then preserve the confirmed brief in canonical state as advisory intake for later re-grounding",
-        "removed inline `/cook` arguments from the shipped entry path again so explicit bare `/cook` is the only public command, and fail closed when recent discussion is insufficient or unreliable",
-        "added a pre-`/cook` ordinary-chat handoff boundary so the primary agent is instructed to stop at `/cook` once a task has matured into completion-workflow scope instead of starting long-running implementation directly in ordinary chat",
+        "made explicit primary-agent `/cook` handoff the preferred startup-intake path by teaching ordinary-chat handoff turns to emit a structured `cook_handoff` capsule and letting `/cook` prefer that capsule over broad context re-inference when it is fresh and valid",
+        "kept context-derived startup as a fallback only, so stale, drifted, or non-startable handoff capsules still fail closed or fall back to recent discussion instead of silently rewriting canonical state",
+        "made finished-workflow suppression stay a safety layer instead of a replacement mission when a fresh explicit `/cook` handoff exists, and blocked negative rejection/suppression text from becoming a Startable startup mission",
     ],
     "extensions/completion/prompt-surfaces.ts": [
         '"/cook is the only explicit entrypoint into long-running completion workflow."',
         '"When you judge that the task has matured into completion-workflow scope',
-        '"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook."',
+        '"Also append one exact fenced block in the same assistant reply using ```cook_handoff ... ``` JSON',
+        '"The capsule is startup intake for /cook only: do not present it as canonical .agent state',
     ],
 }
 
