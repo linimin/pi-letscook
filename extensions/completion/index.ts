@@ -374,6 +374,27 @@ async function promptContextProposalConfirmationAction(
 	});
 }
 
+async function deriveCookStartupProposal(
+	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
+	projectName: string,
+): Promise<CookContextProposalResult> {
+	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
+	const explicitHandoff = assessLatestCookHandoffProposal(recentMessages, projectName, {
+		asString,
+		asStringArray,
+		assessMissionAnchor,
+		normalizeMissionAnchorText,
+		isWeakMissionAnchor,
+		missionAnchorsStrictlyEquivalent,
+		stripCodeBlocks,
+	});
+	if (explicitHandoff.status === "startable") return { proposal: explicitHandoff.proposal };
+	if (explicitHandoff.status === "fresh_but_not_startable") {
+		return { blockedFailureMessage: explicitHandoff.message };
+	}
+	return {};
+}
+
 async function deriveCookContextProposal(
 	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
 	projectName: string,
@@ -396,19 +417,8 @@ async function deriveCookContextProposal(
 			`verification summary: ${asString(snapshot.verificationEvidence?.summary) ?? "(none)"}`,
 		]
 		: [];
-	const explicitHandoff = assessLatestCookHandoffProposal(recentMessages, projectName, {
-		asString,
-		asStringArray,
-		assessMissionAnchor,
-		normalizeMissionAnchorText,
-		isWeakMissionAnchor,
-		missionAnchorsStrictlyEquivalent,
-		stripCodeBlocks,
-	});
-	if (explicitHandoff.status === "startable") return { proposal: explicitHandoff.proposal };
-	if (explicitHandoff.status === "fresh_but_not_startable") {
-		return { blockedFailureMessage: explicitHandoff.message };
-	}
+	const explicitHandoff = await deriveCookStartupProposal(ctx, projectName);
+	if (explicitHandoff.proposal || explicitHandoff.blockedFailureMessage) return explicitHandoff;
 	return {
 		proposal: await deriveCookContextProposalFromRecentDiscussion(projectName, recentEntries, {
 			asString,
@@ -934,6 +944,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		completionTestWorkflowMissionOverride,
 		confirmContextProposal,
 		deriveCookContextProposal,
+		deriveCookStartupProposal,
 		emitCommandText,
 		finalizeContextProposalAnalysis,
 		getCtxCwd,

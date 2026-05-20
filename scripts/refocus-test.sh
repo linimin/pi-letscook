@@ -47,15 +47,99 @@ with session_path.open('w', encoding='utf-8') as fh:
 PY
 }
 
+write_session_messages() {
+  local session_path="$1"
+  local cwd="$2"
+  local messages_json="$3"
+  python3 - "$session_path" "$cwd" "$messages_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+session_path = Path(sys.argv[1])
+cwd = sys.argv[2]
+messages = json.loads(sys.argv[3])
+session_path.parent.mkdir(parents=True, exist_ok=True)
+entries = [
+    {
+        "type": "session",
+        "version": 3,
+        "id": "11111111-1111-4111-8111-111111111111",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "cwd": cwd,
+    },
+]
+parent_id = None
+for index, message in enumerate(messages, start=1):
+    entry_id = f"m{index:04d}"
+    entries.append({
+        "type": "message",
+        "id": entry_id,
+        "parentId": parent_id,
+        "timestamp": f"2026-01-01T00:00:{index:02d}.000Z",
+        "message": {
+            "role": message["role"],
+            "content": message["content"],
+            "timestamp": 1767225600000 + index * 1000,
+        },
+    })
+    parent_id = entry_id
+with session_path.open('w', encoding='utf-8') as fh:
+    for entry in entries:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+PY
+}
+
 cd "$TMPDIR"
 git init -q
 
 BOOTSTRAP_SESSION="$TMPDIR/session-bootstrap.jsonl"
-BOOTSTRAP_DISCUSSION=$'Mission: Smoke-test mission.\nScope:\n- Bootstrap a completion workflow for the refocus regression fixture.\nConstraints:\n- Use supported bare /cook discussion flow only.\nAcceptance:\n- Materialize canonical state for active-workflow refocus tests.'
-write_session "$BOOTSTRAP_SESSION" "$TMPDIR" "$BOOTSTRAP_DISCUSSION"
+BOOTSTRAP_MESSAGES="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Smoke-test mission.",
+    "scope": [
+        "Bootstrap a completion workflow for the refocus regression fixture."
+    ],
+    "constraints": [
+        "Keep active-workflow refocus behavior under the explicit-handoff startup contract."
+    ],
+    "acceptance": [
+        "Bootstrap canonical refocus-fixture state for the active-workflow regression.",
+        "Verify the refocus regression with npm run refocus-test."
+    ],
+    "risks": [],
+    "notes": [
+        "Use explicit primary-agent handoff startup for the refocus regression fixture."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Bootstrap the refocus regression fixture from a fresh explicit handoff.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "scripts/refocus-test.sh"
+    ],
+    "verification_commands": [
+        "npm run refocus-test"
+    ],
+    "why_this_slice_first": "The refocus regression fixture needs canonical state before active-workflow routing can be exercised.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The active-workflow refocus regression needs a fresh explicit startup boundary."
+}
+messages = [
+    {"role": "user", "content": "Prepare the refocus regression fixture and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "The refocus regression fixture is ready for /cook.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$BOOTSTRAP_SESSION" "$TMPDIR" "$BOOTSTRAP_MESSAGES"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-refocus-bootstrap.out" 2>"$TMPDIR/pi-completion-refocus-bootstrap.err" &
 PI_PID=$!
 for _ in $(seq 1 60); do

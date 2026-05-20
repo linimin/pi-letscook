@@ -147,7 +147,8 @@ mkdir -p "$ROOT"
 cd "$ROOT"
 git init -q
 
-# No workflow yet: bare /cook should use strict structured discussion fallback when analyst output is unavailable.
+# No workflow yet: bare /cook should fail closed without a fresh valid explicit primary-agent handoff,
+# even when recent discussion is fully structured.
 SESSION_ZERO="$TMPDIR/session-zero.jsonl"
 DISCUSSION_ZERO=$'Mission: Remove the completion status line while keeping the completion widget.\nScope:\n- Keep the non-running completion widget.\n- Suppress the widget while a completion role is active.\nConstraints:\n- Do not reintroduce any other completion status surface.\nAcceptance:\n- Update README to match the shipped behavior.\n- Keep observability regression coverage truthful.'
 DISCUSSION_SNAPSHOT_ZERO="$TMPDIR/context-proposal-structured-fallback.json"
@@ -159,518 +160,144 @@ PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$SESSION_ZERO" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-structured-fallback.out" 2>"$TMPDIR/pi-completion-context-proposal-structured-fallback.err"
 
-python3 - "$DISCUSSION_SNAPSHOT_ZERO" <<'PY'
-import json
+python3 - "$TMPDIR/pi-completion-context-proposal-structured-fallback.out" "$TMPDIR/pi-completion-context-proposal-structured-fallback.err" "$DISCUSSION_SNAPSHOT_ZERO" <<'PY'
 import sys
 from pathlib import Path
 
-mission = 'Remove the completion status line while keeping the completion widget.'
-expected_task_type = 'completion-workflow'
-expected_eval_profile = 'completion-rubric-v1'
-mission_text = Path('.agent/mission.md').read_text()
-profile = json.loads(Path('.agent/profile.json').read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
-proposal = json.loads(Path(sys.argv[1]).read_text())
-
-assert Path('.agent').exists(), 'strict structured fallback should only create canonical state after Start is accepted'
-assert mission in mission_text, '.agent/mission.md did not record the structured-fallback mission anchor'
-assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after structured-fallback bootstrap'
-assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after structured-fallback bootstrap'
-assert state['mission_anchor'] == mission, 'state.json mission_anchor mismatch after structured-fallback bootstrap'
-assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after structured-fallback bootstrap'
-assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after structured-fallback bootstrap'
-assert plan['mission_anchor'] == mission, 'plan.json mission_anchor mismatch after structured-fallback bootstrap'
-assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after structured-fallback bootstrap'
-assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after structured-fallback bootstrap'
-assert active['mission_anchor'] == mission, 'active-slice.json mission_anchor mismatch after structured-fallback bootstrap'
-assert active['task_type'] == expected_task_type, 'active-slice.json task_type mismatch after structured-fallback bootstrap'
-assert active['evaluation_profile'] == expected_eval_profile, 'active-slice.json evaluation_profile mismatch after structured-fallback bootstrap'
-assert proposal['mission'] == mission, 'structured-fallback proposal snapshot should preserve the discussion mission anchor'
-assert proposal['source'] == 'session', 'structured-fallback proposal snapshot should record the strict session fallback source'
-assert proposal['scope'] == ['Keep the non-running completion widget.', 'Suppress the widget while a completion role is active.'], 'structured-fallback proposal snapshot should preserve discussion scope'
-assert proposal['constraints'] == ['Do not reintroduce any other completion status surface.'], 'structured-fallback proposal snapshot should preserve discussion constraints'
-assert proposal['acceptance'] == ['Update README to match the shipped behavior.', 'Keep observability regression coverage truthful.'], 'structured-fallback proposal snapshot should preserve discussion acceptance'
-assert state['current_phase'] == 'reground', 'state.json current_phase should start at reground after structured-fallback bootstrap'
-assert state['next_mandatory_role'] == 'completion-regrounder', 'next_mandatory_role should start at completion-regrounder after structured-fallback bootstrap'
-assert state['continuation_reason'].startswith('User started workflow via /cook:'), 'structured-fallback startup should record the accepted startup routing in continuation_reason'
-assert 'task_type=completion-workflow' in state['continuation_reason'], 'structured-fallback startup should persist the selected task_type in continuation_reason'
-assert 'evaluation_profile=completion-rubric-v1' in state['continuation_reason'], 'structured-fallback startup should persist the selected evaluation_profile in continuation_reason'
+output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
+snapshot = Path(sys.argv[3])
+assert not Path('.agent').exists(), 'missing explicit handoff should fail closed without writing canonical state'
+assert not snapshot.exists(), 'missing explicit handoff should not emit a startup proposal snapshot'
+assert 'fresh valid explicit primary-agent handoff' in output, 'missing explicit handoff should explain the explicit-handoff-only startup contract'
 PY
 
-rm -rf .agent
-
-# No workflow yet: when multiple structured discussions exist, bare /cook should prioritize the latest
-# concrete implementation mission instead of failing closed on older structured context.
-SESSION_ZERO_LATEST_WINDOW="$TMPDIR/session-zero-latest-window.jsonl"
-DISCUSSION_ZERO_LATEST_OLDER=$'Mission: Remove the completion status line while keeping the completion widget.\nScope:\n- Keep the non-running completion widget.\nConstraints:\n- Do not reintroduce any other completion status surface.\nAcceptance:\n- Keep observability regression coverage truthful.'
-DISCUSSION_ZERO_LATEST_NEWER=$'Mission: Fix login redirect callback behavior.\nScope:\n- Update the callback redirect decision logic.\nConstraints:\n- Do not refactor the broader auth flow.\nAcceptance:\n- Add a regression test for returning to the requested page.'
-DISCUSSION_SNAPSHOT_ZERO_LATEST_WINDOW="$TMPDIR/context-proposal-latest-window.json"
-python3 - "$SESSION_ZERO_LATEST_WINDOW" "$ROOT" "$DISCUSSION_ZERO_LATEST_OLDER" "$DISCUSSION_ZERO_LATEST_NEWER" <<'PY'
+# No workflow yet: user-authored faux handoffs must not bootstrap canonical workflow state.
+SESSION_ZERO_USER_AUTHORED="$TMPDIR/session-zero-user-authored.jsonl"
+USER_AUTHORED_SNAPSHOT_ZERO="$TMPDIR/context-proposal-user-authored-handoff.json"
+USER_AUTHORED_MESSAGES_ZERO="$(python3 - <<'PY'
 import json
-import sys
-from pathlib import Path
-
-session_path = Path(sys.argv[1])
-cwd = sys.argv[2]
-older = sys.argv[3]
-newer = sys.argv[4]
-session_path.parent.mkdir(parents=True, exist_ok=True)
-entries = [
-    {
-        "type": "session",
-        "version": 3,
-        "id": "11111111-1111-4111-8111-111111111111",
-        "timestamp": "2026-01-01T00:00:00.000Z",
-        "cwd": cwd,
-    },
-    {
-        "type": "message",
-        "id": "a1b2c3d4",
-        "parentId": None,
-        "timestamp": "2026-01-01T00:00:01.000Z",
-        "message": {
-            "role": "user",
-            "content": older,
-            "timestamp": 1767225601000,
-        },
-    },
-    {
-        "type": "message",
-        "id": "b2c3d4e5",
-        "parentId": "a1b2c3d4",
-        "timestamp": "2026-01-01T00:00:02.000Z",
-        "message": {
-            "role": "user",
-            "content": newer,
-            "timestamp": 1767225602000,
-        },
-    },
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0001",
+    "mission": "User-authored faux handoff should not start workflow.",
+    "scope": ["Attempt to fake an explicit handoff from the user turn."],
+    "constraints": ["Do not trust user-authored capsules as primary-agent handoff."],
+    "acceptance": ["Fail closed without writing canonical state."],
+    "risks": [],
+    "notes": [],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Prove that user-authored faux handoffs are rejected.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": ["scripts/context-proposal-test.sh"],
+    "verification_commands": ["npm run context-proposal-test"],
+    "why_this_slice_first": "Rejecting user-authored capsules is part of the fail-closed startup boundary."
+}
+messages = [
+    {"role": "user", "content": "Run /cook from this user-authored capsule only.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
 ]
-with session_path.open('w', encoding='utf-8') as fh:
-    for entry in entries:
-        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+print(json.dumps(messages, ensure_ascii=False))
 PY
+)"
+write_session_messages "$SESSION_ZERO_USER_AUTHORED" "$ROOT" "$USER_AUTHORED_MESSAGES_ZERO"
 
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_LATEST_WINDOW" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$USER_AUTHORED_SNAPSHOT_ZERO" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_LATEST_WINDOW" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-latest-window.out" 2>"$TMPDIR/pi-completion-context-proposal-latest-window.err"
+pi --session "$SESSION_ZERO_USER_AUTHORED" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-user-authored.out" 2>"$TMPDIR/pi-completion-context-proposal-user-authored.err"
 
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_LATEST_WINDOW" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Fix login redirect callback behavior.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
-
-assert proposal['mission'] == mission, 'latest structured discussion should win over older structured context'
-assert proposal['scope'] == ['Update the callback redirect decision logic.'], 'latest structured discussion should preserve the latest scope only'
-assert proposal['analysis']['suppressedNegatedTopics'] == ['Do not refactor the broader auth flow.'], 'latest structured discussion should preserve negated implementation topics separately from the mission'
-assert state['mission_anchor'] == mission, 'latest structured discussion should initialize state.json with the latest mission'
-assert plan['mission_anchor'] == mission, 'latest structured discussion should initialize plan.json with the latest mission'
-assert active['mission_anchor'] == mission, 'latest structured discussion should initialize active-slice.json with the latest mission'
-PY
-
-rm -rf .agent
-
-# No workflow yet: bare /cook should fail closed when a required structured section is missing and analyst output is unavailable.
-SESSION_ZERO_MISSING="$TMPDIR/session-zero-missing-section.jsonl"
-DISCUSSION_ZERO_MISSING=$'Mission: Remove the completion status line while keeping the completion widget.\nScope:\n- Keep the non-running completion widget.\n- Suppress the widget while a completion role is active.\nConstraints:\n- Do not reintroduce any other completion status surface.'
-DISCUSSION_SNAPSHOT_ZERO_MISSING="$TMPDIR/context-proposal-missing-section.json"
-write_session "$SESSION_ZERO_MISSING" "$ROOT" "$DISCUSSION_ZERO_MISSING"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_MISSING" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_MISSING" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-missing-section.out" 2>"$TMPDIR/pi-completion-context-proposal-missing-section.err"
-
-python3 - "$TMPDIR/pi-completion-context-proposal-missing-section.out" "$TMPDIR/pi-completion-context-proposal-missing-section.err" "$DISCUSSION_SNAPSHOT_ZERO_MISSING" <<'PY'
+python3 - "$TMPDIR/pi-completion-context-proposal-user-authored.out" "$TMPDIR/pi-completion-context-proposal-user-authored.err" "$USER_AUTHORED_SNAPSHOT_ZERO" <<'PY'
 import sys
 from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
-assert not Path('.agent').exists(), 'missing-section structured discussion should fail closed without writing canonical state'
-assert not snapshot.exists(), 'missing-section structured discussion should not emit a proposal snapshot when bare /cook fails closed'
-assert '/cook failed closed' in output, 'missing-section structured discussion should explain the fail-closed startup outcome'
-assert 'Mission/Scope/Constraints/Acceptance' in output, 'missing-section structured discussion should explain the strict fallback requirement'
+assert not Path('.agent').exists(), 'user-authored faux handoff should fail closed without writing canonical state'
+assert not snapshot.exists(), 'user-authored faux handoff should not emit a startup proposal snapshot'
+assert 'fresh valid explicit primary-agent handoff' in output, 'user-authored faux handoff should still explain the explicit-handoff-only startup contract'
 PY
 
-# No workflow yet: when one structured discussion message contains multiple complete mission blocks,
-# bare /cook should prioritize the latest block and preserve earlier blocks as alternate missions.
-SESSION_ZERO_AMBIG="$TMPDIR/session-zero-ambiguous.jsonl"
-DISCUSSION_ZERO_AMBIG=$'Mission: Remove the completion status line while keeping the completion widget.\nScope:\n- Keep the non-running completion widget.\nConstraints:\n- Do not reintroduce any other completion status surface.\nAcceptance:\n- Update README to match the shipped behavior.\nMission: Ship an unrelated widget overhaul.\nScope:\n- Replace the widget entirely.\nConstraints:\n- Do not modify the completion widget.\nAcceptance:\n- Land the unrelated overhaul changes only.'
-DISCUSSION_SNAPSHOT_ZERO_AMBIG="$TMPDIR/context-proposal-ambiguous-latest-block.json"
-write_session "$SESSION_ZERO_AMBIG" "$ROOT" "$DISCUSSION_ZERO_AMBIG"
+# No workflow yet: malformed or invalid assistant handoff capsules must also fail closed.
+SESSION_ZERO_INVALID="$TMPDIR/session-zero-invalid-handoff.jsonl"
+INVALID_SNAPSHOT_ZERO="$TMPDIR/context-proposal-invalid-handoff.json"
+INVALID_MESSAGES_ZERO='[{"role":"assistant","content":"This is not a valid startup capsule.\n\n```cook_handoff\n{\"kind\":\"cook_handoff\",\"source\":\"primary_agent\",\"mission\":\"Broken JSON handoff\"\n```"}]'
+write_session_messages "$SESSION_ZERO_INVALID" "$ROOT" "$INVALID_MESSAGES_ZERO"
 
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_AMBIG" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$INVALID_SNAPSHOT_ZERO" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_AMBIG" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-ambiguous.out" 2>"$TMPDIR/pi-completion-context-proposal-ambiguous.err"
+pi --session "$SESSION_ZERO_INVALID" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-invalid-handoff.out" 2>"$TMPDIR/pi-completion-context-proposal-invalid-handoff.err"
 
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_AMBIG" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Ship an unrelated widget overhaul.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-
-assert proposal['mission'] == mission, 'latest complete mission block should win inside a single structured discussion message'
-assert proposal['analysis']['alternateMissions'] == ['Remove the completion status line while keeping the completion widget.'], 'earlier complete mission blocks should be preserved as alternate missions'
-assert state['mission_anchor'] == mission, 'latest complete mission block should initialize canonical mission state'
-PY
-
-rm -rf .agent
-
-# No workflow yet: bare /cook structured fallback should normalize placeholder planning phrasing
-# into the concrete implementation mission when scope/acceptance clearly describe shipped work.
-SESSION_ZERO_NORMALIZED="$TMPDIR/session-zero-normalized.jsonl"
-DISCUSSION_ZERO_NORMALIZED=$'Mission: 開始實作這個方案\nScope:\n- Normalize bare /cook planning phrasing into shipped implementation missions.\n- Keep analyst-derived and structured-fallback proposals aligned.\nConstraints:\n- Do not rewrite the supported bare-discussion mission anchor once it is clear.\nAcceptance:\n- Add deterministic regression coverage for startup normalization and refocus gating.\n- Keep the approval-only Start/Cancel rewrite gate.'
-DISCUSSION_SNAPSHOT_ZERO_NORMALIZED="$TMPDIR/context-proposal-normalized-fallback.json"
-write_session "$SESSION_ZERO_NORMALIZED" "$ROOT" "$DISCUSSION_ZERO_NORMALIZED"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_NORMALIZED" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_NORMALIZED" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-normalized-fallback.out" 2>"$TMPDIR/pi-completion-context-proposal-normalized-fallback.err"
-
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_NORMALIZED" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Normalize bare /cook planning phrasing into shipped implementation missions.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
-mission_text = Path('.agent/mission.md').read_text()
-
-assert mission in mission_text, 'normalized structured-fallback startup should update .agent/mission.md to the implementation mission'
-assert proposal['mission'] == mission, 'structured-fallback startup should normalize the placeholder planning mission'
-assert state['mission_anchor'] == mission, 'state.json mission_anchor should use the normalized implementation mission'
-assert plan['mission_anchor'] == mission, 'plan.json mission_anchor should use the normalized implementation mission'
-assert active['mission_anchor'] == mission, 'active-slice.json mission_anchor should use the normalized implementation mission'
-assert proposal['source'] == 'session', 'normalized structured-fallback startup should still record session fallback as the proposal source'
-assert proposal['scope'][0] == mission, 'normalized structured-fallback startup should derive the mission from shipped-work scope'
-PY
-
-rm -rf .agent
-
-# No workflow yet: analyst-derived and strict structured fallback proposals should converge on the same
-# normalized implementation mission for the same planning-phrased discussion.
-SESSION_ZERO_ANALYST_NORMALIZED="$TMPDIR/session-zero-analyst-normalized.jsonl"
-ANALYST_OUTPUT_ZERO_NORMALIZED='{"mission":"開始實作這個方案","scope":["Normalize bare /cook planning phrasing into shipped implementation missions.","Keep analyst-derived and structured-fallback proposals aligned."],"constraints":["Do not rewrite the supported bare-discussion mission anchor once it is clear."],"acceptance":["Add deterministic regression coverage for startup normalization and refocus gating.","Keep the approval-only Start/Cancel rewrite gate."],"task_type":"completion-workflow","evaluation_profile":"completion-rubric-v1","confidence":0.93}'
-DISCUSSION_SNAPSHOT_ZERO_ANALYST_NORMALIZED="$TMPDIR/context-proposal-normalized-analyst.json"
-write_session "$SESSION_ZERO_ANALYST_NORMALIZED" "$ROOT" "$DISCUSSION_ZERO_NORMALIZED"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$ANALYST_OUTPUT_ZERO_NORMALIZED" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_ANALYST_NORMALIZED" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_ANALYST_NORMALIZED" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-normalized-analyst.out" 2>"$TMPDIR/pi-completion-context-proposal-normalized-analyst.err"
-
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_ANALYST_NORMALIZED" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Normalize bare /cook planning phrasing into shipped implementation missions.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-
-assert proposal['mission'] == mission, 'analyst-derived startup should normalize the same placeholder planning mission to the same implementation mission'
-assert state['mission_anchor'] == mission, 'analyst-derived startup should converge on the same canonical mission anchor as structured fallback'
-assert proposal['analysis']['taskType'] == 'completion-workflow', 'analyst-derived normalization should preserve task_type hints'
-assert proposal['analysis']['evaluationProfile'] == 'completion-rubric-v1', 'analyst-derived normalization should preserve evaluation_profile hints'
-PY
-
-rm -rf .agent
-
-# No workflow yet: planning-artifact-only context should fail closed even when the discussion is
-# clearly structured, because bare /cook now expects execution-ready repo changes.
-SESSION_ZERO_PLANNING_ONLY="$TMPDIR/session-zero-planning-only.jsonl"
-DISCUSSION_ZERO_PLANNING_ONLY=$'Mission: 開始實作這個方案\nScope:\n- Draft the migration plan for the /cook mission-normalization rollout.\nConstraints:\n- Docs only; do not implement runtime changes.\nAcceptance:\n- Produce the proposal text for review.'
-DISCUSSION_SNAPSHOT_ZERO_PLANNING_ONLY="$TMPDIR/context-proposal-planning-only.json"
-write_session "$SESSION_ZERO_PLANNING_ONLY" "$ROOT" "$DISCUSSION_ZERO_PLANNING_ONLY"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_PLANNING_ONLY" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_PLANNING_ONLY" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-planning-only.out" 2>"$TMPDIR/pi-completion-context-proposal-planning-only.err"
-
-python3 - "$TMPDIR/pi-completion-context-proposal-planning-only.out" "$TMPDIR/pi-completion-context-proposal-planning-only.err" "$DISCUSSION_SNAPSHOT_ZERO_PLANNING_ONLY" <<'PY'
+python3 - "$TMPDIR/pi-completion-context-proposal-invalid-handoff.out" "$TMPDIR/pi-completion-context-proposal-invalid-handoff.err" "$INVALID_SNAPSHOT_ZERO" <<'PY'
 import sys
 from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
-assert not Path('.agent').exists(), 'planning-only startup should fail closed without writing canonical state'
-assert not snapshot.exists(), 'planning-only startup should not emit a proposal snapshot when bare /cook fails closed'
-assert '/cook failed closed' in output, 'planning-only startup should explain the fail-closed startup outcome'
-assert 'Mission/Scope/Constraints/Acceptance' in output, 'planning-only startup should still explain the structured discussion requirement'
-assert 'concrete repo changes' in output, 'planning-only startup should explain that bare /cook now expects execution-ready repo changes'
+assert not Path('.agent').exists(), 'invalid assistant handoff should fail closed without writing canonical state'
+assert not snapshot.exists(), 'invalid assistant handoff should not emit a startup proposal snapshot'
+assert 'fresh valid explicit primary-agent handoff' in output, 'invalid assistant handoff should still explain the explicit-handoff-only startup contract'
 PY
 
-# No workflow yet: docs-only tracked deliverables such as README/CHANGELOG updates should
-# normalize placeholder planning missions into concrete repo-change missions.
-SESSION_ZERO_SUPPORT_DOCS_ONLY="$TMPDIR/session-zero-support-docs-only.jsonl"
-DISCUSSION_ZERO_SUPPORT_DOCS_ONLY=$'Mission: 開始實作這個方案\nScope:\n- Update README and CHANGELOG for the /cook mission-normalization behavior.\nConstraints:\n- Keep the approval-only Start/Cancel gate unchanged.\nAcceptance:\n- Add documentation for the operator-facing refocus flow.'
-DISCUSSION_SNAPSHOT_ZERO_SUPPORT_DOCS_ONLY="$TMPDIR/context-proposal-support-docs-only.json"
-write_session "$SESSION_ZERO_SUPPORT_DOCS_ONLY" "$ROOT" "$DISCUSSION_ZERO_SUPPORT_DOCS_ONLY"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_SUPPORT_DOCS_ONLY" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_SUPPORT_DOCS_ONLY" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-support-docs-only.out" 2>"$TMPDIR/pi-completion-context-proposal-support-docs-only.err"
-
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_SUPPORT_DOCS_ONLY" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Update README and CHANGELOG for the /cook mission-normalization behavior.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-
-assert proposal['mission'] == mission, 'docs-only startup should normalize the placeholder planning mission to the tracked-doc repo change'
-assert state['mission_anchor'] == mission, 'docs-only startup should write the normalized tracked-doc mission into canonical state'
-assert proposal['scope'][0] == mission, 'docs-only startup should derive the mission from the tracked-doc scope item'
-assert proposal['acceptance'] == ['Add documentation for the operator-facing refocus flow.'], 'docs-only startup should keep the documentation acceptance item'
-PY
-
-rm -rf .agent
-
-# No workflow yet: reviewer-reproduced docs-only phrasing with edit/document wording should
-# also normalize placeholder planning missions into concrete repo-change missions.
-SESSION_ZERO_EDIT_DOCUMENT_DOCS_ONLY="$TMPDIR/session-zero-edit-document-docs-only.jsonl"
-DISCUSSION_ZERO_EDIT_DOCUMENT_DOCS_ONLY=$'Mission: 開始實作這個方案\nScope:\n- Edit README to explain the /cook mission-normalization behavior.\nConstraints:\n- Keep the approval-only Start/Cancel gate unchanged.\nAcceptance:\n- Document the operator-facing refocus flow.'
-DISCUSSION_SNAPSHOT_ZERO_EDIT_DOCUMENT_DOCS_ONLY="$TMPDIR/context-proposal-edit-document-docs-only.json"
-write_session "$SESSION_ZERO_EDIT_DOCUMENT_DOCS_ONLY" "$ROOT" "$DISCUSSION_ZERO_EDIT_DOCUMENT_DOCS_ONLY"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_EDIT_DOCUMENT_DOCS_ONLY" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_EDIT_DOCUMENT_DOCS_ONLY" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-edit-document-docs-only.out" 2>"$TMPDIR/pi-completion-context-proposal-edit-document-docs-only.err"
-
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_EDIT_DOCUMENT_DOCS_ONLY" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Edit README to explain the /cook mission-normalization behavior.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-
-assert proposal['mission'] == mission, 'edit/document docs-only startup should normalize the placeholder planning mission to the tracked-doc repo change'
-assert state['mission_anchor'] == mission, 'edit/document docs-only startup should write the normalized tracked-doc mission into canonical state'
-assert proposal['scope'][0] == mission, 'edit/document docs-only startup should derive the mission from the tracked-doc scope item'
-assert proposal['acceptance'] == ['Document the operator-facing refocus flow.'], 'edit/document docs-only startup should keep the documentation acceptance item'
-PY
-
-rm -rf .agent
-
-# No workflow yet: acceptance-only docs deliverables using write phrasing should also
-# normalize placeholder planning missions into concrete repo-change missions.
-SESSION_ZERO_WRITE_DOCS_ONLY="$TMPDIR/session-zero-write-docs-only.jsonl"
-DISCUSSION_ZERO_WRITE_DOCS_ONLY=$'Mission: 開始實作這個方案\nScope:\n- README and CHANGELOG guidance for bare /cook.\nConstraints:\n- Keep the approval-only Start/Cancel gate unchanged.\nAcceptance:\n- Write README and CHANGELOG notes for the bare /cook fail-closed clarification path.'
-DISCUSSION_SNAPSHOT_ZERO_WRITE_DOCS_ONLY="$TMPDIR/context-proposal-write-docs-only.json"
-write_session "$SESSION_ZERO_WRITE_DOCS_ONLY" "$ROOT" "$DISCUSSION_ZERO_WRITE_DOCS_ONLY"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_WRITE_DOCS_ONLY" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_WRITE_DOCS_ONLY" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-write-docs-only.out" 2>"$TMPDIR/pi-completion-context-proposal-write-docs-only.err"
-
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_WRITE_DOCS_ONLY" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Write README and CHANGELOG notes for the bare /cook fail-closed clarification path.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-
-assert proposal['mission'] == mission, 'write docs-only startup should normalize the placeholder planning mission from acceptance-only tracked-doc work'
-assert state['mission_anchor'] == mission, 'write docs-only startup should write the acceptance-derived tracked-doc mission into canonical state'
-assert proposal['scope'] == ['README and CHANGELOG guidance for bare /cook.'], 'write docs-only startup should preserve the noun-only scope item while deriving the mission from acceptance'
-assert proposal['acceptance'] == [mission], 'write docs-only startup should keep the acceptance-derived docs deliverable intact'
-PY
-
-rm -rf .agent
-
-# No workflow yet: explicit `Docs only:` tracked-doc scope wording should still
-# normalize placeholder planning missions into concrete repo-change missions.
-SESSION_ZERO_EXPLICIT_DOCS_ONLY_SCOPE="$TMPDIR/session-zero-explicit-docs-only-scope.jsonl"
-DISCUSSION_ZERO_EXPLICIT_DOCS_ONLY_SCOPE=$'Mission: 開始實作這個方案\nScope:\n- Docs only: Update README and CHANGELOG for the /cook mission-normalization behavior.\nConstraints:\n- Keep the approval-only Start/Cancel gate unchanged.\nAcceptance:\n- Keep the operator-facing refocus flow guidance truthful.'
-DISCUSSION_SNAPSHOT_ZERO_EXPLICIT_DOCS_ONLY_SCOPE="$TMPDIR/context-proposal-explicit-docs-only-scope.json"
-write_session "$SESSION_ZERO_EXPLICIT_DOCS_ONLY_SCOPE" "$ROOT" "$DISCUSSION_ZERO_EXPLICIT_DOCS_ONLY_SCOPE"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_EXPLICIT_DOCS_ONLY_SCOPE" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_EXPLICIT_DOCS_ONLY_SCOPE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-explicit-docs-only-scope.out" 2>"$TMPDIR/pi-completion-context-proposal-explicit-docs-only-scope.err"
-
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_EXPLICIT_DOCS_ONLY_SCOPE" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Update README and CHANGELOG for the /cook mission-normalization behavior.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-
-assert proposal['mission'] == mission, 'explicit docs only scope should strip the docs-only qualifier while normalizing to the tracked-doc repo change'
-assert state['mission_anchor'] == mission, 'explicit docs only scope should write the stripped tracked-doc mission into canonical state'
-assert proposal['scope'] == ['Docs only: Update README and CHANGELOG for the /cook mission-normalization behavior.'], 'explicit docs only scope should preserve the original scope wording in the proposal body'
-assert proposal['acceptance'] == ['Keep the operator-facing refocus flow guidance truthful.'], 'explicit docs only scope should preserve the non-mission acceptance item'
-PY
-
-rm -rf .agent
-
-# No workflow yet: explicit `Documentation only:` tracked-doc acceptance wording should also
-# normalize placeholder planning missions into concrete repo-change missions.
-SESSION_ZERO_EXPLICIT_DOCUMENTATION_ONLY_ACCEPTANCE="$TMPDIR/session-zero-explicit-documentation-only-acceptance.jsonl"
-DISCUSSION_ZERO_EXPLICIT_DOCUMENTATION_ONLY_ACCEPTANCE=$'Mission: 開始實作這個方案\nScope:\n- README and CHANGELOG guidance for bare /cook.\nConstraints:\n- Keep the approval-only Start/Cancel gate unchanged.\nAcceptance:\n- Documentation only: Write README and CHANGELOG notes for the bare /cook fail-closed clarification path.'
-DISCUSSION_SNAPSHOT_ZERO_EXPLICIT_DOCUMENTATION_ONLY_ACCEPTANCE="$TMPDIR/context-proposal-explicit-documentation-only-acceptance.json"
-write_session "$SESSION_ZERO_EXPLICIT_DOCUMENTATION_ONLY_ACCEPTANCE" "$ROOT" "$DISCUSSION_ZERO_EXPLICIT_DOCUMENTATION_ONLY_ACCEPTANCE"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_EXPLICIT_DOCUMENTATION_ONLY_ACCEPTANCE" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_EXPLICIT_DOCUMENTATION_ONLY_ACCEPTANCE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-explicit-documentation-only-acceptance.out" 2>"$TMPDIR/pi-completion-context-proposal-explicit-documentation-only-acceptance.err"
-
-python3 - "$DISCUSSION_SNAPSHOT_ZERO_EXPLICIT_DOCUMENTATION_ONLY_ACCEPTANCE" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-mission = 'Write README and CHANGELOG notes for the bare /cook fail-closed clarification path.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-
-assert proposal['mission'] == mission, 'explicit documentation only acceptance should strip the docs-only qualifier while normalizing to the tracked-doc repo change'
-assert state['mission_anchor'] == mission, 'explicit documentation only acceptance should write the stripped tracked-doc mission into canonical state'
-assert proposal['scope'] == ['README and CHANGELOG guidance for bare /cook.'], 'explicit documentation only acceptance should preserve the noun-only scope item while deriving the mission from acceptance'
-assert proposal['acceptance'] == ['Documentation only: Write README and CHANGELOG notes for the bare /cook fail-closed clarification path.'], 'explicit documentation only acceptance should preserve the original acceptance wording in the proposal body'
-PY
-
-rm -rf .agent
-
-# No workflow yet: assistant-authored completed-plan summaries should fail closed instead of
-# seeding startup proposals when the user has not restated an execution-ready mission.
-SESSION_ZERO_ASSISTANT_SUMMARY="$TMPDIR/session-zero-assistant-summary.jsonl"
-DISCUSSION_SNAPSHOT_ZERO_ASSISTANT_SUMMARY="$TMPDIR/context-proposal-assistant-summary.json"
-python3 - "$SESSION_ZERO_ASSISTANT_SUMMARY" "$ROOT" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-session_path = Path(sys.argv[1])
-cwd = sys.argv[2]
-session_path.parent.mkdir(parents=True, exist_ok=True)
-entries = [
-    {
-        "type": "session",
-        "version": 3,
-        "id": "11111111-1111-4111-8111-111111111111",
-        "timestamp": "2026-01-01T00:00:00.000Z",
-        "cwd": cwd,
-    },
-    {
-        "type": "message",
-        "id": "b2c3d4e5",
-        "parentId": None,
-        "timestamp": "2026-01-01T00:00:02.000Z",
-        "message": {
-            "role": "assistant",
-            "content": "Mission: Ship the replacement workflow from the completed plan.\nScope:\n- Rewrite bare /cook around the finished plan summary.\nConstraints:\n- Keep the approval-only Start/Cancel gate unchanged.\nAcceptance:\n- Start immediately from this summary without more user clarification.",
-            "timestamp": 1767225602000,
-        },
-    },
-]
-with session_path.open('w', encoding='utf-8') as fh:
-    for entry in entries:
-        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-PY
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_ASSISTANT_SUMMARY" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_ASSISTANT_SUMMARY" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-assistant-summary.out" 2>"$TMPDIR/pi-completion-context-proposal-assistant-summary.err"
-
-python3 - "$TMPDIR/pi-completion-context-proposal-assistant-summary.out" "$TMPDIR/pi-completion-context-proposal-assistant-summary.err" "$DISCUSSION_SNAPSHOT_ZERO_ASSISTANT_SUMMARY" <<'PY'
-import sys
-from pathlib import Path
-
-output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
-snapshot = Path(sys.argv[3])
-assert not Path('.agent').exists(), 'assistant-only startup summary should fail closed without writing canonical state'
-assert not snapshot.exists(), 'assistant-only startup summary should not emit a proposal snapshot when bare /cook fails closed'
-assert '/cook failed closed' in output, 'assistant-only startup summary should explain the fail-closed startup outcome'
-assert 'concrete repo changes' in output, 'assistant-only startup summary should explain that bare /cook expects execution-ready repo changes from main-chat discussion'
-PY
-
-rm -rf .agent
-
-# No workflow yet: analyst-derived generic planning missions should still fail closed when discussion
-# never provides a clear implementation anchor, instead of promoting vague non-doc scope.
-SESSION_ZERO_ANALYST_AMBIGUOUS_GENERIC="$TMPDIR/session-zero-analyst-ambiguous-generic.jsonl"
-DISCUSSION_ZERO_ANALYST_AMBIGUOUS_GENERIC=$'We should revisit the completion widget while roles are active and make the outcome easier to follow without deciding the exact implementation yet.'
-ANALYST_OUTPUT_ZERO_AMBIGUOUS_GENERIC='{"mission":"開始實作這個方案","scope":["The completion widget during active roles."],"constraints":["Keep the approval-only Start/Cancel gate unchanged."],"acceptance":["Current behavior stays understandable."],"task_type":"completion-workflow","evaluation_profile":"completion-rubric-v1","confidence":0.74}'
-DISCUSSION_SNAPSHOT_ZERO_ANALYST_AMBIGUOUS_GENERIC="$TMPDIR/context-proposal-analyst-ambiguous-generic.json"
-write_session "$SESSION_ZERO_ANALYST_AMBIGUOUS_GENERIC" "$ROOT" "$DISCUSSION_ZERO_ANALYST_AMBIGUOUS_GENERIC"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$ANALYST_OUTPUT_ZERO_AMBIGUOUS_GENERIC" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO_ANALYST_AMBIGUOUS_GENERIC" \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ZERO_ANALYST_AMBIGUOUS_GENERIC" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-analyst-ambiguous-generic.out" 2>"$TMPDIR/pi-completion-context-proposal-analyst-ambiguous-generic.err"
-
-python3 - "$TMPDIR/pi-completion-context-proposal-analyst-ambiguous-generic.out" "$TMPDIR/pi-completion-context-proposal-analyst-ambiguous-generic.err" "$DISCUSSION_SNAPSHOT_ZERO_ANALYST_AMBIGUOUS_GENERIC" <<'PY'
-import sys
-from pathlib import Path
-
-output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
-snapshot = Path(sys.argv[3])
-assert not Path('.agent').exists(), 'analyst-derived ambiguous generic discussion should fail closed without writing canonical state'
-assert not snapshot.exists(), 'analyst-derived ambiguous generic discussion should not emit a proposal snapshot when bare /cook fails closed'
-assert '/cook failed closed' in output, 'analyst-derived ambiguous generic discussion should explain the fail-closed startup outcome'
-PY
-
-# No workflow yet: /cook with no goal should infer from recent discussion through analyst output.
+# No workflow yet: a fresh explicit primary-agent handoff should still bootstrap canonical startup state.
 SESSION_ONE="$TMPDIR/session-one.jsonl"
-DISCUSSION_ONE="$DISCUSSION_ZERO"
-ANALYST_OUTPUT_ONE='{"mission":"Remove the completion status line while keeping the completion widget.","scope":["Keep the non-running completion widget.","Suppress the widget while a completion role is active."],"constraints":["Do not reintroduce any other completion status surface."],"acceptance":["Update README to match the shipped behavior.","Keep observability regression coverage truthful."],"critique":["Keep critique separate from the mission anchor so startup analysis does not rewrite the workflow goal."],"risks":["Stale widget-removal discussion could broaden the startup plan if it gets treated as mission text."],"task_type":"completion-workflow","evaluation_profile":"completion-rubric-v1","possible_noise":["older widget restyle ideas"],"confidence":0.94}'
-DISCUSSION_SNAPSHOT_ONE="$TMPDIR/context-proposal-discussion-hints.json"
-write_session "$SESSION_ONE" "$ROOT" "$DISCUSSION_ONE"
+HANDOFF_SNAPSHOT_ONE="$TMPDIR/context-proposal-explicit-startup.json"
+HANDOFF_MESSAGES_ONE="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Remove the completion status line while keeping the completion widget.",
+    "scope": [
+        "Keep the non-running completion widget.",
+        "Suppress the widget while a completion role is active."
+    ],
+    "constraints": [
+        "Do not reintroduce any other completion status surface."
+    ],
+    "acceptance": [
+        "Update README to match the shipped behavior.",
+        "Keep observability regression coverage truthful."
+    ],
+    "risks": [
+        "Stale widget-removal discussion could broaden the startup plan if the handoff is ignored."
+    ],
+    "notes": [
+        "Keep the startup brief aligned with the explicit primary-agent plan."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Land the completion-status removal and keep the completion widget coverage truthful.",
+    "first_slice_non_goals": [
+        "Do not reintroduce any other completion status surface."
+    ],
+    "implementation_surfaces": [
+        "extensions/completion/index.ts",
+        "scripts/context-proposal-test.sh"
+    ],
+    "verification_commands": [
+        "npm run context-proposal-test"
+    ],
+    "why_this_slice_first": "The startup boundary regression is already bounded enough to implement safely.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The explicit startup brief is concrete and ready for repo changes."
+}
+messages = [
+    {"role": "user", "content": "Please think through the completion widget startup boundary and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "This task is now ready for /cook. Run /cook to confirm the startup brief.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$SESSION_ONE" "$ROOT" "$HANDOFF_MESSAGES_ONE"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$ANALYST_OUTPUT_ONE" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ONE" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_ONE" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_ONE" -e "$PKG_ROOT" -p "/cook" >/tmp/pi-completion-context-proposal-bootstrap.out 2>/tmp/pi-completion-context-proposal-bootstrap.err
+pi --session "$SESSION_ONE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-explicit-startup.out" 2>"$TMPDIR/pi-completion-context-proposal-explicit-startup.err"
 
-python3 - "$DISCUSSION_SNAPSHOT_ONE" <<'PY'
+python3 - "$HANDOFF_SNAPSHOT_ONE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -685,42 +312,39 @@ plan = json.loads(Path('.agent/plan.json').read_text())
 active = json.loads(Path('.agent/active-slice.json').read_text())
 proposal = json.loads(Path(sys.argv[1]).read_text())
 
-assert mission in mission_text, '.agent/mission.md did not record the analyst-derived mission anchor'
-assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after analyst-derived bootstrap'
-assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after analyst-derived bootstrap'
-assert state['mission_anchor'] == mission, 'state.json mission_anchor mismatch after analyst-derived bootstrap'
-assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after analyst-derived bootstrap'
-assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after analyst-derived bootstrap'
-assert plan['mission_anchor'] == mission, 'plan.json mission_anchor mismatch after analyst-derived bootstrap'
-assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after analyst-derived bootstrap'
-assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after analyst-derived bootstrap'
-assert active['mission_anchor'] == mission, 'active-slice.json mission_anchor mismatch after analyst-derived bootstrap'
-assert active['task_type'] == expected_task_type, 'active-slice.json task_type mismatch after analyst-derived bootstrap'
-assert active['evaluation_profile'] == expected_eval_profile, 'active-slice.json evaluation_profile mismatch after analyst-derived bootstrap'
+assert mission in mission_text, '.agent/mission.md did not record the explicit-handoff mission anchor'
+assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after explicit-handoff bootstrap'
+assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after explicit-handoff bootstrap'
+assert state['mission_anchor'] == mission, 'state.json mission_anchor mismatch after explicit-handoff bootstrap'
+assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after explicit-handoff bootstrap'
+assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after explicit-handoff bootstrap'
+assert plan['mission_anchor'] == mission, 'plan.json mission_anchor mismatch after explicit-handoff bootstrap'
+assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after explicit-handoff bootstrap'
+assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after explicit-handoff bootstrap'
+assert active['mission_anchor'] == mission, 'active-slice.json mission_anchor mismatch after explicit-handoff bootstrap'
+assert active['task_type'] == expected_task_type, 'active-slice.json task_type mismatch after explicit-handoff bootstrap'
+assert active['evaluation_profile'] == expected_eval_profile, 'active-slice.json evaluation_profile mismatch after explicit-handoff bootstrap'
 brief = state['advisory_startup_brief']
 assert brief['kind'] == 'startup_brief', 'state.json should preserve the confirmed startup brief as advisory intake'
+assert brief['source'] == 'primary_agent_handoff', 'explicit startup should record the handoff source in advisory intake'
 assert brief['mission'] == mission, 'advisory startup brief mission should match the accepted mission anchor'
 assert brief['scope'] == ['Keep the non-running completion widget.', 'Suppress the widget while a completion role is active.'], 'advisory startup brief should preserve scope items separately from canonical planning state'
 assert brief['constraints'] == ['Do not reintroduce any other completion status surface.'], 'advisory startup brief should preserve constraints separately from canonical planning state'
 assert brief['acceptance'] == ['Update README to match the shipped behavior.', 'Keep observability regression coverage truthful.'], 'advisory startup brief should preserve acceptance separately from canonical planning state'
-assert brief['risks'] == ['Stale widget-removal discussion could broaden the startup plan if it gets treated as mission text.'], 'advisory startup brief should preserve derived risks'
-assert brief['notes'] == ['Keep critique separate from the mission anchor so startup analysis does not rewrite the workflow goal.', 'Possible noise: older widget restyle ideas'], 'advisory startup brief should preserve operator notes and possible-noise cautions'
+assert brief['risks'] == ['Stale widget-removal discussion could broaden the startup plan if the handoff is ignored.'], 'advisory startup brief should preserve handoff risks'
+assert 'First slice goal: Land the completion-status removal and keep the completion widget coverage truthful.' in brief['notes'], 'advisory startup brief should preserve first_slice_goal in notes'
+assert 'Verification commands: npm run context-proposal-test' in brief['notes'], 'advisory startup brief should preserve verification_commands in notes'
 assert plan['candidate_slices'] == [], 'startup brief should remain advisory intake only until regrounder owns plan selection'
 assert active['status'] == 'idle', 'startup brief should not become the active-slice source before regrounder runs'
-assert proposal['mission'] == mission, 'discussion-only proposal snapshot should keep the inferred mission anchor'
-assert proposal['analysis']['taskType'] == expected_task_type, 'discussion-only proposal snapshot should expose task_type hints separately'
-assert proposal['analysis']['evaluationProfile'] == expected_eval_profile, 'discussion-only proposal snapshot should expose evaluation_profile hints separately'
-assert proposal['analysis']['critique'] == ['Keep critique separate from the mission anchor so startup analysis does not rewrite the workflow goal.'], 'discussion-only proposal snapshot should preserve critique hints'
-assert proposal['analysis']['risks'] == ['Stale widget-removal discussion could broaden the startup plan if it gets treated as mission text.'], 'discussion-only proposal snapshot should preserve risk hints'
-assert proposal['analysis']['possibleNoise'] == ['older widget restyle ideas'], 'discussion-only proposal snapshot should preserve possible_noise hints'
-assert 'Critique:' not in proposal['goalText'], 'goalText should keep critique separate from mission/scope/constraints/acceptance'
-assert 'Task type:' not in proposal['goalText'], 'goalText should keep task_type hints separate from the mission body'
-assert state['current_phase'] == 'reground', 'state.json current_phase should start at reground after analyst-derived bootstrap'
-assert state['next_mandatory_role'] == 'completion-regrounder', 'next_mandatory_role should start at completion-regrounder after analyst-derived bootstrap'
+assert proposal['mission'] == mission, 'explicit startup proposal snapshot should keep the handoff mission anchor'
+assert proposal['source'] == 'handoff_capsule', 'explicit startup proposal snapshot should expose the handoff capsule source'
+assert proposal['analysis']['taskType'] == expected_task_type, 'explicit startup proposal snapshot should expose task_type hints separately'
+assert proposal['analysis']['evaluationProfile'] == expected_eval_profile, 'explicit startup proposal snapshot should expose evaluation_profile hints separately'
+assert state['current_phase'] == 'reground', 'state.json current_phase should start at reground after explicit-handoff bootstrap'
+assert state['next_mandatory_role'] == 'completion-regrounder', 'next_mandatory_role should start at completion-regrounder after explicit-handoff bootstrap'
 assert state['continuation_reason'].startswith('User started workflow via /cook:'), 'initial startup should record the accepted startup routing in continuation_reason'
 assert 'task_type=completion-workflow' in state['continuation_reason'], 'initial startup should persist the selected task_type in continuation_reason'
 assert 'evaluation_profile=completion-rubric-v1' in state['continuation_reason'], 'initial startup should persist the selected evaluation_profile in continuation_reason'
-assert 'Keep critique separate from the mission anchor so startup analysis does not rewrite the workflow goal.' in state['continuation_reason'], 'initial startup should persist the accepted critique outcome in continuation_reason'
 PY
 
 # Active workflow: bare /cook with matching structured discussion should classify as continue
@@ -1067,8 +691,8 @@ assert not snapshot.exists(), 'verification-evidence overlap suppression should 
 assert '/cook failed closed' in output, 'verification-evidence overlap suppression should fail closed when the latest discussion only repeats verified work'
 PY
 
-# Completed workflow: bare /cook should normalize placeholder planning phrasing for the next workflow
-# round too, not only for fresh startup.
+# Completed workflow: bare /cook should fail closed for next-round discussion-only startup too,
+# even when the discussion is well structured.
 SESSION_TWO_NORMALIZED="$TMPDIR/session-two-normalized.jsonl"
 DISCUSSION_TWO_NORMALIZED=$'Mission: 開始實作這個方案\nScope:\n- Normalize bare /cook planning phrasing for the next workflow round.\n- Reset canonical state for the new implementation mission.\nConstraints:\n- Do not resume the completed workflow when the new round is clearly different.\nAcceptance:\n- Start a new round with the normalized mission anchor.'
 DISCUSSION_SNAPSHOT_TWO_NORMALIZED="$TMPDIR/context-proposal-next-round-normalized.json"
@@ -1080,34 +704,79 @@ PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_TWO_NORMALIZED" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$SESSION_TWO_NORMALIZED" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-next-round-normalized.out" 2>"$TMPDIR/pi-completion-context-proposal-next-round-normalized.err"
 
-python3 - "$DISCUSSION_SNAPSHOT_TWO_NORMALIZED" <<'PY'
+python3 - "$TMPDIR/pi-completion-context-proposal-next-round-normalized.out" "$TMPDIR/pi-completion-context-proposal-next-round-normalized.err" "$DISCUSSION_SNAPSHOT_TWO_NORMALIZED" "$CURRENT_DONE_MISSION" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-mission = 'Normalize bare /cook planning phrasing for the next workflow round.'
-proposal = json.loads(Path(sys.argv[1]).read_text())
+output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
+snapshot = Path(sys.argv[3])
+expected = sys.argv[4]
 state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
 
-assert proposal['mission'] == mission, 'done-workflow structured fallback should normalize the placeholder planning mission for the next round'
-assert state['mission_anchor'] == mission, 'done-workflow startup should rewrite canonical state to the normalized next-round mission'
-assert plan['mission_anchor'] == mission, 'done-workflow startup should rewrite plan.json to the normalized next-round mission'
-assert active['mission_anchor'] == mission, 'done-workflow startup should rewrite active-slice.json to the normalized next-round mission'
-assert state['continuation_reason'].startswith('User refocused workflow via /cook:'), 'done-workflow normalization should still route through refocus semantics for the next round'
+assert not snapshot.exists(), 'done-workflow discussion-only startup should not emit a proposal snapshot without a fresh explicit handoff'
+assert state['mission_anchor'] == expected, 'done-workflow discussion-only startup should keep the completed mission anchor unchanged'
+assert state['continuation_policy'] == 'done', 'done-workflow discussion-only startup should keep the workflow closed'
+assert 'fresh valid explicit primary-agent handoff' in output, 'done-workflow discussion-only startup should explain the explicit-handoff-only entry contract'
 PY
 
-# Completed workflow: bare /cook should use the same strict structured fallback for the next workflow round when analyst output is unavailable.
+# Completed workflow: a fresh explicit primary-agent handoff should still start the next round.
 mark_done
 
 SESSION_TWO="$TMPDIR/session-two.jsonl"
-DISCUSSION_TWO=$'Mission: Ship the next workflow round for richer context-derived /cook startup.\nScope:\n- Start a new workflow round from recent discussion after the previous one is done.\n- Keep using canonical .agent state after confirmation.\nConstraints:\n- Do not resume the completed workflow when the new round is clearly different.\nAcceptance:\n- Reset canonical state back to reground for the new mission.\n- Preserve the tracked completion control-plane files.'
-DISCUSSION_SNAPSHOT_TWO="$TMPDIR/context-proposal-next-round-structured-fallback.json"
-write_session "$SESSION_TWO" "$ROOT" "$DISCUSSION_TWO"
+DISCUSSION_SNAPSHOT_TWO="$TMPDIR/context-proposal-next-round-explicit-handoff.json"
+HANDOFF_MESSAGES_TWO="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Ship the next workflow round from a fresh explicit handoff.",
+    "scope": [
+        "Reset canonical state back to reground for the fresh mission.",
+        "Preserve the tracked completion control-plane files."
+    ],
+    "constraints": [
+        "Do not resume the completed workflow when the new round is clearly different."
+    ],
+    "acceptance": [
+        "Reset canonical state back to reground for the new mission.",
+        "Preserve the tracked completion control-plane files."
+    ],
+    "risks": [
+        "Done-state history could override the fresh mission if the explicit handoff is ignored."
+    ],
+    "notes": [
+        "This next round must come from the fresh explicit handoff rather than recent discussion."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Start the next round from the fresh explicit handoff and preserve canonical control-plane files.",
+    "first_slice_non_goals": [
+        "Do not resume the completed workflow when the new round is clearly different."
+    ],
+    "implementation_surfaces": [
+        "extensions/completion/driver.ts",
+        "scripts/context-proposal-test.sh"
+    ],
+    "verification_commands": [
+        "npm run context-proposal-test"
+    ],
+    "why_this_slice_first": "The fresh explicit handoff is the smallest truthful next-round startup after the previous workflow closed.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "A new implementation-ready mission was identified after the previous round closed."
+}
+messages = [
+    {"role": "user", "content": "The previous round is done, but there is a fresh next round ready for /cook."},
+    {"role": "assistant", "content": "The next round is ready for /cook. Run /cook to confirm this fresh implementation mission.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$SESSION_TWO" "$ROOT" "$HANDOFF_MESSAGES_TWO"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_TWO" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$SESSION_TWO" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-next-round.out" 2>"$TMPDIR/pi-completion-context-proposal-next-round.err"
@@ -1117,7 +786,7 @@ import json
 import sys
 from pathlib import Path
 
-mission = 'Ship the next workflow round for richer context-derived /cook startup.'
+mission = 'Ship the next workflow round from a fresh explicit handoff.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 mission_text = Path('.agent/mission.md').read_text()
@@ -1127,21 +796,22 @@ plan = json.loads(Path('.agent/plan.json').read_text())
 active = json.loads(Path('.agent/active-slice.json').read_text())
 proposal = json.loads(Path(sys.argv[1]).read_text())
 
-assert mission in mission_text, '.agent/mission.md did not update to the next-round context-derived mission anchor'
-assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after next-round startup'
-assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after next-round startup'
-assert state['mission_anchor'] == mission, 'state.json mission_anchor mismatch after starting the next workflow round'
-assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after starting the next workflow round'
-assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after starting the next workflow round'
-assert state['advisory_startup_brief']['mission'] == mission, 'next-round startup should preserve the confirmed startup brief as advisory intake'
-assert plan['mission_anchor'] == mission, 'plan.json mission_anchor mismatch after starting the next workflow round'
-assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after starting the next workflow round'
-assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after starting the next workflow round'
-assert active['mission_anchor'] == mission, 'active-slice.json mission_anchor mismatch after starting the next workflow round'
-assert active['task_type'] == expected_task_type, 'active-slice.json task_type mismatch after starting the next workflow round'
-assert active['evaluation_profile'] == expected_eval_profile, 'active-slice.json evaluation_profile mismatch after starting the next workflow round'
-assert proposal['mission'] == mission, 'next-round structured-fallback proposal snapshot should preserve the discussion mission anchor'
-assert proposal['source'] == 'session', 'next-round structured-fallback proposal snapshot should record the strict session fallback source'
+assert mission in mission_text, '.agent/mission.md did not update to the next-round explicit-handoff mission anchor'
+assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after next-round explicit handoff startup'
+assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after next-round explicit handoff startup'
+assert state['mission_anchor'] == mission, 'state.json mission_anchor mismatch after starting the next workflow round from explicit handoff'
+assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after starting the next workflow round from explicit handoff'
+assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after starting the next workflow round from explicit handoff'
+assert state['advisory_startup_brief']['mission'] == mission, 'next-round explicit handoff should preserve the confirmed startup brief as advisory intake'
+assert state['advisory_startup_brief']['source'] == 'primary_agent_handoff', 'next-round explicit handoff should preserve the handoff advisory source'
+assert plan['mission_anchor'] == mission, 'plan.json mission_anchor mismatch after starting the next workflow round from explicit handoff'
+assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after starting the next workflow round from explicit handoff'
+assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after starting the next workflow round from explicit handoff'
+assert active['mission_anchor'] == mission, 'active-slice.json mission_anchor mismatch after starting the next workflow round from explicit handoff'
+assert active['task_type'] == expected_task_type, 'active-slice.json task_type mismatch after starting the next workflow round from explicit handoff'
+assert active['evaluation_profile'] == expected_eval_profile, 'active-slice.json evaluation_profile mismatch after starting the next workflow round from explicit handoff'
+assert proposal['mission'] == mission, 'next-round explicit handoff proposal snapshot should preserve the handoff mission anchor'
+assert proposal['source'] == 'handoff_capsule', 'next-round explicit handoff proposal snapshot should record the handoff capsule source'
 assert state['current_phase'] == 'reground', 'state.json current_phase should reset to reground for the next workflow round'
 assert state['continuation_policy'] == 'continue', 'continuation_policy should reset to continue for the next workflow round'
 assert state['requires_reground'] is True, 'requires_reground should reset to true for the next workflow round'
@@ -1150,7 +820,6 @@ assert state['next_mandatory_role'] == 'completion-regrounder', 'next_mandatory_
 assert state['continuation_reason'].startswith('User refocused workflow via /cook:'), 'continuation_reason should record the next-round refocus'
 assert 'task_type=completion-workflow' in state['continuation_reason'], 'next-round refocus should persist the selected task_type'
 assert 'evaluation_profile=completion-rubric-v1' in state['continuation_reason'], 'next-round refocus should persist the selected evaluation_profile'
-assert 'critique outcome=accepted critique=none' in state['continuation_reason'], 'next-round refocus should persist that no critique notes were accepted'
 assert plan['plan_basis'] == 'user_refocus', 'plan_basis should reset to user_refocus for the next workflow round'
 assert active['status'] == 'idle', 'active-slice should reset to idle for the next workflow round'
 PY
@@ -1267,53 +936,34 @@ after = {path.name: path.read_text() for path in tracked}
 assert before == after, 'done /cook inline-args rejection should leave canonical files unchanged'
 PY
 
-# Completed workflow again: /cook with no goal should be able to use model-assisted
-# analysis of natural discussion when discussion-only startup depends on analyst output.
+# Completed workflow again: model-assisted discussion analysis alone should still fail closed
+# without a fresh valid explicit primary-agent handoff.
 mark_done
 
 SESSION_FIVE="$TMPDIR/session-five.jsonl"
 DISCUSSION_FIVE=$'I do not want to rewrite the parser. The safer path is to let /cook analyze the discussion first, keep the discussion-derived mission anchored once it is clear, and ignore stale scope that drifted in from earlier turns. We should still prove it with a regression test before writing canonical state.'
 ANALYST_OUTPUT_FIVE='{"mission":"Use a proposal analyst to summarize natural discussion before /cook writes canonical state.","scope":["Keep the discussion-derived mission anchored once it is clear.","Drop stale scope from earlier turns."],"constraints":["Do not rewrite the parser."],"acceptance":["Add a regression test."],"confidence":0.91,"possible_noise":["old unrelated scope"]}'
+DISCUSSION_SNAPSHOT_FIVE="$TMPDIR/context-proposal-analyst-restart-rejected.json"
 write_session "$SESSION_FIVE" "$ROOT" "$DISCUSSION_FIVE"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$ANALYST_OUTPUT_FIVE" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_FIVE" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi --session "$SESSION_FIVE" -e "$PKG_ROOT" -p "/cook" >/tmp/pi-completion-context-proposal-analyst.out 2>/tmp/pi-completion-context-proposal-analyst.err
+pi --session "$SESSION_FIVE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-analyst.out" 2>"$TMPDIR/pi-completion-context-proposal-analyst.err"
 
-python3 - <<'PY'
+python3 - "$TMPDIR/pi-completion-context-proposal-analyst.out" "$TMPDIR/pi-completion-context-proposal-analyst.err" "$DISCUSSION_SNAPSHOT_FIVE" <<'PY'
 import json
+import sys
 from pathlib import Path
 
-mission = 'Use a proposal analyst to summarize natural discussion before /cook writes canonical state.'
-expected_task_type = 'completion-workflow'
-expected_eval_profile = 'completion-rubric-v1'
-mission_text = Path('.agent/mission.md').read_text()
-profile = json.loads(Path('.agent/profile.json').read_text())
+output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
+snapshot = Path(sys.argv[3])
 state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
-continuation_reason = state['continuation_reason']
 
-assert mission in mission_text, '.agent/mission.md did not record the analyst-derived mission anchor'
-assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after analyst-derived restart'
-assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after analyst-derived restart'
-assert state['mission_anchor'] == mission, 'state.json mission_anchor mismatch after analyst-derived bootstrap'
-assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after analyst-derived bootstrap'
-assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after analyst-derived bootstrap'
-assert plan['mission_anchor'] == mission, 'plan.json mission_anchor mismatch after analyst-derived bootstrap'
-assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after analyst-derived bootstrap'
-assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after analyst-derived bootstrap'
-assert active['mission_anchor'] == mission, 'active-slice.json mission_anchor mismatch after analyst-derived bootstrap'
-assert active['task_type'] == expected_task_type, 'active-slice.json task_type mismatch after analyst-derived bootstrap'
-assert active['evaluation_profile'] == expected_eval_profile, 'active-slice.json evaluation_profile mismatch after analyst-derived bootstrap'
-assert state['current_phase'] == 'reground', 'current_phase should reset to reground after analyst-derived bootstrap'
-assert state['next_mandatory_role'] == 'completion-regrounder', 'next role should reset to completion-regrounder after analyst-derived bootstrap'
-assert continuation_reason.startswith('User refocused workflow via /cook:'), 'continuation_reason should record the analyst-derived restart'
-assert 'task_type=completion-workflow' in continuation_reason, 'analyst-derived restart should persist the selected task_type'
-assert 'evaluation_profile=completion-rubric-v1' in continuation_reason, 'analyst-derived restart should persist the selected evaluation_profile'
-assert 'critique outcome=accepted critique=none' in continuation_reason, 'analyst-derived restart should persist that no critique notes were accepted'
-assert 'Keep the discussion-derived mission anchored once it is clear.' in continuation_reason, 'analyst-derived scope should be preserved'
+assert not snapshot.exists(), 'done-workflow analyst-only restart should not emit a startup proposal snapshot'
+assert state['continuation_policy'] == 'done', 'done-workflow analyst-only restart should keep the workflow closed'
+assert 'fresh valid explicit primary-agent handoff' in output, 'done-workflow analyst-only restart should explain the explicit-handoff-only startup contract'
 PY
 
 # Custom confirmation UI: start should render proposal content separately from approval-only Start/Cancel actions.
@@ -1323,14 +973,41 @@ cd "$UI_ROOT_START"
 git init -q
 
 UI_SESSION_START="$TMPDIR/ui-session-start.jsonl"
-UI_DISCUSSION_START=$'Mission: Replace the crowded selector with a clearer action layout.\nScope:\n- Separate proposal text from actions.\nConstraints:\n- Preserve approval-only Start/Cancel behavior.\nAcceptance:\n- Add regression coverage.'
-UI_ANALYST_OUTPUT_START='{"mission":"Replace the crowded selector with a clearer action layout.","scope":["Separate proposal text from actions."],"constraints":["Preserve approval-only Start/Cancel behavior."],"acceptance":["Add regression coverage."],"critique":["Keep critique details separate from the approval-only proposal summary."],"risks":["Bundling critique into the action list would make the confirmation harder to scan."],"task_type":"completion-workflow","evaluation_profile":"completion-rubric-v1","possible_noise":["old selector wording"],"confidence":0.95}'
 UI_SNAPSHOT_START="$TMPDIR/context-proposal-ui-start.json"
-write_session "$UI_SESSION_START" "$UI_ROOT_START" "$UI_DISCUSSION_START"
+UI_MESSAGES_START="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Replace the crowded selector with a clearer action layout.",
+    "scope": ["Separate proposal text from actions."],
+    "constraints": ["Preserve approval-only Start/Cancel behavior."],
+    "acceptance": ["Add regression coverage."],
+    "risks": ["Bundling critique into the action list would make the confirmation harder to scan."],
+    "notes": ["Keep critique details separate from the approval-only proposal summary.", "Possible noise: old selector wording"],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Separate the proposal text from the approval-only Start/Cancel actions.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": ["extensions/completion/prompt-surfaces.ts"],
+    "verification_commands": ["npm run context-proposal-test"],
+    "why_this_slice_first": "The confirmation layout regression is small and directly testable.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The explicit handoff is concrete enough to exercise the startup confirmation UI."
+}
+messages = [
+    {"role": "user", "content": "Prepare the confirmation-layout work and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "The confirmation-layout work is ready for /cook.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$UI_SESSION_START" "$UI_ROOT_START" "$UI_MESSAGES_START"
 
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_UI_ACTION=start \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_UI_PATH="$UI_SNAPSHOT_START" \
-PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$UI_ANALYST_OUTPUT_START" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$UI_SESSION_START" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-ui-start.out" 2>"$TMPDIR/pi-completion-context-proposal-ui-start.err"
 
@@ -1352,7 +1029,7 @@ assert 'Mission\nReplace the crowded selector with a clearer action layout.' in 
 assert 'Keep critique details separate from the approval-only proposal summary.' not in snapshot['proposalBody'], 'critique notes should not be embedded in the startup-brief body'
 assert 'Critique\n- Keep critique details separate from the approval-only proposal summary.' in snapshot['critiqueBody'], 'notes section should render accepted critique notes separately'
 assert 'Risks\n- Bundling critique into the action list would make the confirmation harder to scan.' in snapshot['critiqueBody'], 'critique section should render risk notes separately'
-assert 'Possible noise\n- old selector wording' in snapshot['critiqueBody'], 'critique section should render possible-noise notes separately'
+assert '- Possible noise: old selector wording' in snapshot['critiqueBody'], 'critique section should preserve additional operator notes separately from the startup-brief body'
 assert '- task_type: completion-workflow' in snapshot['routingBody'], 'routing section should render the recommended task_type'
 assert '- evaluation_profile: completion-rubric-v1' in snapshot['routingBody'], 'routing section should render the recommended evaluation_profile'
 assert [action['id'] for action in snapshot['actions']] == ['start', 'cancel'], 'custom confirmation actions should stay Start/Cancel only'
@@ -1375,14 +1052,41 @@ cd "$UI_ROOT_CANCEL"
 git init -q
 
 UI_SESSION_CANCEL="$TMPDIR/ui-session-cancel.jsonl"
-UI_DISCUSSION_CANCEL=$'Mission: Cancel from the custom confirmation UI without writing state.\nScope:\n- Show the proposal separately from the approval-only actions.\nConstraints:\n- Keep cancellation side-effect free.\nAcceptance:\n- Leave .agent absent after cancel.'
-UI_ANALYST_OUTPUT_CANCEL='{"mission":"Cancel from the custom confirmation UI without writing state.","scope":["Show the proposal separately from the approval-only actions."],"constraints":["Keep cancellation side-effect free."],"acceptance":["Leave .agent absent after cancel."],"confidence":0.92}'
 UI_SNAPSHOT_CANCEL="$TMPDIR/context-proposal-ui-cancel.json"
-write_session "$UI_SESSION_CANCEL" "$UI_ROOT_CANCEL" "$UI_DISCUSSION_CANCEL"
+UI_MESSAGES_CANCEL="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Cancel from the custom confirmation UI without writing state.",
+    "scope": ["Show the proposal separately from the approval-only actions."],
+    "constraints": ["Keep cancellation side-effect free."],
+    "acceptance": ["Add regression coverage proving cancel leaves .agent absent."],
+    "risks": [],
+    "notes": [],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Exercise the cancel path without writing canonical state.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": ["extensions/completion/prompt-surfaces.ts"],
+    "verification_commands": ["npm run context-proposal-test"],
+    "why_this_slice_first": "The cancel path is a direct regression around the startup confirmation UI.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The explicit handoff is concrete enough to exercise the cancel confirmation UI."
+}
+messages = [
+    {"role": "user", "content": "Prepare the cancel-path confirmation work and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "The cancel-path confirmation work is ready for /cook.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$UI_SESSION_CANCEL" "$UI_ROOT_CANCEL" "$UI_MESSAGES_CANCEL"
 
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_UI_ACTION=cancel \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_UI_PATH="$UI_SNAPSHOT_CANCEL" \
-PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$UI_ANALYST_OUTPUT_CANCEL" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$UI_SESSION_CANCEL" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-ui-cancel.out" 2>"$TMPDIR/pi-completion-context-proposal-ui-cancel.err"
 
@@ -1644,10 +1348,35 @@ cd "$HANDOFF_ROOT_DONE"
 git init -q
 
 DONE_SEED_SESSION="$TMPDIR/handoff-done-seed-session.jsonl"
-DONE_SEED_DISCUSSION=$'Mission: Seed a finished workflow before testing fresh handoff priority.\nScope:\n- Create canonical workflow state.\nConstraints:\n- Keep the seed minimal.\nAcceptance:\n- Mark the workflow done before the next test step.'
-write_session "$DONE_SEED_SESSION" "$HANDOFF_ROOT_DONE" "$DONE_SEED_DISCUSSION"
+DONE_SEED_MESSAGES="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Seed a finished workflow before testing fresh handoff priority.",
+    "scope": ["Create canonical workflow state."],
+    "constraints": ["Keep the seed minimal."],
+    "acceptance": ["Add regression coverage for marking the seeded workflow done before the next step."],
+    "risks": [],
+    "notes": [],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Bootstrap the done-workflow seed fixture from an explicit handoff.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": ["scripts/context-proposal-test.sh"],
+    "verification_commands": ["npm run context-proposal-test"],
+    "why_this_slice_first": "The done-workflow handoff test needs canonical state before it can be marked done."
+}
+messages = [
+    {"role": "user", "content": "Prepare the done-workflow seed fixture and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "The done-workflow seed fixture is ready for /cook.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$DONE_SEED_SESSION" "$HANDOFF_ROOT_DONE" "$DONE_SEED_MESSAGES"
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$DONE_SEED_SESSION" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-done-seed.out" 2>"$TMPDIR/pi-completion-handoff-done-seed.err"
 mark_done
@@ -1726,7 +1455,7 @@ assert 'First slice goal: Patch the callback edge case and cover it with a focus
 assert 'Verification commands: npm test -- redirect-edge.spec.ts' in state['advisory_startup_brief']['notes'], 'done-workflow handoff should preserve verification_commands in advisory notes'
 PY
 
-# Stale handoff: later discussion should invalidate the older handoff capsule and fall back to the newer discussion mission.
+# Stale handoff: later discussion should invalidate the older handoff capsule and fail closed instead of falling back to newer discussion.
 HANDOFF_ROOT_STALE="$TMPDIR/handoff-root-stale"
 mkdir -p "$HANDOFF_ROOT_STALE"
 cd "$HANDOFF_ROOT_STALE"
@@ -1771,18 +1500,16 @@ PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_STALE" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$HANDOFF_SESSION_STALE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-stale.out" 2>"$TMPDIR/pi-completion-handoff-stale.err"
 
-python3 - "$HANDOFF_SNAPSHOT_STALE" <<'PY'
-import json
+python3 - "$HANDOFF_SNAPSHOT_STALE" "$TMPDIR/pi-completion-handoff-stale.out" "$TMPDIR/pi-completion-handoff-stale.err" <<'PY'
 import sys
 from pathlib import Path
 
-snapshot = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
+snapshot = Path(sys.argv[1])
+output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
 
-assert snapshot['source'] == 'session', 'stale handoff should fall back to the newer user discussion proposal'
-assert snapshot['mission'] == 'Ship logout redirect consistency instead.', 'stale handoff fallback should prefer the newer discussion mission'
-assert state['mission_anchor'] == 'Ship logout redirect consistency instead.', 'stale handoff fallback should not keep the older handoff mission'
-assert state['advisory_startup_brief']['source'] == 'recent_discussion', 'stale handoff fallback should preserve that the accepted startup came from discussion'
+assert not snapshot.exists(), 'stale handoff should not emit a startup proposal snapshot'
+assert not Path('.agent').exists(), 'stale handoff should fail closed without writing canonical state'
+assert 'fresh valid explicit primary-agent handoff' in output, 'stale handoff should explain that a fresh valid explicit handoff is required'
 PY
 
 # Negative handoff rationale: a non-startable capsule must not become the startup mission.
