@@ -24,6 +24,18 @@ export type AdvisoryStartupBrief = {
 	evaluation_profile?: string;
 };
 
+export function buildCookHandoffBoundaryReminder(): string {
+	return [
+		"You are still in ordinary main chat before any explicit /cook workflow entry.",
+		"Use ordinary chat to clarify requirements, discuss tradeoffs, and propose implementation approaches.",
+		"/cook is the only explicit entrypoint into long-running completion workflow.",
+		"When you judge that the task has matured into completion-workflow scope — for example the user has clearly shifted from exploration into implementation intent, you have just produced a concrete plan or proposal whose next step would naturally be implementation, or the task spans multiple files, steps, or verification surfaces — stop short of long-running implementation and tell the user to run /cook.",
+		"At that handoff point, do not begin long-running product implementation in ordinary chat, do not edit tracked product files for that workflow-level task, and do not act as though /cook had already been invoked.",
+		"When handing off, explain that /cook will derive a startup brief from recent discussion and ask for confirmation before workflow start.",
+		"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook.",
+	].join(" ");
+}
+
 export function buildContextProposalGoalText(proposal: {
 	mission: string;
 	scope: string[];

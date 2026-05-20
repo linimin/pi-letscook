@@ -51,6 +51,7 @@ ROOT="$TMPDIR/repo"
 KICKOFF_PROMPT="$TMPDIR/kickoff-prompt.txt"
 RESUME_PROMPT="$TMPDIR/resume-prompt.txt"
 ORDINARY_SYSTEM_REMINDER="$TMPDIR/ordinary-system-reminder.txt"
+ORDINARY_HANDOFF_REMINDER="$TMPDIR/ordinary-handoff-reminder.txt"
 UNCLEAR_ROUTING_SNAPSHOT="$TMPDIR/active-unclear-routing.json"
 UNCLEAR_CHOOSER_SNAPSHOT="$TMPDIR/unexpected-existing-workflow-chooser.json"
 ORDINARY_AUTO_RESUME_PROMPT="$TMPDIR/ordinary-auto-resume-prompt.txt"
@@ -146,23 +147,29 @@ assert f'- task_type: {expected_task_type}' in kickoff, 'kickoff prompt missing 
 assert f'- evaluation_profile: {expected_eval_profile}' in kickoff, 'kickoff prompt missing canonical evaluation_profile'
 PY
 
-rm -f "$ORDINARY_SYSTEM_REMINDER" "$ORDINARY_AUTO_RESUME_PROMPT"
+rm -f "$ORDINARY_SYSTEM_REMINDER" "$ORDINARY_HANDOFF_REMINDER" "$ORDINARY_AUTO_RESUME_PROMPT"
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 PI_COMPLETION_TEST_SYSTEM_REMINDER_PATH="$ORDINARY_SYSTEM_REMINDER" \
+PI_COMPLETION_TEST_COOK_HANDOFF_REMINDER_PATH="$ORDINARY_HANDOFF_REMINDER" \
 PI_COMPLETION_TEST_AUTO_CONTINUE_ON_SESSION_START=1 \
 PI_COMPLETION_TEST_AUTO_CONTINUE_PROMPT_PATH="$ORDINARY_AUTO_RESUME_PROMPT" \
 pi -e "$PKG_ROOT" -p "Summarize the repo briefly." \
   >"$TMPDIR/pi-completion-smoke-ordinary.out" 2>"$TMPDIR/pi-completion-smoke-ordinary.err"
 
-python3 - "$TMPDIR/pi-completion-smoke-ordinary.out" "$TMPDIR/pi-completion-smoke-ordinary.err" "$ORDINARY_SYSTEM_REMINDER" "$ORDINARY_AUTO_RESUME_PROMPT" <<'PY'
+python3 - "$TMPDIR/pi-completion-smoke-ordinary.out" "$TMPDIR/pi-completion-smoke-ordinary.err" "$ORDINARY_SYSTEM_REMINDER" "$ORDINARY_HANDOFF_REMINDER" "$ORDINARY_AUTO_RESUME_PROMPT" <<'PY'
 import sys
 from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 reminder = Path(sys.argv[3])
-auto_resume = Path(sys.argv[4])
+handoff = Path(sys.argv[4])
+auto_resume = Path(sys.argv[5])
 
 assert not reminder.exists(), 'ordinary non-/cook turn should not inject completion reminder solely from canonical state'
+assert handoff.exists(), 'ordinary non-/cook turn should inject the /cook handoff boundary reminder'
+handoff_text = handoff.read_text()
+assert '/cook is the only explicit entrypoint into long-running completion workflow.' in handoff_text, 'ordinary handoff reminder should preserve the explicit /cook workflow boundary'
+assert 'stop short of long-running implementation and tell the user to run /cook.' in handoff_text, 'ordinary handoff reminder should require primary-agent handoff before implementation'
 assert not auto_resume.exists(), 'ordinary non-/cook turn should not queue auto-resume before /cook activation'
 assert 'Skipped completion workflow auto-resume prompt (test mode)' not in output, 'ordinary non-/cook turn should not attempt auto-resume'
 PY

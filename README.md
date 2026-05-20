@@ -62,10 +62,13 @@ If you pass inline arguments to `/cook`, it also fails closed and tells you to m
 
 Only explicit `/cook` enters the workflow. Ordinary prompts stay in the main chat and go straight to the primary agent.
 
+If a task has clearly matured into completion-workflow scope, the primary agent should hand you off to `/cook` instead of starting long-running implementation directly in ordinary chat.
+
 Important behavior:
 - `/cook` is the canonical workflow boundary and manual entry point
 - startup, refocus, and next-round routing stay confirm-first; nothing silently starts a workflow
 - explicit slash commands other than `/cook` continue normally in the main chat
+- ordinary main-chat discussion may clarify or propose, but mature long-running implementation should be handed off to `/cook`
 
 ## Typical examples
 

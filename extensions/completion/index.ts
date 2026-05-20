@@ -38,6 +38,7 @@ import {
 	buildContextProposalConfirmationLayout as buildExtractedContextProposalConfirmationLayout,
 	buildContextProposalConfirmationSelectItems,
 	buildContextProposalContinuationReason as buildExtractedContextProposalContinuationReason,
+	buildCookHandoffBoundaryReminder as buildExtractedCookHandoffBoundaryReminder,
 	buildEvaluationRoleContextLines as buildExtractedEvaluationRoleContextLines,
 	buildEvaluationRoleReminderText as buildExtractedEvaluationRoleReminderText,
 	buildResumeCapsule as buildExtractedResumeCapsule,
@@ -181,6 +182,10 @@ function completionTestSystemReminderPath(): string | undefined {
 	return asString(process.env.PI_COMPLETION_TEST_SYSTEM_REMINDER_PATH);
 }
 
+function completionTestCookHandoffReminderPath(): string | undefined {
+	return asString(process.env.PI_COMPLETION_TEST_COOK_HANDOFF_REMINDER_PATH);
+}
+
 function maybeWriteTestSnapshot(targetPath: string | undefined, content: string): void {
 	if (!targetPath) return;
 	try {
@@ -223,6 +228,19 @@ function isCompletionDriverPromptTurn(ctx: { sessionManager?: any }): boolean {
 
 function shouldInjectCompletionWorkflowContext(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
 	return hasCompletionRoutingActivation(snapshot) && isCompletionDriverPromptTurn(ctx);
+}
+
+function shouldInjectCookHandoffBoundary(event: { prompt?: string }, ctx: { sessionManager?: any }): boolean {
+	if (roleFromEnv()) return false;
+	if (isCompletionDriverPromptTurn(ctx)) return false;
+	const prompt = typeof event.prompt === "string" ? event.prompt.trim() : "";
+	if (!prompt) return false;
+	if (prompt.startsWith("/")) return false;
+	return true;
+}
+
+function buildCookHandoffBoundaryReminder(): string {
+	return buildExtractedCookHandoffBoundaryReminder();
 }
 
 function buildDoneWorkflowBoundaryReminder(snapshot: CompletionStateSnapshot): string {
@@ -926,7 +944,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	pi.on("before_agent_start", async (_event, ctx) => {
+	pi.on("before_agent_start", async (event, ctx) => {
 		const loaded = await loadCompletionDataForReminder(getCtxCwd(ctx));
 		const driverPromptTurn = isCompletionDriverPromptTurn(ctx);
 		if (loaded && driverPromptTurn) {
@@ -934,28 +952,35 @@ export default function completionExtension(pi: ExtensionAPI) {
 			const fingerprint = completionContinuationFingerprint(loaded.snapshot);
 			if (fingerprint) markQueuedDriverPromptInFlight(rootKey, fingerprint);
 		}
-		if (!loaded || !shouldInjectCompletionWorkflowContext(loaded.snapshot, ctx)) return;
-		const additions = isWorkflowDone(loaded.snapshot)
-			? [buildDoneWorkflowBoundaryReminder(loaded.snapshot)]
-			: [composeSystemReminder(loaded.snapshot, loaded.sliceHistory, loaded.stopHistory)];
-		if (!isWorkflowDone(loaded.snapshot)) {
-			const markerText = await readText(loaded.snapshot.files.compactionMarkerPath);
-			let marker: JsonRecord | undefined;
-			if (markerText) {
-				try {
-					const parsed = JSON.parse(markerText);
-					marker = isRecord(parsed) ? parsed : undefined;
-				} catch {
-					marker = undefined;
-				}
-			}
-			if (marker) additions.push(buildPostCompactionDriverInstructions(loaded.snapshot, marker));
-		}
-		maybeWriteTestSnapshot(completionTestSystemReminderPath(), additions.join("\n\n"));
 		const systemPrompt = getSystemPromptSafe(ctx);
 		if (!systemPrompt) return;
+		if (loaded && shouldInjectCompletionWorkflowContext(loaded.snapshot, ctx)) {
+			const additions = isWorkflowDone(loaded.snapshot)
+				? [buildDoneWorkflowBoundaryReminder(loaded.snapshot)]
+				: [composeSystemReminder(loaded.snapshot, loaded.sliceHistory, loaded.stopHistory)];
+			if (!isWorkflowDone(loaded.snapshot)) {
+				const markerText = await readText(loaded.snapshot.files.compactionMarkerPath);
+				let marker: JsonRecord | undefined;
+				if (markerText) {
+					try {
+						const parsed = JSON.parse(markerText);
+						marker = isRecord(parsed) ? parsed : undefined;
+					} catch {
+						marker = undefined;
+					}
+				}
+				if (marker) additions.push(buildPostCompactionDriverInstructions(loaded.snapshot, marker));
+			}
+			maybeWriteTestSnapshot(completionTestSystemReminderPath(), additions.join("\n\n"));
+			return {
+				systemPrompt: `${systemPrompt}\n\n${additions.join("\n\n")}`,
+			};
+		}
+		if (!shouldInjectCookHandoffBoundary(event, ctx)) return;
+		const handoffReminder = buildCookHandoffBoundaryReminder();
+		maybeWriteTestSnapshot(completionTestCookHandoffReminderPath(), handoffReminder);
 		return {
-			systemPrompt: `${systemPrompt}\n\n${additions.join("\n\n")}`,
+			systemPrompt: `${systemPrompt}\n\n${handoffReminder}`,
 		};
 	});
 

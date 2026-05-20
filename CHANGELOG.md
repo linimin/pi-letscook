@@ -6,6 +6,7 @@
 
 - made `/cook` derive a confirmable startup brief from recent discussion before any canonical workflow rewrite, then preserve the confirmed brief in canonical state as advisory intake for later re-grounding
 - removed inline `/cook` arguments from the shipped entry path again so explicit bare `/cook` is the only public command, and fail closed when recent discussion is insufficient or unreliable
+- added a pre-`/cook` ordinary-chat handoff boundary so the primary agent is instructed to stop at `/cook` once a task has matured into completion-workflow scope instead of starting long-running implementation directly in ordinary chat
 
 ## 0.1.54
 

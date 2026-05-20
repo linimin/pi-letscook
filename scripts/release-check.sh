@@ -17,6 +17,7 @@ checks = {
     "README.md": [
         "`/cook` is the explicit workflow boundary for starting, continuing, refocusing, or beginning the next round of long-running repo work.",
         "Only explicit `/cook` enters the workflow. Ordinary prompts stay in the main chat and go straight to the primary agent.",
+        "If a task has clearly matured into completion-workflow scope, the primary agent should hand you off to `/cook` instead of starting long-running implementation directly in ordinary chat.",
         "`/cook` is the canonical workflow boundary and manual entry point",
         "Discuss the concrete repo change in the main chat, then run `/cook`",
         "The confirmed startup brief is also preserved there as advisory intake for later re-grounding.",
@@ -24,10 +25,12 @@ checks = {
     "CHANGELOG.md": [
         "made `/cook` derive a confirmable startup brief from recent discussion before any canonical workflow rewrite, then preserve the confirmed brief in canonical state as advisory intake for later re-grounding",
         "removed inline `/cook` arguments from the shipped entry path again so explicit bare `/cook` is the only public command, and fail closed when recent discussion is insufficient or unreliable",
+        "added a pre-`/cook` ordinary-chat handoff boundary so the primary agent is instructed to stop at `/cook` once a task has matured into completion-workflow scope instead of starting long-running implementation directly in ordinary chat",
     ],
-    "extensions/completion/index.ts": [
-        'description: "/cook workflow: derive a startup brief from recent discussion, then start, continue, refocus, or start the next round from the explicit /cook command"',
-        '"/cook failed closed because recent discussion did not produce a clear execution-ready startup brief with Mission/Scope/Constraints/Acceptance for concrete repo changes. Clarify the concrete repo changes in the main chat and rerun /cook."',
+    "extensions/completion/prompt-surfaces.ts": [
+        '"/cook is the only explicit entrypoint into long-running completion workflow."',
+        '"When you judge that the task has matured into completion-workflow scope',
+        '"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook."',
     ],
 }
 
