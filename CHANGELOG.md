@@ -8,8 +8,8 @@
 
 - made explicit primary-agent `/cook` handoff the preferred startup-intake path by teaching ordinary-chat handoff turns to emit a structured `cook_handoff` capsule and letting `/cook` prefer that capsule over broad context re-inference when it is fresh, valid, and implementation-startable
 - tightened implementation-ready explicit handoffs so the structured capsule must already carry a bounded `first_slice_goal`, repo-change-oriented acceptance, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` before `/cook` will start workflow from it
-- kept the pre-`/cook` handoff capsule as advisory startup intake only, not canonical `.agent/**` workflow state, while still using context-derived startup as the fallback when no fresh implementation-startable capsule exists
-- kept context-derived startup as a fallback only, so stale, drifted, or non-startable handoff capsules still fail closed or fall back to recent discussion instead of silently rewriting canonical state
+- kept the pre-`/cook` handoff capsule as advisory startup intake only, not canonical `.agent/**` workflow state, while still using context-derived startup as the fallback only when no fresh explicit handoff is blocking startup
+- kept context-derived startup as a fallback only when there is no fresh explicit handoff blocking startup, so stale or invalidated capsules can still fall back to recent discussion while fresh non-startable handoffs fail closed instead of silently rewriting canonical state
 - made finished-workflow suppression stay a safety layer instead of a replacement mission when a fresh explicit `/cook` handoff exists, and blocked negative rejection/suppression text from becoming a Startable startup mission
 - removed inline `/cook` arguments from the shipped entry path again so explicit bare `/cook` is the only public command, and fail closed when recent discussion is insufficient or unreliable
 - added a pre-`/cook` ordinary-chat handoff boundary so the primary agent is instructed to stop at `/cook` once a task has matured into completion-workflow scope instead of starting long-running implementation directly in ordinary chat

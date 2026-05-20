@@ -51,7 +51,7 @@ Then run `/reload` in Pi.
 
 - preferably a fresh explicit primary-agent `/cook` handoff capsule from the immediately preceding ordinary-chat turn
 - for that handoff capsule to start workflow immediately, it must already be implementation-startable: a bounded `first_slice_goal`, repo-change-oriented acceptance, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first`
-- otherwise recent main-chat discussion about concrete repo changes
+- otherwise, when no fresh explicit handoff is blocking startup, recent main-chat discussion about concrete repo changes
 - enough detail to derive a startup brief with mission, scope, constraints or non-goals, acceptance, and notes or risks
 - README/CHANGELOG updates still count as concrete repo changes
 - assistant-produced summaries and plan/spec/design-doc/proposal-only artifacts still do not count unless they include the explicit structured `/cook` handoff capsule
@@ -89,13 +89,13 @@ I want to add login redirect handling and tests.
 
 ## What happens when you run `/cook`
 
-`/cook` first looks for a fresh explicit primary-agent handoff capsule. If one is valid and implementation-startable, `/cook` builds the startup brief from that handoff and only uses recent discussion as validation or supplemental notes. If no valid implementation-startable handoff exists, `/cook` falls back to deriving a startup brief from recent discussion before showing the existing approval-only Start/Cancel gate.
+`/cook` first looks for a fresh explicit primary-agent handoff capsule. If one is valid and implementation-startable, `/cook` builds the startup brief from that handoff and only uses recent discussion as validation or supplemental notes. `/cook` falls back to deriving a startup brief from recent discussion only when no fresh explicit handoff is blocking startup—for example, when there is no fresh capsule or only stale or invalidated capsules—before showing the existing approval-only Start/Cancel gate.
 
 | Repo state | What you'll see |
 |---|---|
-| No workflow yet | If a fresh explicit handoff capsule exists and is implementation-startable, a startup brief built from that handoff. Otherwise a startup brief built from recent main-chat discussion. You choose **Start** or **Cancel**. Weak, unreliable, stale, planning-only, or non-startable explicit-handoff intake fails closed. |
+| No workflow yet | If a fresh explicit handoff capsule exists and is implementation-startable, a startup brief built from that handoff. Otherwise, when no fresh explicit handoff is blocking startup, a startup brief built from recent main-chat discussion. You choose **Start** or **Cancel**. Weak, unreliable, stale, planning-only, or non-startable explicit-handoff intake fails closed. |
 | Active workflow exists | Usually a resume of the current workflow. If a fresh explicit handoff capsule or recent discussion clearly points to a different concrete repo change, `/cook` shows a chooser first and only rewrites canonical state after you confirm the new startup brief. Ambiguous intake stays conservative. |
-| Previous workflow is `done` | A fresh explicit handoff capsule can still start the next implementation round behind **Start** or **Cancel**. Without that, `/cook` falls back to recent discussion. Discussion that only restates already-finished work still fails closed. |
+| Previous workflow is `done` | A fresh explicit handoff capsule can still start the next implementation round behind **Start** or **Cancel**. Without a fresh explicit handoff blocking startup, `/cook` can fall back to recent discussion. Discussion that only restates already-finished work still fails closed. |
 
 ## Confirmation and fail-closed behavior
 

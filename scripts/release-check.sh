@@ -23,13 +23,14 @@ checks = {
         "for that handoff capsule to start workflow immediately, it must already be implementation-startable: a bounded `first_slice_goal`, repo-change-oriented acceptance, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first`",
         "The preferred capsule is still advisory startup intake, not canonical workflow state, and it only counts as implementation-ready when it already names the first bounded slice, repo-change-oriented acceptance, implementation surfaces, and verification commands.",
         "`/cook` first looks for a fresh explicit primary-agent handoff capsule. If one is valid and implementation-startable, `/cook` builds the startup brief from that handoff and only uses recent discussion as validation or supplemental notes.",
+        "`/cook` falls back to deriving a startup brief from recent discussion only when no fresh explicit handoff is blocking startup—for example, when there is no fresh capsule or only stale or invalidated capsules—before showing the existing approval-only Start/Cancel gate.",
         "The pre-`/cook` handoff capsule itself is not canonical workflow state. It is only startup intake for `/cook`.",
     ],
     "CHANGELOG.md": [
         "made explicit primary-agent `/cook` handoff the preferred startup-intake path by teaching ordinary-chat handoff turns to emit a structured `cook_handoff` capsule and letting `/cook` prefer that capsule over broad context re-inference when it is fresh, valid, and implementation-startable",
         "tightened implementation-ready explicit handoffs so the structured capsule must already carry a bounded `first_slice_goal`, repo-change-oriented acceptance, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` before `/cook` will start workflow from it",
-        "kept the pre-`/cook` handoff capsule as advisory startup intake only, not canonical `.agent/**` workflow state, while still using context-derived startup as the fallback when no fresh implementation-startable capsule exists",
-        "kept context-derived startup as a fallback only, so stale, drifted, or non-startable handoff capsules still fail closed or fall back to recent discussion instead of silently rewriting canonical state",
+        "kept the pre-`/cook` handoff capsule as advisory startup intake only, not canonical `.agent/**` workflow state, while still using context-derived startup as the fallback only when no fresh explicit handoff is blocking startup",
+        "kept context-derived startup as a fallback only when there is no fresh explicit handoff blocking startup, so stale or invalidated capsules can still fall back to recent discussion while fresh non-startable handoffs fail closed instead of silently rewriting canonical state",
         "made finished-workflow suppression stay a safety layer instead of a replacement mission when a fresh explicit `/cook` handoff exists, and blocked negative rejection/suppression text from becoming a Startable startup mission",
     ],
     "extensions/completion/prompt-surfaces.ts": [
