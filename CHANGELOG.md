@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.57
+
 ### Changed
 
 - made explicit primary-agent `/cook` handoff the preferred startup-intake path by teaching ordinary-chat handoff turns to emit a structured `cook_handoff` capsule and letting `/cook` prefer that capsule over broad context re-inference when it is fresh and valid
