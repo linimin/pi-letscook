@@ -59,7 +59,12 @@ export type CookHandoffCapsule = {
 	acceptance: string[];
 	risks: string[];
 	notes: string[];
-	handoff_kind: "implementation_workflow_ready";
+	handoff_kind: "implementation_workflow_handoff";
+	first_slice_goal: string;
+	first_slice_non_goals: string[];
+	implementation_surfaces: string[];
+	verification_commands: string[];
+	why_this_slice_first: string;
 	task_type?: string;
 	evaluation_profile?: string;
 	why_cook_now?: string;
@@ -1251,15 +1256,20 @@ function parseCookHandoffCapsulesFromText(
 		if (!localIsRecord(parsed)) continue;
 		if (deps.asString(parsed.kind) !== "cook_handoff") continue;
 		if (deps.asString(parsed.source) !== "primary_agent") continue;
-		if (deps.asString(parsed.handoff_kind) !== "implementation_workflow_ready") continue;
+		if (deps.asString(parsed.handoff_kind) !== "implementation_workflow_handoff") continue;
 		const mission = deps.asString(parsed.mission);
-		if (!mission) continue;
+		const firstSliceGoal = deps.asString(parsed.first_slice_goal ?? parsed.firstSliceGoal);
+		const whyThisSliceFirst = deps.asString(parsed.why_this_slice_first ?? parsed.whyThisSliceFirst);
+		if (!mission || !firstSliceGoal || !whyThisSliceFirst) continue;
 		const scope = deps.asStringArray(parsed.scope);
 		const constraints = deps.asStringArray(parsed.constraints);
 		const nonGoals = deps.asStringArray(parsed.non_goals ?? parsed.nonGoals);
 		const acceptance = deps.asStringArray(parsed.acceptance);
 		const risks = deps.asStringArray(parsed.risks);
 		const notes = deps.asStringArray(parsed.notes);
+		const firstSliceNonGoals = deps.asStringArray(parsed.first_slice_non_goals ?? parsed.firstSliceNonGoals);
+		const implementationSurfaces = deps.asStringArray(parsed.implementation_surfaces ?? parsed.implementationSurfaces);
+		const verificationCommands = deps.asStringArray(parsed.verification_commands ?? parsed.verificationCommands);
 		const capturedAt = deps.asString(parsed.captured_at) ?? (timestampMs ? new Date(timestampMs).toISOString() : undefined);
 		const sourceTurnId = deps.asString(parsed.source_turn_id) ?? messageId;
 		if (!capturedAt || !sourceTurnId) continue;
@@ -1275,7 +1285,12 @@ function parseCookHandoffCapsulesFromText(
 			acceptance,
 			risks,
 			notes,
-			handoff_kind: "implementation_workflow_ready",
+			handoff_kind: "implementation_workflow_handoff",
+			first_slice_goal: firstSliceGoal,
+			first_slice_non_goals: firstSliceNonGoals,
+			implementation_surfaces: implementationSurfaces,
+			verification_commands: verificationCommands,
+			why_this_slice_first: whyThisSliceFirst,
 			task_type: deps.asString(parsed.task_type),
 			evaluation_profile: deps.asString(parsed.evaluation_profile),
 			why_cook_now: deps.asString(parsed.why_cook_now),
@@ -1285,7 +1300,18 @@ function parseCookHandoffCapsulesFromText(
 }
 
 function buildCookHandoffBasisPreview(capsule: CookHandoffCapsule): string {
-	const parts = [capsule.mission, ...capsule.scope, ...capsule.constraints, ...capsule.non_goals, ...capsule.acceptance];
+	const parts = [
+		capsule.mission,
+		...capsule.scope,
+		...capsule.constraints,
+		...capsule.non_goals,
+		...capsule.acceptance,
+		`first_slice_goal: ${capsule.first_slice_goal}`,
+		...capsule.first_slice_non_goals.map((item) => `first_slice_non_goals: ${item}`),
+		...capsule.implementation_surfaces.map((item) => `implementation_surfaces: ${item}`),
+		...capsule.verification_commands.map((item) => `verification_commands: ${item}`),
+		`why_this_slice_first: ${capsule.why_this_slice_first}`,
+	];
 	if (capsule.why_cook_now) parts.push(`why_cook_now: ${capsule.why_cook_now}`);
 	return parts.join("\n").trim();
 }
@@ -1347,6 +1373,11 @@ function buildContextProposalFromCookHandoffCapsule(
 				evaluationProfile: capsule.evaluation_profile,
 				critique: [
 					...capsule.notes,
+					`First slice goal: ${capsule.first_slice_goal}`,
+					...(capsule.first_slice_non_goals.length > 0 ? [`First slice non-goals: ${capsule.first_slice_non_goals.join(" | ")}`] : []),
+					...(capsule.implementation_surfaces.length > 0 ? [`Implementation surfaces: ${capsule.implementation_surfaces.join(" | ")}`] : []),
+					...(capsule.verification_commands.length > 0 ? [`Verification commands: ${capsule.verification_commands.join(" | ")}`] : []),
+					`Why this slice first: ${capsule.why_this_slice_first}`,
 					...(capsule.why_cook_now ? [`Primary-agent /cook handoff rationale: ${capsule.why_cook_now}`] : []),
 				],
 				risks: capsule.risks,
@@ -1355,7 +1386,19 @@ function buildContextProposalFromCookHandoffCapsule(
 				suppressedCompletedTopics: [],
 				suppressedNegatedTopics: [],
 			},
-			[mission, goalText, capsule.mission, ...capsule.scope, ...constraints, ...capsule.acceptance],
+			[
+				mission,
+				goalText,
+				capsule.mission,
+				...capsule.scope,
+				...constraints,
+				...capsule.acceptance,
+				capsule.first_slice_goal,
+				...capsule.first_slice_non_goals,
+				...capsule.implementation_surfaces,
+				...capsule.verification_commands,
+				capsule.why_this_slice_first,
+			],
 		),
 		goalText,
 		basisPreview: buildCookHandoffBasisPreview(capsule),

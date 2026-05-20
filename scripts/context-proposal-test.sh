@@ -1433,7 +1433,19 @@ capsule = {
     "notes": [
         "Keep the startup brief aligned with the explicit primary-agent plan."
     ],
-    "handoff_kind": "implementation_workflow_ready",
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Land the redirect callback fix and its regression coverage.",
+    "first_slice_non_goals": [
+        "Do not refactor the broader auth flow."
+    ],
+    "implementation_surfaces": [
+        "src/auth/redirect.ts",
+        "tests/auth/redirect.spec.ts"
+    ],
+    "verification_commands": [
+        "npm test -- redirect.spec.ts"
+    ],
+    "why_this_slice_first": "The redirect callback bug is already bounded enough to start implementation safely.",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "The implementation plan is concrete and ready for repo changes."
@@ -1465,6 +1477,11 @@ assert snapshot['mission'] == 'Fix login redirect callback behavior.', 'explicit
 assert state['mission_anchor'] == 'Fix login redirect callback behavior.', 'explicit handoff startup should use the handoff mission as canonical mission_anchor'
 assert state['advisory_startup_brief']['source'] == 'primary_agent_handoff', 'explicit handoff startup should preserve the advisory intake source'
 assert state['advisory_startup_brief']['risks'] == ['Stale auth discussion could broaden the startup brief if the handoff is ignored.'], 'explicit handoff startup should preserve handoff risks'
+assert 'First slice goal: Land the redirect callback fix and its regression coverage.' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve first_slice_goal in advisory notes'
+assert 'First slice non-goals: Do not refactor the broader auth flow.' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve first_slice_non_goals in advisory notes'
+assert 'Implementation surfaces: src/auth/redirect.ts | tests/auth/redirect.spec.ts' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve implementation_surfaces in advisory notes'
+assert 'Verification commands: npm test -- redirect.spec.ts' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve verification_commands in advisory notes'
+assert 'Why this slice first: The redirect callback bug is already bounded enough to start implementation safely.' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve why_this_slice_first in advisory notes'
 assert 'Primary-agent /cook handoff rationale: The implementation plan is concrete and ready for repo changes.' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve why_cook_now as notes'
 PY
 
@@ -1509,7 +1526,19 @@ capsule = {
     "notes": [
         "This is a fresh implementation round, not a summary of the finished workflow."
     ],
-    "handoff_kind": "implementation_workflow_ready",
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Patch the callback edge case and cover it with a focused regression test.",
+    "first_slice_non_goals": [
+        "Do not turn done-state suppression into the startup mission."
+    ],
+    "implementation_surfaces": [
+        "src/auth/redirect.ts",
+        "tests/auth/redirect-edge.spec.ts"
+    ],
+    "verification_commands": [
+        "npm test -- redirect-edge.spec.ts"
+    ],
+    "why_this_slice_first": "The new callback edge case is the smallest fresh implementation slice after the prior round closed.",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "A new implementation-ready edge case was identified after the previous round closed."
@@ -1541,6 +1570,8 @@ assert snapshot['mission'] == 'Reopen the login redirect work for the callback e
 assert state['mission_anchor'] == 'Reopen the login redirect work for the callback edge case.', 'done-workflow handoff should override done-state suppression with the fresh mission'
 assert state['continuation_policy'] == 'continue', 'done-workflow handoff should reopen canonical workflow state for the new round'
 assert state['advisory_startup_brief']['source'] == 'primary_agent_handoff', 'done-workflow handoff should preserve the handoff advisory source'
+assert 'First slice goal: Patch the callback edge case and cover it with a focused regression test.' in state['advisory_startup_brief']['notes'], 'done-workflow handoff should preserve first_slice_goal in advisory notes'
+assert 'Verification commands: npm test -- redirect-edge.spec.ts' in state['advisory_startup_brief']['notes'], 'done-workflow handoff should preserve verification_commands in advisory notes'
 PY
 
 # Stale handoff: later discussion should invalidate the older handoff capsule and fall back to the newer discussion mission.
@@ -1564,7 +1595,12 @@ capsule = {
     "acceptance": ["Add the original callback regression test."],
     "risks": [],
     "notes": [],
-    "handoff_kind": "implementation_workflow_ready"
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Ship the original login callback follow-up.",
+    "first_slice_non_goals": ["Do not refactor the auth stack."],
+    "implementation_surfaces": ["src/auth/login-redirect.ts"],
+    "verification_commands": ["npm test -- login-redirect.spec.ts"],
+    "why_this_slice_first": "The original callback follow-up was the first bounded implementation slice before later discussion replaced it."
 }
 newer_discussion = "Mission: Ship logout redirect consistency instead.\nScope:\n- Update the logout redirect path.\nConstraints:\n- Leave the login callback flow unchanged.\nAcceptance:\n- Add a logout redirect regression test."
 messages = [
@@ -1618,7 +1654,12 @@ capsule = {
     "acceptance": ["Explain that the finished workflow should stay closed."],
     "risks": [],
     "notes": [],
-    "handoff_kind": "implementation_workflow_ready"
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Keep the finished workflow closed.",
+    "first_slice_non_goals": ["Do not start repo changes."],
+    "implementation_surfaces": ["docs/workflow-status.md"],
+    "verification_commands": ["npm test -- workflow-status"],
+    "why_this_slice_first": "This is the only bounded next step being proposed, even though the mission itself is invalid."
 }
 messages = [
     {"role": "user", "content": "Should we reopen the finished workflow?"},

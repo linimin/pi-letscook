@@ -31,8 +31,11 @@ export function buildCookHandoffBoundaryReminder(): string {
 		"/cook is the only explicit entrypoint into long-running completion workflow.",
 		"When you judge that the task has matured into completion-workflow scope — for example the user has clearly shifted from exploration into implementation intent, you have just produced a concrete plan or proposal whose next step would naturally be implementation, or the task spans multiple files, steps, or verification surfaces — stop short of long-running implementation and tell the user to run /cook.",
 		"At that handoff point, do not begin long-running product implementation in ordinary chat, do not edit tracked product files for that workflow-level task, and do not act as though /cook had already been invoked.",
+		"Distinguish a workflow-worthy handoff from an implementation-ready handoff: only emit the implementation-ready capsule when the first bounded implementation slice is concrete enough to start immediately.",
 		"When handing off, explain that /cook will first look for a fresh explicit primary-agent handoff capsule and otherwise fall back to recent discussion.",
-		"Also append one exact fenced block in the same assistant reply using ```cook_handoff ... ``` JSON with kind/source/handoff_kind plus mission, scope, constraints or non_goals, acceptance, risks, notes, captured_at, source_turn_id, and optional task_type/evaluation_profile/why_cook_now.",
+		"If the task is workflow-worthy but that first slice is still vague, tell the user to run /cook without emitting an implementation-ready capsule yet.",
+		"Otherwise append one exact fenced block in the same assistant reply using ```cook_handoff ... ``` JSON with kind/source/handoff_kind plus mission, scope, constraints or non_goals, acceptance, risks, notes, captured_at, source_turn_id, first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first, and optional task_type/evaluation_profile/why_cook_now.",
+		"Use handoff_kind implementation_workflow_handoff for that implementation-ready capsule.",
 		"The capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
 		"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook.",
 	].join(" ");

@@ -36,7 +36,8 @@ When the task is judged ready for completion workflow, the primary agent must:
 - not edit tracked product files in ordinary chat for that workflow-level task
 - tell the user to run `/cook`
 - explain that `/cook` will first look for a fresh explicit primary-agent handoff and otherwise fall back to recent discussion before asking for confirmation
-- append one exact structured `/cook` handoff capsule in the same assistant reply
+- distinguish a workflow-worthy handoff from an implementation-ready handoff
+- only append an implementation-ready `/cook` handoff capsule when the first bounded implementation slice is concrete enough to start immediately
 
 Required capsule format:
 
@@ -50,10 +51,16 @@ Required capsule format:
   "mission": "<startable implementation mission>",
   "scope": ["..."],
   "constraints": ["..."],
+  "non_goals": ["..."],
   "acceptance": ["..."],
   "risks": ["..."],
   "notes": ["..."],
-  "handoff_kind": "implementation_workflow_ready",
+  "handoff_kind": "implementation_workflow_handoff",
+  "first_slice_goal": "<bounded first slice goal>",
+  "first_slice_non_goals": ["..."],
+  "implementation_surfaces": ["path/or/surface"],
+  "verification_commands": ["npm test -- example"],
+  "why_this_slice_first": "<why this first slice should start the workflow>",
   "task_type": "completion-workflow",
   "evaluation_profile": "completion-rubric-v1",
   "why_cook_now": "<why the task is ready for /cook now>"
@@ -64,6 +71,7 @@ Required capsule format:
 Notes:
 
 - `constraints` may be replaced or supplemented by `non_goals` when clearer.
+- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are required only for implementation-ready handoffs; if the work is workflow-worthy but that first slice is still vague, tell the user to run `/cook` without emitting this implementation-ready capsule.
 - The mission must be positively startable implementation work; do not use rejection or suppression text as the mission.
 - The capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
 
