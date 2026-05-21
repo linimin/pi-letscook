@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- made ordinary chat implementation-first again so the primary agent may directly edit repo files without requiring `/cook` when workflow state is unnecessary
+- repositioned `/cook` as optional workflow mode for confirm-first startup, resumability, review/audit flow, and canonical `.agent/**` state rather than as a mandatory implementation boundary
+- updated ordinary-chat boundary docs, reminders, and release-parity checks so they no longer tell the agent to block repo edits pending explicit `/cook`
+
 ## 0.1.61
 
 ### Changed

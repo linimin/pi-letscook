@@ -942,7 +942,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: synthesize a startup brief when the user explicitly enters /cook, resume the current workflow from canonical state, or confirm a replacement mission from explicit /cook entry",
+			description: "/cook workflow: optionally enter tracked workflow mode, synthesize a startup brief from explicit /cook entry, resume the current workflow from canonical state, or confirm a replacement mission",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,

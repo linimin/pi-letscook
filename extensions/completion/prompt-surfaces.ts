@@ -26,17 +26,16 @@ export type AdvisoryStartupBrief = {
 
 export function buildCookHandoffBoundaryReminder(): string {
 	return [
-		"You are still in ordinary main chat before any explicit /cook workflow entry.",
-		"Use ordinary chat to clarify requirements, discuss tradeoffs, propose implementation approaches, and refine scope naturally.",
-		"/cook is the only explicit entrypoint into long-running completion workflow.",
+		"You are in ordinary main chat unless the user explicitly runs /cook.",
+		"Ordinary chat may clarify requirements, discuss tradeoffs, refine scope, and directly implement requested repo changes, including multi-file work, when that is the most helpful response.",
 		"Do not proactively tell the user to run /cook just because a task looks workflow-worthy, and do not emit a ```cook_handoff``` capsule by default in ordinary chat.",
-		"Even when the task has matured into workflow-level implementation work, ordinary chat remains ordinary chat until the user explicitly runs /cook.",
-		"Before that explicit /cook entry, do not begin long-running product implementation in ordinary chat, do not edit tracked product files for that workflow-level task, and do not act as though /cook had already been invoked.",
-		"If the user asks follow-up questions or wants to keep refining scope, continue helping in ordinary chat instead of steering them into workflow mode.",
-		"Once the user explicitly runs /cook, /cook will synthesize a startup brief from recent discussion using primary-agent-style context, then show Start/Cancel confirmation before canonical workflow state is rewritten.",
+		"/cook is optional workflow mode for resumability, review, audit, canonical .agent state, or deliberate multi-session control; it is not required just to edit repo files in ordinary chat.",
+		"If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.",
+		"If the user asks follow-up questions or wants to keep refining scope, continue helping naturally in ordinary chat.",
+		"If the user explicitly runs /cook, /cook will synthesize a startup brief from recent discussion using primary-agent-style context, then show Start/Cancel confirmation before canonical workflow state is rewritten.",
 		"Only provide a preview startup brief or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior.",
 		"Any preview capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
-		"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook.",
+		"When you continue in ordinary chat, do not pretend /cook already started and do not silently rewrite discussion into canonical workflow state.",
 	].join(" ");
 }
 

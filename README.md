@@ -1,8 +1,8 @@
 # @linimin/pi-letscook
 
-`/cook` turns main-chat discussion about concrete repo changes into a resumable repo workflow stored in repo-local `.agent/**` state.
+`/cook` is optional workflow mode for turning main-chat discussion about concrete repo changes into a resumable repo workflow stored in repo-local `.agent/**` state.
 
-`/cook` is the explicit workflow boundary for starting, continuing, refocusing, or beginning the next round of long-running repo work.
+You can still implement directly in ordinary chat when you do not need workflow state. Use `/cook` when you want confirm-first startup, resumability, review/audit flow, or canonical `.agent/**` control.
 
 ## Use it when
 
@@ -10,10 +10,12 @@
 - you want one mission tracked in repo state instead of chat memory
 - you want clear continue / refocus / next-round behavior
 - you want review, audit, and verification tied to the repo
+- you want a confirm-first workflow boundary before canonical state is written
 
 ## Skip it when
 
 - you only need a one-off answer
+- you want the agent to implement directly in ordinary chat
 - you are brainstorming
 - you are writing planning docs but are not ready to start concrete repo changes
 
@@ -30,8 +32,8 @@ Then run `/reload` in Pi.
 1. Install the package:
    `pi install npm:@linimin/pi-letscook`
 2. Run `/reload` in Pi.
-3. In the main chat, describe and refine the concrete repo change you want.
-4. When you want to enter workflow, run `/cook`.
+3. In the main chat, either implement directly with the agent or refine the concrete repo change you want.
+4. When you want workflow mode, run `/cook`.
 5. Review the synthesized startup brief and choose **Start** or **Cancel**.
 6. Later, run `/cook` again to resume from canonical state or confirm a synthesized replacement or next-round startup brief.
 
@@ -43,7 +45,8 @@ Then run `/reload` in Pi.
 
 | If you want to... | Do this |
 |---|---|
-| Start a long-running task | Discuss the concrete repo change in the main chat, then run `/cook` when you want workflow to begin |
+| Implement directly without workflow | Ask in ordinary chat and let the agent modify the repo directly |
+| Start a tracked workflow | Discuss the concrete repo change in the main chat, then run `/cook` when you want workflow to begin |
 | Continue the current workflow | Run `/cook` |
 | Refocus or start the next round | Discuss the new concrete repo change in the main chat, then run `/cook` when you want a new startup brief synthesized |
 
@@ -64,20 +67,20 @@ If you pass inline arguments to `/cook`, it also fails closed and tells you to m
 
 ## Workflow entry
 
-Only explicit `/cook` enters the workflow. Ordinary prompts stay in the main chat and go straight to the primary agent.
+Only explicit `/cook` enters workflow mode. Ordinary prompts stay in the main chat and go straight to the primary agent.
 
-If a task has clearly matured into completion-workflow scope, the primary agent should still avoid starting long-running implementation directly in ordinary chat.
+Ordinary chat can still directly implement repo changes. `/cook` is for the cases where you want workflow control rather than just implementation help.
 
-Ordinary chat remains advisory until you explicitly run `/cook`. At that point `/cook` synthesizes a startup brief from recent discussion using primary-agent-style context, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
+When you explicitly run `/cook`, it synthesizes a startup brief from recent discussion using primary-agent-style context, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
 
-Optional explicit `/cook` capsules may still be used as compatibility startup intake, but they are no longer the default path and are not required for new-workflow or next-round entry.
+Optional explicit `/cook` capsules may still be used as compatibility startup intake, but they are not required for new-workflow or next-round entry.
 
 Important behavior:
-- `/cook` is the canonical workflow boundary and manual entry point
-- startup and next-round entry stay confirm-first, but they now derive startup from explicit user `/cook` entry plus recent discussion when needed
+- `/cook` is an optional workflow boundary and manual entry point
+- startup and next-round entry stay confirm-first, deriving startup from explicit user `/cook` entry plus recent discussion when needed
 - active workflows resume from canonical `.agent/**` state unless `/cook` synthesizes or receives a concrete replacement mission
 - explicit slash commands other than `/cook` continue normally in the main chat
-- ordinary main-chat discussion may clarify or propose, but mature long-running implementation still must not start before explicit `/cook`
+- ordinary main-chat discussion may clarify, propose, or directly implement repo changes without entering workflow mode
 
 ## Typical examples
 
@@ -91,7 +94,7 @@ I want to add login redirect handling and tests.
 
 ## What happens when you run `/cook`
 
-`/cook` first checks for a fresh explicit primary-agent handoff capsule as a compatibility intake path. If none is present, `/cook` synthesizes a startup brief from recent discussion using primary-agent-style context. New-workflow entry and done-workflow next-round entry still fail closed when that synthesis is too weak or planning-only. When a workflow is already active and no concrete replacement mission is available, `/cook` resumes from canonical `.agent/**` state.
+`/cook` first checks for a fresh explicit primary-agent handoff capsule as a compatibility intake path. If none is present, `/cook` synthesizes a startup brief from recent discussion using primary-agent-style context. New-workflow entry and done-workflow next-round entry still fail closed when that synthesis is too weak or planning-only. When a workflow is already active and no concrete replacement mission is available, `/cook` resumes from canonical `.agent/**` state. None of this prevents ordinary-chat implementation when you choose not to enter workflow mode.
 
 | Repo state | What you'll see |
 |---|---|
