@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.66
+
+### Changed
+
+- blocked `completion_role` outside explicit `/cook` workflow-driver turns so ordinary chat can no longer silently dispatch completion subagents on its own
+- tightened ordinary-chat reminders and skill contracts to forbid loading `completion-protocol` before explicit `/cook`
+- expanded smoke and release-parity checks to keep the ordinary-chat vs `/cook` boundary enforced in shipped behavior
+
 ## 0.1.62
 
 ### Changed
