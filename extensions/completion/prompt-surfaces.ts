@@ -10,7 +10,7 @@ import type {
 
 export type AdvisoryStartupBrief = {
 	kind: "startup_brief";
-	source: "recent_discussion" | "primary_agent_handoff";
+	source: "recent_discussion" | "primary_agent_handoff" | "deferred_primary_agent_handoff";
 	confirmed: true;
 	captured_at: string;
 	goal_text: string;
@@ -27,19 +27,16 @@ export type AdvisoryStartupBrief = {
 export function buildCookHandoffBoundaryReminder(): string {
 	return [
 		"You are still in ordinary main chat before any explicit /cook workflow entry.",
-		"Use ordinary chat to clarify requirements, discuss tradeoffs, propose implementation approaches, and refine scope with the user.",
+		"Use ordinary chat to clarify requirements, discuss tradeoffs, propose implementation approaches, and refine scope naturally.",
 		"/cook is the only explicit entrypoint into long-running completion workflow.",
-		"When you judge that the task has matured into completion-workflow scope — for example the user has clearly shifted from exploration into implementation intent, you have just produced a concrete plan or proposal whose next step would naturally be implementation, or the task spans multiple files, steps, or verification surfaces — do not begin long-running product implementation in ordinary chat and do not edit tracked product files for that workflow-level task.",
-		"Instead, recommend /cook as the workflow boundary while keeping the conversation in ordinary chat until the user explicitly runs /cook.",
-		"If the user keeps asking follow-up questions or refining requirements before /cook, continue that ordinary-chat discussion normally instead of switching into a handoff-only refusal mode, but do not act as though /cook had already been invoked.",
-		"Distinguish a workflow-worthy handoff from an opt-in preview request: by default, do not emit a structured preview or cook_handoff capsule in ordinary chat once the task is concrete enough; recommend bare /cook instead.",
-		"If the task is workflow-worthy but the user still wants to refine scope before /cook, keep refining in ordinary chat without acting as though workflow already started.",
-		"When handing off, explain that bare /cook will synthesize a startup brief from recent ordinary-chat discussion for a new workflow or next round, while already-active workflows resume from canonical .agent state unless the user explicitly chooses a replacement path backed by a fresh valid explicit handoff.",
-		"If the user explicitly asks for a /cook preview or capsule before running /cook, you may append one exact fenced block in the same assistant reply using ```cook_handoff ... ``` JSON with kind/source/handoff_kind plus mission, scope, constraints or non_goals, acceptance, risks, notes, captured_at, source_turn_id, first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first, and optional task_type/evaluation_profile/why_cook_now.",
-		"Use handoff_kind implementation_workflow_handoff for that opt-in preview capsule.",
-		"If later ordinary-chat discussion materially changes the startup brief before /cook runs, update or replace the preview capsule in a later assistant reply instead of pretending the workflow already started.",
+		"Do not proactively tell the user to run /cook just because a task looks workflow-worthy, and do not emit a ```cook_handoff``` capsule by default in ordinary chat.",
+		"Even when the task has matured into workflow-level implementation work, ordinary chat remains ordinary chat until the user explicitly runs /cook.",
+		"Before that explicit /cook entry, do not begin long-running product implementation in ordinary chat, do not edit tracked product files for that workflow-level task, and do not act as though /cook had already been invoked.",
+		"If the user asks follow-up questions or wants to keep refining scope, continue helping in ordinary chat instead of steering them into workflow mode.",
+		"Once the user explicitly runs /cook, /cook will synthesize a startup brief from recent discussion using primary-agent-style context, then show Start/Cancel confirmation before canonical workflow state is rewritten.",
+		"Only provide a preview startup brief or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior.",
 		"Any preview capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
-		"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook or emitting an unsolicited preview capsule.",
+		"If the task is still ordinary Q&A, lightweight brainstorming, or a tiny one-off fix, continue normally without forcing /cook.",
 	].join(" ");
 }
 
@@ -97,7 +94,12 @@ export function buildAdvisoryStartupBrief(args: {
 }): AdvisoryStartupBrief {
 	return {
 		kind: "startup_brief",
-		source: args.proposal.source === "handoff_capsule" ? "primary_agent_handoff" : "recent_discussion",
+		source:
+			args.proposal.source === "handoff_capsule"
+				? "primary_agent_handoff"
+				: args.proposal.source === "deferred_primary_agent_handoff"
+					? "deferred_primary_agent_handoff"
+					: "recent_discussion",
 		confirmed: true,
 		captured_at: args.capturedAt ?? new Date().toISOString(),
 		goal_text: args.proposal.goalText,

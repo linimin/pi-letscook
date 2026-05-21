@@ -30,10 +30,10 @@ Then run `/reload` in Pi.
 1. Install the package:
    `pi install npm:@linimin/pi-letscook`
 2. Run `/reload` in Pi.
-3. In the main chat, describe the concrete repo change you want and let the primary agent help refine it until the first slice is ready for `/cook`.
-4. Run `/cook`.
-5. Review the startup brief and choose **Start** or **Cancel**.
-6. Later, run `/cook` again to resume from canonical state or confirm an explicit replacement or next-round handoff.
+3. In the main chat, describe and refine the concrete repo change you want.
+4. When you want to enter workflow, run `/cook`.
+5. Review the synthesized startup brief and choose **Start** or **Cancel**.
+6. Later, run `/cook` again to resume from canonical state or confirm a synthesized replacement or next-round startup brief.
 
 ```text
 /cook
@@ -43,22 +43,22 @@ Then run `/reload` in Pi.
 
 | If you want to... | Do this |
 |---|---|
-| Start a long-running task | Discuss the concrete repo change in the main chat, then run `/cook` once the recent discussion is specific enough for a startup brief. If you explicitly want a pre-`/cook` preview or capsule first, ask for one. |
+| Start a long-running task | Discuss the concrete repo change in the main chat, then run `/cook` when you want workflow to begin |
 | Continue the current workflow | Run `/cook` |
-| Refocus or start the next round | Discuss the new concrete repo change in the main chat, then run `/cook` to synthesize the next startup brief. Active-workflow replacement still stays explicit and confirm-first. |
+| Refocus or start the next round | Discuss the new concrete repo change in the main chat, then run `/cook` when you want a new startup brief synthesized |
 
 ## What `/cook` expects
 
-- recent ordinary-chat discussion concrete enough for bare `/cook` to synthesize a startup brief for a new workflow or the next round after a completed workflow
-- enough repo-change detail for that startup brief to stay implementation-oriented once you review it behind **Start** or **Cancel**
+- enough recent main-chat discussion for `/cook` to synthesize a concrete startup brief when you explicitly invoke it
+- a mission that is concrete enough to anchor bounded repo work rather than planning-only discussion
+- acceptance and verification intent that can support a truthful first workflow round
 - README/CHANGELOG updates still count as concrete repo changes
-- assistant-produced summaries and plan/spec/design-doc/proposal-only artifacts still do not become canonical workflow state by themselves
-- any pre-`/cook` preview or `cook_handoff` capsule only when you explicitly ask for it; that preview stays advisory startup intake, not canonical `.agent/**` state
-- active-workflow replacement still stays conservative: `/cook` resumes from canonical state unless a fresh explicit handoff proposes a different concrete repo change and you confirm that replacement
+- assistant-produced summaries and plan/spec/design-doc/proposal-only artifacts still do not count unless they can be turned into a concrete startup brief
+- optional explicit `cook_handoff` capsules may still be consumed as a compatibility intake path, but they are no longer required for new-workflow or next-round entry
 
-If recent discussion is too weak, ambiguous, stale, or planning-only for new-workflow or next-round entry, `/cook` fails closed, leaves canonical `.agent/**` state unchanged, and tells you to clarify the concrete repo change in the main chat before rerunning `/cook`.
+If `/cook` cannot derive a concrete startup brief, it fails closed, leaves canonical `.agent/**` state unchanged, and tells you to refine the mission, first slice, or verification intent in the main chat before rerunning `/cook`.
 
-If you explicitly asked for a preview capsule and it is still workflow-worthy rather than implementation-startable, `/cook` also fails closed instead of silently treating that preview as planning support or canonical workflow state.
+If a fresh explicit handoff exists but is still workflow-worthy rather than implementation-startable, `/cook` also fails closed instead of silently treating that capsule as planning support or canonical workflow state.
 
 If you pass inline arguments to `/cook`, it also fails closed and tells you to move that intent into the main chat before rerunning bare `/cook`.
 
@@ -66,41 +66,38 @@ If you pass inline arguments to `/cook`, it also fails closed and tells you to m
 
 Only explicit `/cook` enters the workflow. Ordinary prompts stay in the main chat and go straight to the primary agent.
 
-If a task has clearly matured into completion-workflow scope, the primary agent should recommend `/cook` instead of starting long-running implementation directly in ordinary chat.
+If a task has clearly matured into completion-workflow scope, the primary agent should still avoid starting long-running implementation directly in ordinary chat.
 
-Before you explicitly run `/cook`, the conversation can still stay in ordinary chat: the primary agent may keep answering follow-up questions and refining requirements rather than switching into a hard handoff-only refusal mode.
+Ordinary chat remains advisory until you explicitly run `/cook`. At that point `/cook` synthesizes a startup brief from recent discussion using primary-agent-style context, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
 
-If you explicitly ask for a pre-`/cook` preview or capsule, the primary agent may provide one, but that preview is opt-in only and stays non-canonical until you later run `/cook` and choose **Start**.
-
-Bare `/cook` is still the canonical workflow boundary: it synthesizes the startup brief from recent ordinary-chat discussion at `/cook` time, then waits for **Start** or **Cancel** before any canonical `.agent/**` write.
+Optional explicit `/cook` capsules may still be used as compatibility startup intake, but they are no longer the default path and are not required for new-workflow or next-round entry.
 
 Important behavior:
 - `/cook` is the canonical workflow boundary and manual entry point
-- startup and next-round entry stay confirm-first: bare `/cook` synthesizes the startup brief from recent discussion, then waits for **Start** or **Cancel**
-- active workflows resume from canonical `.agent/**` state unless a fresh valid explicit handoff proposes a replacement
-- any pre-`/cook` preview or capsule is explicit-request-only and non-canonical
+- startup and next-round entry stay confirm-first, but they now derive startup from explicit user `/cook` entry plus recent discussion when needed
+- active workflows resume from canonical `.agent/**` state unless `/cook` synthesizes or receives a concrete replacement mission
 - explicit slash commands other than `/cook` continue normally in the main chat
-- ordinary main-chat discussion may clarify or propose, but mature long-running implementation should be handed off to `/cook`
+- ordinary main-chat discussion may clarify or propose, but mature long-running implementation still must not start before explicit `/cook`
 
 ## Typical examples
 
-Start a new workflow from recent discussion:
+Start a new workflow from recent main-chat discussion:
 
 ```text
 I want to add login redirect handling and tests.
-# discuss scope until the startup brief is clear enough
+# discuss/refine in main chat
 /cook
 ```
 
 ## What happens when you run `/cook`
 
-When no workflow is active, bare `/cook` synthesizes a startup brief from recent ordinary-chat discussion and then waits for **Start** or **Cancel**. If recent discussion is too weak, ambiguous, stale, or planning-only, `/cook` fails closed instead of guessing. If you explicitly asked for a preview capsule first and that preview is fresh but still non-startable, `/cook` also fails closed instead of silently treating it as canonical state. When a workflow is already active and no fresh valid explicit replacement handoff is present, `/cook` resumes from canonical `.agent/**` state instead of deriving replacement startup from recent discussion.
+`/cook` first checks for a fresh explicit primary-agent handoff capsule as a compatibility intake path. If none is present, `/cook` synthesizes a startup brief from recent discussion using primary-agent-style context. New-workflow entry and done-workflow next-round entry still fail closed when that synthesis is too weak or planning-only. When a workflow is already active and no concrete replacement mission is available, `/cook` resumes from canonical `.agent/**` state.
 
 | Repo state | What you'll see |
 |---|---|
-| No workflow yet | `/cook` synthesizes a startup brief from recent discussion and shows **Start** / **Cancel**. If recent discussion is too weak, ambiguous, stale, or planning-only, `/cook` fails closed and leaves canonical state unchanged. An explicit-request preview capsule can inform that startup brief, but it is still non-canonical until you choose **Start**. |
-| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If a fresh explicit handoff capsule points to a different concrete repo change, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous intake stays conservative. |
-| Previous workflow is `done` | `/cook` synthesizes the next implementation round from recent discussion behind **Start** / **Cancel**. If that recent discussion is too weak or ambiguous, `/cook` fails closed and leaves the finished workflow state unchanged. |
+| No workflow yet | `/cook` synthesizes a startup brief from recent discussion and asks you to choose **Start** or **Cancel**. A fresh explicit handoff capsule may still be used if present. Weak, unreliable, stale, planning-only, or non-startable intake still fails closed. |
+| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If `/cook` finds a different concrete replacement mission from a compatibility capsule or deferred synthesis, it shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous intake stays conservative. |
+| Previous workflow is `done` | `/cook` can synthesize the next implementation round from recent discussion behind **Start** or **Cancel**. Weak or planning-only next-round intake still fails closed. |
 
 ## Confirmation and fail-closed behavior
 
@@ -108,10 +105,9 @@ When no workflow is active, bare `/cook` synthesizes a startup brief from recent
 
 - startup, next-round, and refocus proposals are approval-only
 - actions are **Start** and **Cancel**
-- **Cancel** is side-effect free: canonical workflow state stays unchanged, so you can discuss changes in the main chat and rerun `/cook`
+- **Cancel** is side-effect free: discuss changes in the main chat and rerun `/cook`
 - weak, ambiguous, stale, invalid, assistant-produced, or planning-only intake does not start a workflow
-- any pre-`/cook` preview or capsule is advisory only and never writes canonical workflow state by itself
-- when a fresh explicit handoff suggests replacing an active workflow, `/cook` shows a chooser before any canonical state rewrite
+- when a concrete replacement mission suggests replacing an active workflow, `/cook` shows a chooser before any canonical state rewrite
 
 When you accept startup or refocus, `/cook` persists the chosen workflow state in canonical `.agent/**` files before the re-ground round begins.
 
@@ -264,7 +260,7 @@ npm run rubric-contract-test
 npm run release-check
 ```
 
-`npm run release-check` is the broad packaged-release verifier. It begins with `bash .agent/verify_completion_control_plane.sh`, so missing or stale `.agent/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped mixed-model `/cook` public parity surfaces in `README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
+`npm run release-check` is the broad packaged-release verifier. It begins with `bash .agent/verify_completion_control_plane.sh`, so missing or stale `.agent/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped `/cook` public parity surfaces in `README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
 
 The direct package-root verifier commands above intentionally self-isolate the repo-local extension when they shell back into `pi`, so you should not need to wrap them with `pi --no-extensions` even if `@linimin/pi-letscook` is also installed globally on the same machine.
 

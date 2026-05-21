@@ -27,7 +27,7 @@ export type ContextProposalAlternate = {
 	analysis: ContextProposalAnalysis;
 	goalText: string;
 	basisPreview: string;
-	source: "session" | "analyst" | "handoff_capsule";
+	source: "session" | "analyst" | "handoff_capsule" | "deferred_primary_agent_handoff";
 };
 
 export type ContextProposal = ContextProposalAlternate & {
@@ -1246,6 +1246,7 @@ export function extractContextProposalFromStructuredSession(
 
 const COOK_HANDOFF_BLOCK_REGEX = /```cook_handoff\s*([\s\S]*?)```/giu;
 const COOK_HANDOFF_MAX_AGE_MS = 45 * 60 * 1000;
+const COOK_HANDOFF_MAX_LATER_NON_COMMAND_MESSAGES = 2;
 const COOK_HANDOFF_NEGATIVE_MISSION_REGEX =
 	/(?:\b(?:do not|don't|dont|not|never|avoid|skip|refuse|recognize that|suppress|ignore|block|prevent)\b|(?:不要|別|别|勿|禁止|避免|忽略|阻止))/iu;
 const COOK_HANDOFF_WORKFLOW_ONLY_ACCEPTANCE_REGEX =
@@ -1388,6 +1389,19 @@ function isStartableCookHandoffCapsule(
 	return cookHandoffStartabilityFailures(capsule, deps).length === 0;
 }
 
+function laterMessagesInvalidateCookHandoff(
+	laterMessages: RecentSessionMessage[],
+	deps: Pick<ProposalParseDeps, "stripCodeBlocks">,
+): boolean {
+	const laterNonCommandMessages = laterMessages.filter((entry) => !entry.isCommand);
+	if (laterNonCommandMessages.length > COOK_HANDOFF_MAX_LATER_NON_COMMAND_MESSAGES) return true;
+	return laterNonCommandMessages.some((entry) => {
+		if (entry.role === "summary") return false;
+		if (!hasRecentDiscussionImplementationIntent(entry.text, deps.stripCodeBlocks)) return false;
+		return true;
+	});
+}
+
 function cookHandoffIsFreshEnough(capsule: CookHandoffCapsule, laterMessages: RecentSessionMessage[]): boolean {
 	const capturedAtMs = Date.parse(capsule.captured_at);
 	if (!Number.isFinite(capturedAtMs)) return false;
@@ -1470,6 +1484,7 @@ export function assessLatestCookHandoffProposal(
 			const capsule = capsules[capsuleIndex];
 			const laterMessages = recentMessages.slice(0, index);
 			if (!cookHandoffIsFreshEnough(capsule, laterMessages)) continue;
+			if (laterMessagesInvalidateCookHandoff(laterMessages, deps)) continue;
 			const failures = cookHandoffStartabilityFailures(capsule, deps);
 			if (failures.length > 0) {
 				return {
@@ -1513,6 +1528,18 @@ export async function deriveCookContextProposalFromRecentDiscussion(
 		if (structured) return structured;
 	}
 	return undefined;
+}
+
+export function retagContextProposalSource(
+	proposal: ContextProposal | undefined,
+	source: ContextProposalAlternate["source"],
+): ContextProposal | undefined {
+	if (!proposal) return undefined;
+	return {
+		...proposal,
+		source,
+		alternateProposals: proposal.alternateProposals.map((alternate) => ({ ...alternate, source })),
+	};
 }
 
 export function resolveContextProposalConfirmationAction(

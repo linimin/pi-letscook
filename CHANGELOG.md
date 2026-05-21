@@ -2,17 +2,12 @@
 
 ## Unreleased
 
-## 0.1.60
-
-## 0.1.59
-
 ### Changed
 
-- relaxed the pre-`/cook` ordinary-chat boundary so the primary agent can keep discussing and refining requirements before explicit `/cook` instead of switching into a hard handoff-only refusal mode as soon as workflow-worthiness is detected
-- kept `/cook` as the only explicit workflow boundary, while moving default startup and done-workflow next-round synthesis to bare `/cook` from recent ordinary-chat discussion behind the existing **Start** / **Cancel** approval gate
-- kept pre-`/cook` previews or `cook_handoff` capsules opt-in only, non-canonical, and advisory until the user explicitly runs `/cook`; bare `/cook` no longer depends on a default prebuilt capsule for new-workflow startup
-- kept active workflows resuming from canonical `.agent/**` state unless a fresh explicit handoff proposes a replacement, so discussion-only context does not silently rewrite an in-progress workflow
-- updated public parity and packaged release verification so README/help/changelog/release-check all describe and gate the shipped mixed model truthfully, while still packaging the tracked `.agent` contract files
+- removed proactive primary-agent `/cook` prompting and default ordinary-chat `cook_handoff` emission so main chat stays advisory until the user explicitly runs `/cook`
+- changed bare `/cook` startup and done-workflow next-round entry to synthesize a deferred primary-agent startup brief from recent discussion instead of requiring a pre-authored explicit handoff capsule
+- kept active-workflow bare `/cook` resumable from canonical `.agent/**` state by default while allowing `/cook` to confirm a concrete replacement mission derived from explicit entry context
+- updated public parity and shipped package contents so the tracked `.agent` contract files are included in package tarballs and packaged smoke/release verification can scaffold canonical state truthfully
 
 ## 0.1.58
 

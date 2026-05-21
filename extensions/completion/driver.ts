@@ -38,7 +38,7 @@ type ContextProposalAlternate = {
 	analysis: ContextProposalAnalysis;
 	goalText: string;
 	basisPreview: string;
-	source: "session" | "analyst" | "handoff_capsule";
+	source: "session" | "analyst" | "handoff_capsule" | "deferred_primary_agent_handoff";
 };
 
 type ContextProposal = ContextProposalAlternate & {
@@ -60,9 +60,8 @@ type CookContextProposalResult = {
 	blockedFailureMessage?: string;
 };
 
-function buildCookStartupBriefRequiredMessage(deps: CompletionDriverDeps, prefix?: string): string {
-	const requirement =
-		"/cook failed closed because recent discussion did not produce a clear execution-ready startup brief with Mission/Scope/Constraints/Acceptance for concrete repo changes. Clarify the concrete repo changes in the main chat and rerun /cook.";
+function buildCookStartupDerivationFailureMessage(deps: CompletionDriverDeps, prefix?: string): string {
+	const requirement = deps.structuredDiscussionFailureDetail;
 	return prefix ? `${prefix} ${requirement}` : requirement;
 }
 
@@ -73,9 +72,10 @@ type ActiveWorkflowProposalAssessment = {
 	blockedFailureMessage?: string;
 	reason:
 		| "matching_mission"
-		| "missing_explicit_handoff"
-		| "fresh_explicit_handoff"
-		| "fresh_explicit_handoff_not_startable";
+		| "no_replacement_proposal"
+		| "explicit_handoff_replacement"
+		| "deferred_replacement"
+		| "replacement_not_startable";
 };
 
 type ExistingWorkflowChooserOptions = {
@@ -321,23 +321,23 @@ async function assessActiveWorkflowProposalRouting(
 ): Promise<ActiveWorkflowProposalAssessment> {
 	const currentMission = currentMissionAnchor(snapshot);
 	const projectName = path.basename(snapshot.files.root);
-	const explicitHandoff = await deps.deriveCookStartupProposal(ctx, projectName);
-	if (explicitHandoff.blockedFailureMessage) {
+	const derived = await deps.deriveCookContextProposal(ctx, projectName);
+	if (derived.blockedFailureMessage) {
 		const assessment: ActiveWorkflowProposalAssessment = {
 			action: "blocked",
 			currentMissionAnchor: currentMission,
-			blockedFailureMessage: explicitHandoff.blockedFailureMessage,
-			reason: "fresh_explicit_handoff_not_startable",
+			blockedFailureMessage: derived.blockedFailureMessage,
+			reason: "replacement_not_startable",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
 	}
-	const proposal = explicitHandoff.proposal;
+	const proposal = derived.proposal;
 	if (!proposal) {
 		const assessment: ActiveWorkflowProposalAssessment = {
 			action: "continue",
 			currentMissionAnchor: currentMission,
-			reason: "missing_explicit_handoff",
+			reason: "no_replacement_proposal",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
@@ -356,7 +356,7 @@ async function assessActiveWorkflowProposalRouting(
 		action: "refocus",
 		currentMissionAnchor: currentMission,
 		proposal,
-		reason: "fresh_explicit_handoff",
+		reason: proposal.source === "handoff_capsule" ? "explicit_handoff_replacement" : "deferred_replacement",
 	};
 	deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 	return assessment;
@@ -536,14 +536,14 @@ export async function runCookEntry(
 	if (!snapshot) {
 		const root = findRepoRoot(cwd) ?? cwd;
 		const projectName = path.basename(root);
-		const derived = await deps.deriveCookContextProposal(ctx, projectName);
+		const derived = await deps.deriveCookStartupProposal(ctx, projectName);
 		if (derived.blockedFailureMessage) {
 			deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
 			return;
 		}
 		const proposal = derived.proposal;
 		if (!proposal) {
-			deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps), "info");
+			deps.emitCommandText(ctx, buildCookStartupDerivationFailureMessage(deps), "info");
 			return;
 		}
 		const decision = await deps.confirmContextProposal(ctx, proposal, {
@@ -581,14 +581,14 @@ export async function runCookEntry(
 	if (!goal) {
 		if (workflowDone) {
 			const projectName = path.basename(snapshot.files.root);
-			const derived = await deps.deriveCookContextProposal(ctx, projectName);
+			const derived = await deps.deriveCookStartupProposal(ctx, projectName);
 			if (derived.blockedFailureMessage) {
 				deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
 				return;
 			}
 			const proposal = derived.proposal;
 			if (!proposal) {
-				deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps, "The previous completion workflow is already done."), "info");
+				deps.emitCommandText(ctx, buildCookStartupDerivationFailureMessage(deps, "The previous completion workflow is already done."), "info");
 				return;
 			}
 			const decision = await deps.confirmContextProposal(ctx, proposal, {
@@ -614,7 +614,7 @@ export async function runCookEntry(
 				ctx,
 				proposal.source === "handoff_capsule"
 					? `Started a new completion workflow round from explicit primary-agent handoff: ${decision.missionAnchor}`
-					: `Started a new completion workflow round from recent discussion: ${decision.missionAnchor}`,
+					: `Started a new completion workflow round from deferred primary-agent handoff: ${decision.missionAnchor}`,
 				"info",
 			);
 		} else {
@@ -627,20 +627,29 @@ export async function runCookEntry(
 				await resumeActiveWorkflowFromCanonicalState(pi, ctx, snapshot, deps);
 				return;
 			}
-			const explicitReplacement = assessment.reason === "fresh_explicit_handoff";
+			const explicitReplacement = assessment.reason === "explicit_handoff_replacement";
+			const deferredReplacement = assessment.reason === "deferred_replacement";
 			const decision = await confirmExistingWorkflowProposal(ctx, snapshot, assessment.proposal, deps, {
 				intro: explicitReplacement
 					? "A fresh explicit primary-agent handoff proposes replacing the current workflow. Choose how /cook should proceed:"
-					: "A replacement workflow is ready. Choose how /cook should proceed:",
+					: deferredReplacement
+						? "A deferred primary-agent handoff synthesized from your recent discussion proposes replacing the current workflow. Choose how /cook should proceed:"
+						: "A replacement workflow is ready. Choose how /cook should proceed:",
 				proposedMissionLabel: explicitReplacement
 					? "Proposed mission from explicit primary-agent handoff"
-					: "Proposed mission",
+					: deferredReplacement
+						? "Proposed mission from deferred primary-agent handoff"
+						: "Proposed mission",
 				refocusChoiceLabel: explicitReplacement
 					? "Start new workflow from explicit primary-agent handoff\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
-					: "Start new workflow\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state.",
+					: deferredReplacement
+						? "Start new workflow from deferred primary-agent handoff\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+						: "Start new workflow\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state.",
 				alternateChoiceLabel: explicitReplacement
 					? "Start alternate workflow from explicit primary-agent handoff\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
-					: undefined,
+					: deferredReplacement
+						? "Start alternate workflow from deferred primary-agent handoff\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+						: undefined,
 				comparison: "strict",
 			});
 			if (!decision) {
@@ -653,9 +662,11 @@ export async function runCookEntry(
 			}
 			const selectedProposal = decision.proposal;
 			const proposalDecision = await deps.confirmContextProposal(ctx, selectedProposal, {
-				title: assessment.reason === "fresh_explicit_handoff"
+				title: explicitReplacement
 					? "Start the replacement workflow from this explicit startup brief?"
-					: "Start the replacement workflow from this startup brief?",
+					: deferredReplacement
+						? "Start the replacement workflow from this deferred startup brief?"
+						: "Start the replacement workflow from this startup brief?",
 			});
 			if (!proposalDecision) {
 				deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled replacement workflow proposal", deps), "info");
@@ -675,9 +686,11 @@ export async function runCookEntry(
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
 			deps.emitCommandText(
 				ctx,
-				assessment.reason === "fresh_explicit_handoff"
+				explicitReplacement
 					? `Refocused completion mission from explicit primary-agent handoff to: ${proposalDecision.missionAnchor}`
-					: `Refocused completion mission to: ${proposalDecision.missionAnchor}`,
+					: deferredReplacement
+						? `Refocused completion mission from deferred primary-agent handoff to: ${proposalDecision.missionAnchor}`
+						: `Refocused completion mission to: ${proposalDecision.missionAnchor}`,
 				"info",
 			);
 		}
