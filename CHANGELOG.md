@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.61
+
 ### Changed
 
 - removed proactive primary-agent `/cook` prompting and default ordinary-chat `cook_handoff` emission so main chat stays advisory until the user explicitly runs `/cook`
