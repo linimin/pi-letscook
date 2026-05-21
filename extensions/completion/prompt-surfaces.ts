@@ -32,9 +32,9 @@ export function buildCookHandoffBoundaryReminder(): string {
 		"/cook is optional workflow mode for resumability, review, audit, canonical .agent state, or deliberate multi-session control; it is not required just to edit repo files in ordinary chat.",
 		"If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.",
 		"If the user asks follow-up questions or wants to keep refining scope, continue helping naturally in ordinary chat.",
-		"If the user explicitly asks to enter /cook workflow, generate one fresh ```cook_handoff``` capsule in ordinary chat from the primary-agent view of the task, then tell the user to run /cook.",
-		"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should consume the explicit primary-agent handoff instead.",
-		"Only provide a preview startup brief or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior or explicitly asks to enter /cook workflow.",
+		"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context, then show Start/Cancel confirmation without making the user rerun /cook.",
+		"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should use explicit primary-agent handoff data, whether it already exists or is synthesized in the same /cook entry.",
+		"Only provide a preview startup brief or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior.",
 		"Any preview capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
 		"When you continue in ordinary chat, do not pretend /cook already started and do not silently rewrite discussion into canonical workflow state.",
 	].join(" ");

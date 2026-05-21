@@ -182,6 +182,7 @@ function buildCookStructuredDiscussionFailureMessage(deps: CompletionDriverDeps,
 	return prefix ? `${prefix} ${deps.structuredDiscussionFailureDetail}` : deps.structuredDiscussionFailureDetail;
 }
 
+
 export function completionContinuationFingerprint(snapshot: CompletionStateSnapshot): string | undefined {
 	if (asString(snapshot.state?.continuation_policy) !== "continue") return undefined;
 	const nextMandatoryRole = asString(snapshot.state?.next_mandatory_role);
@@ -535,7 +536,7 @@ export async function runCookEntry(
 	if (!snapshot) {
 		const root = findRepoRoot(cwd) ?? cwd;
 		const projectName = path.basename(root);
-		const derived = await deps.deriveCookStartupProposal(ctx, projectName);
+		const derived = await deps.deriveCookContextProposal(ctx, projectName);
 		if (derived.blockedFailureMessage) {
 			deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
 			return;
@@ -580,7 +581,7 @@ export async function runCookEntry(
 	if (!goal) {
 		if (workflowDone) {
 			const projectName = path.basename(snapshot.files.root);
-			const derived = await deps.deriveCookStartupProposal(ctx, projectName);
+			const derived = await deps.deriveCookContextProposal(ctx, projectName);
 			if (derived.blockedFailureMessage) {
 				deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
 				return;

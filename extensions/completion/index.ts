@@ -17,7 +17,6 @@ import {
 	assessMissionAnchor,
 	collectRecentDiscussionEntries,
 	collectRecentSessionMessages,
-	deriveCookContextProposalFromRecentDiscussion,
 	assessLatestCookHandoffProposal,
 	finalizeContextProposalAnalysis,
 	isWeakMissionAnchor,
@@ -25,7 +24,6 @@ import {
 	missionAnchorsStrictlyEquivalent,
 	normalizeMissionAnchorText,
 	resolveContextProposalConfirmationAction,
-	retagContextProposalSource,
 	stripCodeBlocks,
 } from "./proposal";
 import type {
@@ -49,7 +47,7 @@ import {
 	maybeWriteContextProposalSnapshot,
 } from "./prompt-surfaces";
 import { toolCallBlockReason } from "./policy-guards";
-import { analyzeContextProposalWithAgent, runCompletionRole } from "./role-runner";
+import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";
 import {
 	applyLiveRoleEvent,
 	buildInlineRunningLines,
@@ -211,7 +209,7 @@ function maybeWriteTestSnapshot(targetPath: string | undefined, content: string)
 
 const COOK_MAIN_CHAT_RERUN_GUIDANCE = "Discuss changes in the main chat and rerun /cook.";
 const COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL =
-	"/cook failed closed because starting workflow now requires a fresh explicit primary-agent handoff. Ask the primary agent in the main chat to emit a fresh ```cook_handoff``` capsule, then rerun /cook.";
+	"/cook failed closed because the primary-agent handoff step could not prepare a concrete startup handoff from the current task context. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook.";
 
 function isWorkflowDone(snapshot: CompletionStateSnapshot | undefined): boolean {
 	return asString(snapshot?.state?.continuation_policy) === "done";
@@ -374,6 +372,10 @@ async function promptContextProposalConfirmationAction(
 	});
 }
 
+function stripCookHandoffBlocks(text: string): string {
+	return text.replace(COOK_HANDOFF_BLOCK_REGEX, " ").replace(/\s+/g, " ").trim();
+}
+
 async function deriveCookStartupProposal(
 	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
 	projectName: string,
@@ -399,7 +401,54 @@ async function deriveCookContextProposal(
 	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
 	projectName: string,
 ): Promise<CookContextProposalResult> {
-	return await deriveCookStartupProposal(ctx, projectName);
+	const explicit = await deriveCookStartupProposal(ctx, projectName);
+	if (explicit.proposal || explicit.blockedFailureMessage) return explicit;
+	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
+	const recentEntries = recentMessages
+		.filter((entry) => !entry.isCommand && (entry.role === "user" || entry.role === "assistant" || entry.role === "custom" || entry.role === "summary"))
+		.slice(0, 12)
+		.map((entry) => ({ role: entry.role, text: stripCookHandoffBlocks(entry.text) }))
+		.filter((entry) => entry.text.length > 0);
+	const snapshot = await loadCompletionSnapshot(getCtxCwd(ctx));
+	const workflowContextLines = snapshot
+		? [
+			`current mission anchor: ${asString(snapshot.state?.mission_anchor) ?? asString(snapshot.plan?.mission_anchor) ?? asString(snapshot.active?.mission_anchor) ?? "(none)"}`,
+			`continuation policy: ${asString(snapshot.state?.continuation_policy) ?? "(none)"}`,
+			`latest completed slice: ${asString(snapshot.state?.latest_completed_slice) ?? "(none)"}`,
+			`latest verified slice: ${asString(snapshot.state?.latest_verified_slice) ?? "(none)"}`,
+			`active slice goal: ${asString(snapshot.active?.goal) ?? "(none)"}`,
+			`active slice why_now: ${asString(snapshot.active?.why_now) ?? "(none)"}`,
+			`verification goal: ${asString(snapshot.verificationEvidence?.goal) ?? "(none)"}`,
+			`verification summary: ${asString(snapshot.verificationEvidence?.summary) ?? "(none)"}`,
+		]
+		: [];
+	const raw = await generateCookHandoffWithAgent({
+		ctx,
+		projectName,
+		recentEntries,
+		workflowContextLines,
+		liveRoleActivityByRoot,
+		completionStatusKey: COMPLETION_STATUS_KEY,
+		safeUiCall,
+		getCtxCwd,
+		getCtxHasUI,
+		getCtxUi,
+	});
+	if (!raw) return {};
+	const generated = assessLatestCookHandoffProposal([
+		{ role: "assistant", text: raw, messageId: "generated-primary-agent-handoff", timestampMs: Date.now(), isCommand: false },
+	], projectName, {
+		asString,
+		asStringArray,
+		assessMissionAnchor,
+		normalizeMissionAnchorText,
+		isWeakMissionAnchor,
+		missionAnchorsStrictlyEquivalent,
+		stripCodeBlocks,
+	});
+	if (generated.status === "startable") return { proposal: generated.proposal };
+	if (generated.status === "fresh_but_not_startable") return { blockedFailureMessage: generated.message };
+	return {};
 }
 
 async function confirmContextProposal(

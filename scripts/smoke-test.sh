@@ -270,7 +270,7 @@ assert 'directly implement requested repo changes, including multi-file work' in
 assert 'Do not proactively tell the user to run /cook' in handoff_text, 'ordinary handoff reminder should keep ordinary chat neutral until explicit /cook entry'
 assert '/cook is optional workflow mode' in handoff_text, 'ordinary handoff reminder should position /cook as optional workflow mode'
 assert 'If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.' in handoff_text, 'ordinary handoff reminder should avoid blocking implementation on /cook'
-assert 'generate one fresh ```cook_handoff``` capsule in ordinary chat from the primary-agent view of the task' in handoff_text, 'ordinary handoff reminder should require primary-agent authored handoff when the user explicitly chooses /cook'
+assert 'the extension should call a primary-agent handoff synthesis step from the current task context' in handoff_text, 'ordinary handoff reminder should describe same-entry primary-agent handoff synthesis for /cook'
 assert 'Do not expect /cook to infer or guess startup intent from recent discussion alone' in handoff_text, 'ordinary handoff reminder should forbid /cook-side guessing'
 assert 'do not silently rewrite discussion into canonical workflow state' in handoff_text, 'ordinary handoff reminder should preserve non-canonical ordinary-chat behavior'
 assert not auto_resume.exists(), 'ordinary non-/cook turn should not queue auto-resume before /cook activation'

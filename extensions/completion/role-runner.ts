@@ -67,6 +67,8 @@ export type AnalyzeContextProposalWithAgentParams = {
 	getCtxUi: <T extends { ui: any }>(ctx: T) => any | undefined;
 };
 
+export type GenerateCookHandoffWithAgentParams = AnalyzeContextProposalWithAgentParams;
+
 const AGENT_HOME = path.join(os.homedir(), ".pi", "agent");
 const EXTENSION_DIR = typeof __dirname === "string" ? __dirname : process.cwd();
 const PACKAGE_ROOT_CANDIDATE = path.resolve(EXTENSION_DIR, "..", "..");
@@ -93,6 +95,18 @@ const CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT = [
 ].join(" ");
 const STARTUP_ANALYST_ROLE = "cook-proposal-analyst";
 const ANALYST_HEARTBEAT_MS = 5_000;
+
+const PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT = [
+	"You are the primary agent preparing an explicit /cook handoff after the user already chose workflow mode.",
+	"Return either exactly one fenced ```cook_handoff JSON block or one brief plain sentence explaining why no concrete handoff can be prepared.",
+	"If you can prepare a handoff, the JSON must use kind cook_handoff, source primary_agent, and handoff_kind implementation_workflow_handoff.",
+	"When the user has clearly accepted a concrete assistant-proposed slice, carry that slice forward into the handoff instead of broadening or re-guessing the mission.",
+	"Do not make /cook infer or rediscover the mission from recent discussion later; author the handoff now from the primary-agent view of the task.",
+	"Do not emit markdown commentary before or after the capsule.",
+	"If the task is not concrete enough for implementation workflow, do not invent the slice.",
+	"A valid implementation-ready handoff must include mission, scope, constraints or non_goals, acceptance, risks, notes, first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, and why_this_slice_first.",
+].join(" ");
+const PRIMARY_AGENT_HANDOFF_ROLE = "cook-primary-agent-handoff";
 
 class StartupAnalystOverlay extends Container {
 	private readonly border: DynamicBorder;
@@ -307,6 +321,97 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 		}
 	}
 	return await run();
+}
+
+function serializeRecentConversationEntries(entries: RecentDiscussionEntry[]): string {
+	return entries
+		.slice()
+		.reverse()
+		.map((entry, index) => `[${index + 1}] ${entry.role.toUpperCase()}\n${entry.text}`)
+		.join("\n\n");
+}
+
+function buildPrimaryAgentHandoffPrompt(projectName: string, recentEntries: RecentDiscussionEntry[], workflowContextLines: string[] = []): string {
+	const lines = [
+		`Project: ${projectName}`,
+		"",
+		"Recent session transcript:",
+		serializeRecentConversationEntries(recentEntries),
+	];
+	if (workflowContextLines.length > 0) lines.push("", "Canonical workflow context:", ...workflowContextLines);
+	lines.push(
+		"",
+		"Task:",
+		"The user explicitly invoked /cook. Prepare the primary-agent handoff that /cook should consume immediately for Start/Cancel confirmation.",
+	);
+	return lines.join("\n");
+}
+
+async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithAgentParams): Promise<string | undefined> {
+	const { ctx, projectName, recentEntries } = params;
+	const modelArg = contextProposalAnalystModelArg(ctx.model);
+	if (!modelArg) return undefined;
+	const cwd = params.getCtxCwd(ctx);
+	const runCwd = findCompletionRoot(cwd) ?? findRepoRoot(cwd) ?? cwd;
+	const prompt = buildPrimaryAgentHandoffPrompt(projectName, recentEntries, params.workflowContextLines ?? []);
+	const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-primary-agent-handoff-", PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT);
+	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath, "--model", modelArg, prompt];
+	const invocation = getPiInvocation(args);
+	const liveActivity = createLiveRoleActivity(PRIMARY_AGENT_HANDOFF_ROLE);
+	liveActivity.progress = "Preparing primary-agent /cook handoff";
+	liveActivity.currentAction = "Authoring explicit startup handoff from current task context";
+	liveActivity.assistantSummary = liveActivity.progress;
+	try {
+		const output = await new Promise<string | undefined>((resolve) => {
+			const proc = spawn(invocation.command, invocation.args, {
+				cwd: runCwd,
+				env: process.env,
+				stdio: ["ignore", "pipe", "pipe"],
+				shell: false,
+			});
+			let buffer = "";
+			const messages: RoleMessage[] = [];
+			const processLine = (line: string) => {
+				if (!line.trim()) return;
+				try {
+					const event = JSON.parse(line) as JsonRecord;
+					applyLiveRoleEvent(liveActivity, event, messages);
+				} catch {
+					// ignore malformed lines
+				}
+			};
+			proc.stdout.on("data", (chunk) => {
+				buffer += chunk.toString();
+				const lines = buffer.split("\n");
+				buffer = lines.pop() ?? "";
+				for (const line of lines) processLine(line);
+			});
+			proc.stderr.on("data", () => {
+				// ignore stderr unless no assistant output arrives
+			});
+			proc.on("close", (code) => {
+				if (buffer.trim()) processLine(buffer);
+				resolve(code === 0 ? liveActivity.lastAssistantText?.trim() || undefined : undefined);
+			});
+			proc.on("error", () => resolve(undefined));
+		});
+		return output;
+	} finally {
+		await fsp.rm(systemPromptTemp.dir, { recursive: true, force: true });
+	}
+}
+
+export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWithAgentParams): Promise<string | undefined> {
+	if (process.env.PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS === "1") return undefined;
+	const testOutput = asString(process.env.PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT);
+	if (testOutput) return testOutput;
+	if (params.recentEntries.length === 0) return undefined;
+	try {
+		return await runPrimaryAgentHandoffSubprocess(params);
+	} catch (error) {
+		console.warn("[completion] primary-agent handoff generation failed", error);
+		return undefined;
+	}
 }
 
 export async function analyzeContextProposalWithAgent(params: AnalyzeContextProposalWithAgentParams): Promise<ContextProposal | undefined> {
