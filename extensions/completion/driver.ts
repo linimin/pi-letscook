@@ -321,18 +321,18 @@ async function assessActiveWorkflowProposalRouting(
 ): Promise<ActiveWorkflowProposalAssessment> {
 	const currentMission = currentMissionAnchor(snapshot);
 	const projectName = path.basename(snapshot.files.root);
-	const explicitHandoff = await deps.deriveCookStartupProposal(ctx, projectName);
-	if (explicitHandoff.blockedFailureMessage) {
+	const proposalResult = await deps.deriveCookContextProposal(ctx, projectName);
+	if (proposalResult.blockedFailureMessage) {
 		const assessment: ActiveWorkflowProposalAssessment = {
 			action: "blocked",
 			currentMissionAnchor: currentMission,
-			blockedFailureMessage: explicitHandoff.blockedFailureMessage,
+			blockedFailureMessage: proposalResult.blockedFailureMessage,
 			reason: "fresh_explicit_handoff_not_startable",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
 	}
-	const proposal = explicitHandoff.proposal;
+	const proposal = proposalResult.proposal;
 	if (!proposal) {
 		const assessment: ActiveWorkflowProposalAssessment = {
 			action: "continue",

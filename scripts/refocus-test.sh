@@ -519,4 +519,81 @@ assert plan['plan_basis'] == 'user_refocus', 'plan.json plan_basis should be use
 assert active['status'] == 'idle', 'active-slice.json status should reset to idle after bare refocus'
 PY
 
+SYNTH_REPLACEMENT_SESSION="$TMPDIR/session-synthesized-active-replacement.jsonl"
+SYNTH_REPLACEMENT_ROUTING="$TMPDIR/synthesized-active-replacement-routing.json"
+SYNTH_REPLACEMENT_PROPOSAL="$TMPDIR/synthesized-active-replacement-proposal.json"
+write_session "$SYNTH_REPLACEMENT_SESSION" "$TMPDIR" "Please replace the current workflow with the synthesized replacement mission when I run /cook."
+
+SYNTH_REPLACEMENT_HANDOFF="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "generated-primary-agent-handoff",
+    "mission": "Exercise same-entry active-workflow replacement synthesis.",
+    "scope": [
+        "Generate the replacement handoff inside the same /cook entry.",
+        "Keep the chooser and final Start/Cancel confirmation truthful."
+    ],
+    "constraints": [
+        "Do not rewrite canonical state before the final Start confirmation."
+    ],
+    "acceptance": [
+        "Replace the active workflow using the synthesized primary-agent handoff.",
+        "Keep deterministic coverage for same-entry active replacement."
+    ],
+    "risks": [],
+    "notes": [
+        "This replacement is synthesized during /cook rather than pre-authored in the transcript."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Exercise same-entry active-workflow replacement synthesis.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "scripts/refocus-test.sh"
+    ],
+    "verification_commands": [
+        "npm run refocus-test"
+    ],
+    "why_this_slice_first": "Active replacement should work when the primary-agent handoff is synthesized in the same /cook entry.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The user explicitly chose workflow mode and the replacement handoff can be synthesized immediately."
+}
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
+PY
+)"
+
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$SYNTH_REPLACEMENT_HANDOFF" \
+PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$SYNTH_REPLACEMENT_PROPOSAL" \
+PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$SYNTH_REPLACEMENT_ROUTING" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$SYNTH_REPLACEMENT_SESSION" -e "$PKG_ROOT" -p "/cook" \
+  >"$TMPDIR/pi-completion-synthesized-active-replacement.out" 2>"$TMPDIR/pi-completion-synthesized-active-replacement.err"
+
+python3 - "$SYNTH_REPLACEMENT_PROPOSAL" "$SYNTH_REPLACEMENT_ROUTING" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+new_anchor = 'Exercise same-entry active-workflow replacement synthesis.'
+proposal = json.loads(Path(sys.argv[1]).read_text())
+routing = json.loads(Path(sys.argv[2]).read_text())
+state = json.loads(Path('.agent/state.json').read_text())
+plan = json.loads(Path('.agent/plan.json').read_text())
+active = json.loads(Path('.agent/active-slice.json').read_text())
+
+assert proposal['mission'] == new_anchor, 'same-entry synthesized replacement should preserve the replacement proposal mission'
+assert routing['action'] == 'refocus', 'same-entry synthesized replacement should classify active bare /cook as refocus'
+assert routing['reason'] == 'fresh_explicit_handoff', 'same-entry synthesized replacement should reuse the explicit-handoff routing reason because /cook synthesized an explicit handoff'
+assert routing['proposalSource'] == 'handoff_capsule', 'same-entry synthesized replacement should surface the synthesized handoff as a handoff capsule source'
+assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after same-entry synthesized refocus'
+assert plan['mission_anchor'] == new_anchor, 'plan.json mission_anchor mismatch after same-entry synthesized refocus'
+assert active['mission_anchor'] == new_anchor, 'active-slice.json mission_anchor mismatch after same-entry synthesized refocus'
+assert state['continuation_reason'].startswith('User refocused workflow via /cook:'), 'same-entry synthesized replacement should record the /cook refocus continuation reason'
+PY
+
 echo "refocus test passed: $TMPDIR"
