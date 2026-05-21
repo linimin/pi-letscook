@@ -62,12 +62,17 @@ export function toolCallBlockReason(args: {
 	input?: JsonRecord;
 	role?: string;
 	completionActive: boolean;
+	completionRoleDispatchAllowed: boolean;
 	root: string;
 }): string | undefined {
-	const { toolName, input, role, completionActive, root } = args;
+	const { toolName, input, role, completionActive, completionRoleDispatchAllowed, root } = args;
 
 	if (toolName === "completion_role" && role) {
 		return `Nested completion role dispatch is forbidden for ${role}.`;
+	}
+
+	if (toolName === "completion_role" && !completionRoleDispatchAllowed) {
+		return "completion_role may only be used from an explicit /cook workflow driver turn.";
 	}
 
 	if (toolName === "edit" || toolName === "write") {

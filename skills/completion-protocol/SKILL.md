@@ -1,11 +1,13 @@
 ---
 name: completion-protocol
-description: Shared completion workflow protocol for long-running coding tasks with canonical .agent state, one-slice execution, mandatory role dispatch, recovery, and final stop criteria. Use when driving persistent end-to-end completion work across multiple sessions.
+description: Shared completion workflow protocol for long-running coding tasks with canonical .agent state, one-slice execution, mandatory role dispatch, recovery, and final stop criteria. Use only after the user explicitly enters `/cook` and the main session becomes the completion workflow driver.
 ---
 
 # Completion Protocol
 
-Load this skill whenever you are operating inside the `completion` workflow.
+Load this skill only after the user explicitly enters `/cook` and you are operating inside the `completion` workflow as the workflow driver or a completion role.
+
+Do not load or follow this skill from ordinary chat.
 
 This skill defines shared protocol facts only. Role-specific behavior belongs in the dedicated completion agents:
 

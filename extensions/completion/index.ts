@@ -1055,11 +1055,13 @@ export default function completionExtension(pi: ExtensionAPI) {
 		const snapshot = await loadCompletionSnapshot(cwd);
 		const completionActive = Boolean(snapshot) && asString(snapshot?.state?.continuation_policy) !== "done";
 		const root = snapshot?.files.root ?? findRepoRoot(cwd) ?? cwd;
+		const completionRoleDispatchAllowed = Boolean(role) || (hasCompletionRoutingActivation(snapshot) && isCompletionDriverPromptTurn(ctx));
 		const reason = toolCallBlockReason({
 			toolName: event.toolName,
 			input: isRecord(event.input) ? event.input : undefined,
 			role,
 			completionActive,
+			completionRoleDispatchAllowed,
 			root,
 		});
 		if (reason) return { block: true, reason };
@@ -1074,6 +1076,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 			"Use completion_role when driving the completion workflow and a mandatory completion role must act next.",
 			"Use completion_role only for completion-bootstrapper, completion-regrounder, completion-implementer, completion-reviewer, completion-auditor, or completion-stop-judge.",
 			"Do not use completion_role from inside a completion role; only the workflow driver may dispatch roles.",
+			"Do not call completion_role from ordinary chat; it is reserved for explicit /cook workflow driver turns.",
 		],
 		parameters: Type.Object({
 			role: StringEnum(ROLE_NAMES, { description: "The completion role to invoke." }),

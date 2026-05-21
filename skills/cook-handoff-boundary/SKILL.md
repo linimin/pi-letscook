@@ -34,6 +34,8 @@ The primary agent should not:
 
 - proactively tell the user to run `/cook` just because the task looks workflow-worthy
 - proactively emit a `cook_handoff` capsule by default
+- load or follow `completion-protocol` while still in ordinary chat
+- call `completion_role` before the user has explicitly entered `/cook`
 - act as though workflow has already started when it has not
 - silently rewrite ordinary-chat discussion into canonical workflow state
 
@@ -115,6 +117,8 @@ Suggested wording:
 Before the user explicitly runs `/cook`, the primary agent must not:
 
 - pretend `/cook` has already been invoked
+- load or follow `completion-protocol`
+- call `completion_role` or any completion subagent
 - silently rewrite ordinary-chat discussion into active workflow state
 - claim canonical `.agent/**` startup state exists when it does not
 - refuse ordinary-chat implementation solely because `/cook` would also be possible

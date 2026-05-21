@@ -30,6 +30,7 @@ export function buildCookHandoffBoundaryReminder(): string {
 		"Ordinary chat may clarify requirements, discuss tradeoffs, refine scope, and directly implement requested repo changes, including multi-file work, when that is the most helpful response.",
 		"Do not proactively tell the user to run /cook just because a task looks workflow-worthy, and do not emit a ```cook_handoff``` capsule by default in ordinary chat.",
 		"/cook is optional workflow mode for resumability, review, audit, canonical .agent state, or deliberate multi-session control; it is not required just to edit repo files in ordinary chat.",
+		"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role.",
 		"If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.",
 		"If the user asks follow-up questions or wants to keep refining scope, continue helping naturally in ordinary chat.",
 		"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context, then show Start/Cancel confirmation without making the user rerun /cook.",

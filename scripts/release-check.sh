@@ -27,10 +27,23 @@ checks = {
     "extensions/completion/prompt-surfaces.ts": [
         '"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context, then show Start/Cancel confirmation without making the user rerun /cook."',
         '"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should use explicit primary-agent handoff data, whether it already exists or is synthesized in the same /cook entry."',
+        '"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role."',
     ],
     "extensions/completion/index.ts": [
         '"/cook failed closed because the primary-agent handoff step could not prepare a concrete startup handoff from the current task context. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook."',
         'description: "/cook workflow: start or replace workflow only from an explicit primary-agent handoff, or resume the current workflow from canonical state"',
+        '"Do not call completion_role from ordinary chat; it is reserved for explicit /cook workflow driver turns."',
+    ],
+    "extensions/completion/policy-guards.ts": [
+        'return "completion_role may only be used from an explicit /cook workflow driver turn.";',
+    ],
+    "skills/cook-handoff-boundary/SKILL.md": [
+        '- load or follow `completion-protocol` while still in ordinary chat',
+        '- call `completion_role` before the user has explicitly entered `/cook`',
+    ],
+    "skills/completion-protocol/SKILL.md": [
+        'Load this skill only after the user explicitly enters `/cook` and you are operating inside the `completion` workflow as the workflow driver or a completion role.',
+        'Do not load or follow this skill from ordinary chat.',
     ],
 }
 
