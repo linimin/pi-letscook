@@ -135,10 +135,9 @@ type ActiveWorkflowProposalAssessment = {
 	blockedFailureMessage?: string;
 	reason:
 		| "matching_mission"
-		| "no_replacement_proposal"
-		| "explicit_handoff_replacement"
-		| "deferred_replacement"
-		| "replacement_not_startable";
+		| "missing_explicit_handoff"
+		| "fresh_explicit_handoff"
+		| "fresh_explicit_handoff_not_startable";
 };
 
 function completionTestWorkflowActionOverride(): "continue" | "refocus" | "cancel" | undefined {
@@ -212,7 +211,7 @@ function maybeWriteTestSnapshot(targetPath: string | undefined, content: string)
 
 const COOK_MAIN_CHAT_RERUN_GUIDANCE = "Discuss changes in the main chat and rerun /cook.";
 const COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL =
-	"/cook failed closed because it could not derive a concrete startup brief from recent discussion. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook.";
+	"/cook failed closed because starting workflow now requires a fresh explicit primary-agent handoff. Ask the primary agent in the main chat to emit a fresh ```cook_handoff``` capsule, then rerun /cook.";
 
 function isWorkflowDone(snapshot: CompletionStateSnapshot | undefined): boolean {
 	return asString(snapshot?.state?.continuation_policy) === "done";
@@ -375,72 +374,6 @@ async function promptContextProposalConfirmationAction(
 	});
 }
 
-function stripCookHandoffBlocks(text: string): string {
-	return text.replace(COOK_HANDOFF_BLOCK_REGEX, " ").replace(/\s+/g, " ").trim();
-}
-
-async function deriveCookRecentDiscussionProposal(
-	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
-	projectName: string,
-): Promise<ContextProposal | undefined> {
-	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
-	const recentEntries = recentMessages
-		.filter((entry) => (entry.role === "user" || entry.role === "custom") && !entry.isCommand)
-		.filter((entry) => !/```cook_handoff\b/i.test(entry.text))
-		.slice(0, 8)
-		.map((entry) => ({ role: entry.role, text: stripCookHandoffBlocks(entry.text) }))
-		.filter((entry) => entry.text.length > 0);
-	const snapshot = await loadCompletionSnapshot(getCtxCwd(ctx));
-	const workflowContextLines = snapshot
-		? [
-			`current mission anchor: ${asString(snapshot.state?.mission_anchor) ?? asString(snapshot.plan?.mission_anchor) ?? asString(snapshot.active?.mission_anchor) ?? "(none)"}`,
-			`continuation policy: ${asString(snapshot.state?.continuation_policy) ?? "(none)"}`,
-			`latest completed slice: ${asString(snapshot.state?.latest_completed_slice) ?? "(none)"}`,
-			`latest verified slice: ${asString(snapshot.state?.latest_verified_slice) ?? "(none)"}`,
-			`active slice goal: ${asString(snapshot.active?.goal) ?? "(none)"}`,
-			`active slice why_now: ${asString(snapshot.active?.why_now) ?? "(none)"}`,
-			`verification goal: ${asString(snapshot.verificationEvidence?.goal) ?? "(none)"}`,
-			`verification summary: ${asString(snapshot.verificationEvidence?.summary) ?? "(none)"}`,
-		]
-		: [];
-	const proposal = await deriveCookContextProposalFromRecentDiscussion(projectName, recentEntries, {
-		asString,
-		asStringArray,
-		workflowContext: snapshot
-			? {
-				currentMissionAnchor:
-					asString(snapshot.state?.mission_anchor) ?? asString(snapshot.plan?.mission_anchor) ?? asString(snapshot.active?.mission_anchor),
-				latestCompletedSlice: asString(snapshot.state?.latest_completed_slice),
-				latestVerifiedSlice: asString(snapshot.state?.latest_verified_slice),
-				activeSliceGoal: asString(snapshot.active?.goal),
-				activeSliceWhyNow: asString(snapshot.active?.why_now),
-				verificationGoal: asString(snapshot.verificationEvidence?.goal),
-				verificationSummary: asString(snapshot.verificationEvidence?.summary),
-				continuationPolicy: asString(snapshot.state?.continuation_policy),
-			}
-			: undefined,
-		analyzeContextProposal: async (entries) =>
-			await analyzeContextProposalWithAgent({
-				ctx,
-				projectName,
-				recentEntries: entries,
-				workflowContextLines,
-				liveRoleActivityByRoot,
-				completionStatusKey: COMPLETION_STATUS_KEY,
-				safeUiCall,
-				getCtxCwd,
-				getCtxHasUI,
-				getCtxUi,
-			}),
-		assessMissionAnchor,
-		isWeakMissionAnchor,
-		missionAnchorsStrictlyEquivalent,
-		normalizeMissionAnchorText,
-		stripCodeBlocks,
-	});
-	return retagContextProposalSource(proposal, "deferred_primary_agent_handoff");
-}
-
 async function deriveCookStartupProposal(
 	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
 	projectName: string,
@@ -459,7 +392,7 @@ async function deriveCookStartupProposal(
 	if (explicitHandoff.status === "fresh_but_not_startable") {
 		return { blockedFailureMessage: explicitHandoff.message };
 	}
-	return { proposal: await deriveCookRecentDiscussionProposal(ctx, projectName) };
+	return {};
 }
 
 async function deriveCookContextProposal(
@@ -942,7 +875,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: optionally enter tracked workflow mode, synthesize a startup brief from explicit /cook entry, resume the current workflow from canonical state, or confirm a replacement mission",
+			description: "/cook workflow: start or replace workflow only from an explicit primary-agent handoff, or resume the current workflow from canonical state",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,

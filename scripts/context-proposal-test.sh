@@ -147,14 +147,15 @@ mkdir -p "$ROOT"
 cd "$ROOT"
 git init -q
 
-# No workflow yet: bare /cook should synthesize a deferred startup brief from recent discussion,
-# even when no explicit ordinary-chat handoff capsule exists.
+# No workflow yet: bare /cook should fail closed without a fresh explicit primary-agent handoff,
+# even when recent discussion is fully structured.
 SESSION_ZERO="$TMPDIR/session-zero.jsonl"
 DISCUSSION_ZERO=$'Mission: Remove the completion status line while keeping the completion widget.\nScope:\n- Keep the non-running completion widget.\n- Suppress the widget while a completion role is active.\nConstraints:\n- Do not reintroduce any other completion status surface.\nAcceptance:\n- Update README to match the shipped behavior.\n- Keep observability regression coverage truthful.'
 DISCUSSION_SNAPSHOT_ZERO="$TMPDIR/context-proposal-structured-fallback.json"
 write_session "$SESSION_ZERO" "$ROOT" "$DISCUSSION_ZERO"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_ZERO" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$SESSION_ZERO" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-structured-fallback.out" 2>"$TMPDIR/pi-completion-context-proposal-structured-fallback.err"
@@ -166,13 +167,9 @@ from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
-assert Path('.agent').exists(), 'bare /cook should scaffold canonical state from structured recent discussion'
-assert snapshot.exists(), 'bare /cook should emit a startup proposal snapshot when recent discussion is concrete enough'
-proposal = json.loads(snapshot.read_text())
-brief = json.loads(Path('.agent/state.json').read_text())['advisory_startup_brief']
-assert proposal['source'] == 'deferred_primary_agent_handoff', 'structured startup should snapshot the deferred primary-agent handoff source'
-assert brief['source'] == 'deferred_primary_agent_handoff', 'structured startup should record the deferred primary-agent handoff source in advisory intake'
-assert 'Initialized completion control plane' in output, 'structured startup should initialize canonical workflow state'
+assert not Path('.agent').exists(), 'missing explicit handoff should fail closed without writing canonical state'
+assert not snapshot.exists(), 'missing explicit handoff should not emit a startup proposal snapshot'
+assert 'fresh explicit primary-agent handoff' in output, 'missing explicit handoff should explain the explicit-handoff-only startup contract'
 PY
 
 rm -rf .agent
@@ -220,7 +217,7 @@ output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
 assert not Path('.agent').exists(), 'user-authored faux handoff without supporting discussion should still fail closed without writing canonical state'
 assert not snapshot.exists(), 'user-authored faux handoff should not emit a startup proposal snapshot'
-assert 'could not derive a concrete startup brief from recent discussion' in output, 'user-authored faux handoff should fall back to the deferred-synthesis fail-closed message'
+assert 'fresh explicit primary-agent handoff' in output, 'user-authored faux handoff should still explain the explicit-handoff requirement'
 PY
 
 # No workflow yet: malformed or invalid assistant handoff capsules must also fail closed.
@@ -241,7 +238,7 @@ output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
 assert not Path('.agent').exists(), 'invalid assistant handoff without supporting discussion should fail closed without writing canonical state'
 assert not snapshot.exists(), 'invalid assistant handoff should not emit a startup proposal snapshot'
-assert 'could not derive a concrete startup brief from recent discussion' in output, 'invalid assistant handoff should explain the deferred-synthesis fail-closed contract'
+assert 'fresh explicit primary-agent handoff' in output, 'invalid assistant handoff should still explain the explicit-handoff requirement'
 PY
 
 # No workflow yet: a fresh explicit primary-agent handoff should still bootstrap canonical startup state.
@@ -389,7 +386,7 @@ assert routing['mode'] == 'bare', 'active bare /cook resume regression should sn
 assert 'explicitGoal' not in routing, 'active bare /cook resume routing should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'active bare /cook resume routing should not expose removed explicit-goal shim fields'
 assert routing['action'] == 'continue', 'active bare /cook should resume when no fresh explicit handoff exists'
-assert routing['reason'] == 'no_replacement_proposal', 'active bare /cook should explain that resume happened because no replacement mission was derived'
+assert routing['reason'] == 'missing_explicit_handoff', 'active bare /cook should explain that resume happened because no fresh explicit handoff existed'
 assert routing['currentMissionAnchor'] == mission, 'resume routing should preserve the current mission anchor'
 assert routing['proposedMissionAnchor'] is None, 'resume routing should not derive a replacement mission from recent discussion'
 assert 'Resume the completion workflow from canonical state.' in resume, 'active bare /cook resume should still use the canonical resume prompt'
@@ -434,7 +431,7 @@ active = json.loads(Path('.agent/active-slice.json').read_text())
 
 assert routing['mode'] == 'bare', 'discussion-driven refocus removal should snapshot bare routing mode'
 assert routing['action'] == 'continue', 'bare /cook should resume instead of deriving a replacement workflow from recent discussion'
-assert routing['reason'] == 'no_replacement_proposal', 'discussion-driven refocus removal should explain that no replacement mission was derived'
+assert routing['reason'] == 'missing_explicit_handoff', 'discussion-driven refocus removal should explain that no fresh explicit handoff existed'
 assert routing['currentMissionAnchor'] == mission, 'discussion-driven refocus removal should preserve the current mission anchor'
 assert routing['proposedMissionAnchor'] is None, 'discussion-driven refocus removal should not preserve a replacement mission from recent discussion'
 assert 'Resume the completion workflow from canonical state.' in resume, 'discussion-driven refocus removal should still queue the canonical resume prompt'
@@ -508,7 +505,7 @@ active = json.loads(Path('.agent/active-slice.json').read_text())
 
 assert routing['mode'] == 'bare', 'summary-only active bare /cook regression should snapshot bare routing mode'
 assert routing['action'] == 'continue', 'summary-only active bare /cook should resume rather than derive replacement startup'
-assert routing['reason'] == 'no_replacement_proposal', 'summary-only active bare /cook should explain that no replacement mission was derived'
+assert routing['reason'] == 'missing_explicit_handoff', 'summary-only active bare /cook should explain that no fresh explicit handoff existed'
 assert routing['currentMissionAnchor'] == mission, 'summary-only active bare /cook should preserve the current mission anchor'
 assert routing['proposedMissionAnchor'] is None, 'summary-only active bare /cook should not derive a replacement mission from summary artifacts alone'
 assert 'Resume the completion workflow from canonical state.' in resume, 'summary-only active bare /cook should still resume the canonical workflow'
@@ -613,7 +610,7 @@ after = {
 
 assert routing['mode'] == 'bare', 'fresh non-startable explicit handoff should snapshot bare routing mode'
 assert routing['action'] == 'blocked', 'fresh non-startable explicit handoff should fail closed for active bare /cook'
-assert routing['reason'] == 'replacement_not_startable', 'fresh non-startable explicit handoff should keep the dedicated replacement fail-closed reason'
+assert routing['reason'] == 'fresh_explicit_handoff_not_startable', 'fresh non-startable explicit handoff should keep the dedicated explicit-handoff fail-closed reason'
 assert 'fresh explicit primary-agent handoff exists' in routing['blockedFailureMessage'], 'fresh non-startable explicit handoff should surface the dedicated fail-closed message'
 assert 'acceptance is not anchored to concrete repo changes or verification' in routing['blockedFailureMessage'], 'fresh non-startable explicit handoff should explain why the capsule is not startable'
 assert not resume_path.exists(), 'fresh non-startable explicit handoff should not queue a resume prompt'
@@ -708,14 +705,15 @@ assert not snapshot.exists(), 'verification-evidence overlap suppression should 
 assert '/cook failed closed' in output, 'verification-evidence overlap suppression should fail closed when the latest discussion only repeats verified work'
 PY
 
-# Completed workflow: bare /cook should synthesize the next round from discussion-only startup too,
-# even when no explicit ordinary-chat handoff capsule exists.
+# Completed workflow: bare /cook should fail closed for next-round discussion-only startup too,
+# even when the discussion is well structured.
 SESSION_TWO_NORMALIZED="$TMPDIR/session-two-normalized.jsonl"
 DISCUSSION_TWO_NORMALIZED=$'Mission: 開始實作這個方案\nScope:\n- Normalize bare /cook planning phrasing for the next workflow round.\n- Reset canonical state for the new implementation mission.\nConstraints:\n- Do not resume the completed workflow when the new round is clearly different.\nAcceptance:\n- Start a new round with the normalized mission anchor.'
 DISCUSSION_SNAPSHOT_TWO_NORMALIZED="$TMPDIR/context-proposal-next-round-normalized.json"
 write_session "$SESSION_TWO_NORMALIZED" "$ROOT" "$DISCUSSION_TWO_NORMALIZED"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DISCUSSION_SNAPSHOT_TWO_NORMALIZED" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$SESSION_TWO_NORMALIZED" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-next-round-normalized.out" 2>"$TMPDIR/pi-completion-context-proposal-next-round-normalized.err"
@@ -730,12 +728,10 @@ snapshot = Path(sys.argv[3])
 previous = sys.argv[4]
 state = json.loads(Path('.agent/state.json').read_text())
 
-assert snapshot.exists(), 'done-workflow discussion-only startup should emit a proposal snapshot from deferred synthesis'
-proposal = json.loads(snapshot.read_text())
-assert state['mission_anchor'] != previous, 'done-workflow discussion-only startup should advance to the new mission anchor'
-assert state['continuation_policy'] == 'continue', 'done-workflow discussion-only startup should reopen workflow state'
-assert proposal['source'] == 'deferred_primary_agent_handoff', 'done-workflow discussion-only startup should snapshot the deferred handoff source'
-assert 'Started a new completion workflow round from deferred primary-agent handoff' in output, 'done-workflow discussion-only startup should report deferred next-round startup'
+assert not snapshot.exists(), 'done-workflow discussion-only startup should not emit a proposal snapshot without a fresh explicit handoff'
+assert state['mission_anchor'] == previous, 'done-workflow discussion-only startup should keep the completed mission anchor unchanged'
+assert state['continuation_policy'] == 'done', 'done-workflow discussion-only startup should keep the workflow closed'
+assert 'fresh explicit primary-agent handoff' in output, 'done-workflow discussion-only startup should explain the explicit-handoff-only entry contract'
 PY
 
 # Completed workflow: a fresh explicit primary-agent handoff should still start the next round.
@@ -954,8 +950,8 @@ after = {path.name: path.read_text() for path in tracked}
 assert before == after, 'done /cook inline-args rejection should leave canonical files unchanged'
 PY
 
-# Completed workflow again: model-assisted discussion analysis alone should be able to
-# synthesize the next round from explicit /cook entry.
+# Completed workflow again: model-assisted discussion analysis alone should still fail closed
+# without a fresh explicit primary-agent handoff.
 mark_done
 
 SESSION_FIVE="$TMPDIR/session-five.jsonl"
@@ -979,9 +975,9 @@ output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
 state = json.loads(Path('.agent/state.json').read_text())
 
-assert snapshot.exists(), 'done-workflow analyst-only restart should emit a startup proposal snapshot'
-assert state['continuation_policy'] == 'continue', 'done-workflow analyst-only restart should reopen the workflow'
-assert 'deferred primary-agent handoff' in output, 'done-workflow analyst-only restart should report deferred startup'
+assert not snapshot.exists(), 'done-workflow analyst-only restart should not emit a startup proposal snapshot'
+assert state['continuation_policy'] == 'done', 'done-workflow analyst-only restart should keep the workflow closed'
+assert 'fresh explicit primary-agent handoff' in output, 'done-workflow analyst-only restart should explain the explicit-handoff-only startup contract'
 PY
 
 # Custom confirmation UI: start should render proposal content separately from approval-only Start/Cancel actions.
@@ -1527,7 +1523,7 @@ output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
 
 assert not snapshot.exists(), 'stale handoff should not emit a startup proposal snapshot'
 assert not Path('.agent').exists(), 'stale handoff should fail closed without writing canonical state'
-assert 'could not derive a concrete startup brief from recent discussion' in output, 'stale handoff should explain that deferred startup synthesis failed closed'
+assert 'fresh explicit primary-agent handoff' in output, 'stale handoff should explain that a fresh valid explicit handoff is required'
 PY
 
 # Negative handoff rationale: a non-startable capsule must not become the startup mission.

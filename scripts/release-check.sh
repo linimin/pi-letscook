@@ -9,46 +9,43 @@ echo "[release-check] running control-plane validation, tracked .agent contract 
 bash .agent/verify_completion_control_plane.sh
 git ls-files --error-unmatch .agent/README.md .agent/mission.md .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null
 
-echo "[release-check] verifying public /cook parity and optional-workflow docs/help"
+echo "[release-check] verifying public /cook parity and explicit-handoff docs/help"
 python3 - <<'PY'
 from pathlib import Path
 
 checks = {
     "README.md": [
         "You can still implement directly in ordinary chat when you do not need workflow state.",
-        "Only explicit `/cook` enters workflow mode. Ordinary prompts stay in the main chat and go straight to the primary agent.",
-        "Ordinary chat can still directly implement repo changes. `/cook` is for the cases where you want workflow control rather than just implementation help.",
-        "- `/cook` is an optional workflow boundary and manual entry point",
-        "- ordinary main-chat discussion may clarify, propose, or directly implement repo changes without entering workflow mode",
-        "None of this prevents ordinary-chat implementation when you choose not to enter workflow mode.",
+        "When you explicitly run `/cook`, it should consume the explicit primary-agent handoff you already prepared in ordinary chat, then ask you to **Start** or **Cancel** before rewriting canonical workflow state.",
+        "Explicit `/cook` capsules are the required startup intake for new-workflow, next-round, and replacement entry.",
+        "`/cook` first checks for a fresh explicit primary-agent handoff capsule.",
+        "New-workflow entry, done-workflow next-round entry, and active-workflow replacement should use that handoff instead of guessing from recent discussion.",
     ],
     "CHANGELOG.md": [
-        "made ordinary chat implementation-first again so the primary agent may directly edit repo files without requiring `/cook` when workflow state is unnecessary",
-        "repositioned `/cook` as optional workflow mode for confirm-first startup, resumability, review/audit flow, and canonical `.agent/**` state rather than as a mandatory implementation boundary",
-        "updated ordinary-chat boundary docs, reminders, and release-parity checks so they no longer tell the agent to block repo edits pending explicit `/cook`",
+        "made `/cook` stop inferring startup handoffs from recent discussion so workflow startup and replacement now require fresh explicit primary-agent `cook_handoff` data",
+        "clarified that when a user explicitly chooses `/cook`, the primary agent must author the handoff in ordinary chat and `/cook` must consume that handoff instead of guessing",
     ],
     "extensions/completion/prompt-surfaces.ts": [
-        '"Ordinary chat may clarify requirements, discuss tradeoffs, refine scope, and directly implement requested repo changes, including multi-file work, when that is the most helpful response."',
-        '"/cook is optional workflow mode for resumability, review, audit, canonical .agent state, or deliberate multi-session control; it is not required just to edit repo files in ordinary chat."',
-        '"If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook."',
+        '"If the user explicitly asks to enter /cook workflow, generate one fresh ```cook_handoff``` capsule in ordinary chat from the primary-agent view of the task, then tell the user to run /cook."',
+        '"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should consume the explicit primary-agent handoff instead."',
     ],
     "extensions/completion/index.ts": [
-        '"/cook failed closed because it could not derive a concrete startup brief from recent discussion. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook."',
-        'description: "/cook workflow: optionally enter tracked workflow mode, synthesize a startup brief from explicit /cook entry, resume the current workflow from canonical state, or confirm a replacement mission"',
+        '"/cook failed closed because starting workflow now requires a fresh explicit primary-agent handoff. Ask the primary agent in the main chat to emit a fresh ```cook_handoff``` capsule, then rerun /cook."',
+        'description: "/cook workflow: start or replace workflow only from an explicit primary-agent handoff, or resume the current workflow from canonical state"',
     ],
 }
 
 forbidden = {
     "README.md": [
-        "mature long-running implementation still must not start before explicit `/cook`",
-        "Ordinary chat remains advisory until you explicitly run `/cook`.",
+        "synthesizes a startup brief from recent discussion using primary-agent-style context",
+        "derive startup from explicit user `/cook` entry plus recent discussion when needed",
     ],
     "extensions/completion/prompt-surfaces.ts": [
-        '"Before that explicit /cook entry, do not begin long-running product implementation in ordinary chat, do not edit tracked product files for that workflow-level task, and do not act as though /cook had already been invoked."',
+        '"If the user explicitly runs /cook, /cook will synthesize a startup brief from recent discussion using primary-agent-style context, then show Start/Cancel confirmation before canonical workflow state is rewritten."',
     ],
-    "skills/cook-handoff-boundary/SKILL.md": [
-        "Before that explicit `/cook` entry, the primary agent must stop short of long-running implementation for workflow-level tasks.",
-        "not edit tracked product files for that workflow-level task in ordinary chat",
+    "extensions/completion/index.ts": [
+        'description: "/cook workflow: optionally enter tracked workflow mode, synthesize a startup brief from explicit /cook entry, resume the current workflow from canonical state, or confirm a replacement mission"',
+        '"/cook failed closed because it could not derive a concrete startup brief from recent discussion. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook."',
     ],
 }
 
