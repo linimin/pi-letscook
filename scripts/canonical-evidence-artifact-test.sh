@@ -134,11 +134,11 @@ assertIncludes('.agent/README.md', 'durable canonical record of deterministic ve
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '- `.agent/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work.');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/startup-plan.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work.');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Ignored Canonical Execution State', '- `.agent/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.agent/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '- `.agent/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work.');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/startup-plan.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence summary: ${args.evidence.summary}');
 assertIncludes('extensions/completion/index.ts', 'Canonical verification evidence artifact is currently: ${evidence.path} (${evidence.status})');
@@ -202,7 +202,7 @@ capsule = {
         "Keep scripts/canonical-evidence-artifact-test.sh aligned with packaged bootstrap behavior."
     ],
     "risks": [
-        "Evidence-artifact bootstrap must stay anchored to the fresh explicit handoff."
+        "Evidence-artifact bootstrap must stay anchored to the fresh explicit startup-plan preview."
     ],
     "notes": [
         "This fixture exists only to scaffold canonical files before rewriting them for evidence parity coverage."
@@ -242,7 +242,7 @@ PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-canonical-evidence-bootstrap.out" 2>"$TMPDIR/pi-canonical-evidence-bootstrap.err"
 
-for file in .agent/profile.json .agent/state.json .agent/plan.json .agent/active-slice.json .agent/verification-evidence.json; do
+for file in .agent/profile.json .agent/state.json .agent/startup-plan.json .agent/startup-plan.md .agent/plan.json .agent/active-slice.json .agent/verification-evidence.json; do
   [[ -f "$file" ]] || { echo "missing canonical bootstrap file: $file" >&2; exit 1; }
 done
 
@@ -288,6 +288,36 @@ acceptance = [
     'Canonical verification evidence is recorded for the selected slice.',
     'Fail-closed verification rejects missing or stale evidence.',
 ]
+startup_plan = {
+    'schema_version': 1,
+    'artifact_type': 'completion-startup-plan',
+    'status': 'approved',
+    'source': 'primary_agent_handoff',
+    'captured_at': '2026-05-03T00:00:00Z',
+    'mission_anchor': mission,
+    'goal_text': 'Mission: Exercise canonical verification evidence parity.\n\nScope:\n- Persist canonical verification evidence for the selected slice.\n- Keep the verifier fail-closed on stale or missing evidence.\n\nAcceptance:\n- Canonical verification evidence is recorded for the selected slice.\n- Fail-closed verification rejects missing or stale evidence.',
+    'task_type': task_type,
+    'evaluation_profile': evaluation_profile,
+    'scope': [
+        'Persist canonical verification evidence for the selected slice.',
+        'Keep the verifier fail-closed on stale or missing evidence.',
+    ],
+    'constraints': [
+        'Keep the fixture scoped to canonical verification evidence parity.',
+    ],
+    'acceptance': acceptance,
+    'risks': [
+        'Stale startup-plan parity could mask canonical evidence regressions.',
+    ],
+    'notes': [
+        'Use startup-plan parity to prove the verifier reads the approved startup plan alongside other canonical state.',
+    ],
+    'planned_surfaces': implementation_surfaces,
+    'verification_intent': verification_commands,
+    'sequencing_hints': [
+        'First slice goal: Persist canonical verification evidence for the selected slice.',
+    ],
+}
 state = {
     'schema_version': 1,
     'mission_anchor': mission,
@@ -365,6 +395,21 @@ active = {
 }
 
 Path('.agent/state.json').write_text(json.dumps(state, indent=2) + '\n')
+Path('.agent/startup-plan.json').write_text(json.dumps(startup_plan, indent=2) + '\n')
+Path('.agent/startup-plan.md').write_text(
+    '# Approved Startup Plan\n\n'
+    f'Mission anchor: {mission}\n'
+    'Source: primary_agent_handoff\n'
+    'Captured at: 2026-05-03T00:00:00Z\n'
+    f'Task type: {task_type}\n'
+    f'Evaluation profile: {evaluation_profile}\n\n'
+    '## Goal\n\n'
+    f"{startup_plan['goal_text']}\n\n"
+    '## Planned surfaces\n\n'
+    + ''.join(f'- {item}\n' for item in startup_plan['planned_surfaces'])
+    + '\n## Verification intent\n\n'
+    + ''.join(f'- {item}\n' for item in startup_plan['verification_intent'])
+)
 Path('.agent/plan.json').write_text(json.dumps(plan, indent=2) + '\n')
 Path('.agent/active-slice.json').write_text(json.dumps(active, indent=2) + '\n')
 PY

@@ -123,10 +123,10 @@ capsule = {
         "Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap."
     ],
     "risks": [
-        "Smoke-test bootstrap should stay anchored to the fresh explicit handoff."
+        "Smoke-test bootstrap should stay anchored to the fresh explicit startup-plan preview."
     ],
     "notes": [
-        "Keep the smoke fixture aligned with the shipped explicit-handoff-only startup contract."
+        "Keep the smoke fixture aligned with the shipped startup-plan-driven startup contract."
     ],
     "handoff_kind": "implementation_workflow_handoff",
     "first_slice_goal": "Scaffold canonical completion files and verify the packaged startup contract.",
@@ -140,14 +140,14 @@ capsule = {
     "verification_commands": [
         "npm run smoke-test"
     ],
-    "why_this_slice_first": "The packaged explicit-handoff startup path must work before later workflow verification can run.",
+    "why_this_slice_first": "The packaged startup-plan entry path must work before later workflow verification can run.",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
-    "why_cook_now": "The startup handoff is concrete enough to bootstrap canonical workflow files."
+    "why_cook_now": "The startup plan is concrete enough to bootstrap canonical workflow files."
 }
 messages = [
     {"role": "user", "content": "Please prepare the packaged smoke-test bootstrap path and tell me when it is ready for /cook."},
-    {"role": "assistant", "content": "This bootstrap path is ready for /cook. Run /cook to confirm the startup brief.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+    {"role": "assistant", "content": "This bootstrap path is ready for /cook. Run /cook to confirm the startup plan.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
 ]
 print(json.dumps(messages, ensure_ascii=False))
 PY
@@ -175,7 +175,7 @@ chooser = Path(sys.argv[5])
 
 assert not Path('.agent').exists(), 'startup /cook inline-args rejection should leave canonical state untouched'
 assert not routing.exists(), 'startup /cook inline-args rejection should not open active-workflow routing before a workflow exists'
-assert not proposal.exists(), 'startup /cook inline-args rejection should not emit a startup-brief proposal snapshot'
+assert not proposal.exists(), 'startup /cook inline-args rejection should not emit a startup-plan proposal snapshot'
 assert not chooser.exists(), 'startup /cook inline-args rejection should not open the existing-workflow chooser before a workflow exists'
 assert '/cook no longer accepts inline arguments.' in output, 'startup /cook inline-args rejection should explain the bare-only entry contract'
 PY
@@ -189,7 +189,7 @@ PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$KICKOFF_PROMPT" \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-completion-smoke-bootstrap.out" 2>"$TMPDIR/pi-completion-smoke-bootstrap.err"
 
-for file in .agent/profile.json .agent/state.json .agent/plan.json .agent/active-slice.json .agent/verification-evidence.json; do
+for file in .agent/profile.json .agent/state.json .agent/startup-plan.json .agent/startup-plan.md .agent/plan.json .agent/active-slice.json .agent/verification-evidence.json; do
   [[ -f "$file" ]] || { echo "missing canonical bootstrap file: $file" >&2; exit 1; }
 done
 
@@ -209,6 +209,8 @@ profile = json.loads(Path('.agent/profile.json').read_text())
 state = json.loads(Path('.agent/state.json').read_text())
 plan = json.loads(Path('.agent/plan.json').read_text())
 active = json.loads(Path('.agent/active-slice.json').read_text())
+startup_plan = json.loads(Path('.agent/startup-plan.json').read_text())
+startup_plan_md = Path('.agent/startup-plan.md').read_text()
 evidence = json.loads(Path('.agent/verification-evidence.json').read_text())
 kickoff = Path(sys.argv[1]).read_text()
 
@@ -228,11 +230,20 @@ assert brief['source'] == 'primary_agent_handoff', 'smoke bootstrap should recor
 assert brief['mission'] == state['mission_anchor'], 'advisory startup brief mission should match the canonical mission anchor after bootstrap'
 assert brief['scope'] == ['Materialize the canonical completion control-plane files.', 'Keep the smoke test on supported /cook startup behavior.'], 'advisory startup brief should preserve scope items'
 assert brief['constraints'] == ['Keep startup proposal confirmation approval-only.'], 'advisory startup brief should preserve constraints'
+assert startup_plan['artifact_type'] == 'completion-startup-plan', 'startup-plan.json should persist the approved startup plan canonically'
+assert startup_plan['mission_anchor'] == state['mission_anchor'], 'startup-plan.json mission anchor should match canonical workflow state'
+assert startup_plan['source'] == 'primary_agent_handoff', 'startup-plan.json should preserve the primary-agent startup source'
+assert startup_plan['scope'] == brief['scope'], 'startup-plan.json should preserve approved scope items'
+assert startup_plan['constraints'] == brief['constraints'], 'startup-plan.json should preserve approved constraints'
+assert startup_plan['planned_surfaces'] == ['.agent/README.md', 'scripts/smoke-test.sh'], 'startup-plan.json should preserve planned surfaces derived from startup hints'
+assert startup_plan['verification_intent'] == ['npm run smoke-test'], 'startup-plan.json should preserve verification intent derived from startup hints'
+assert '## Planned surfaces' in startup_plan_md, 'startup-plan.md should render planned surfaces as a readable section'
+assert '.agent/README.md' in startup_plan_md and 'scripts/smoke-test.sh' in startup_plan_md, 'startup-plan.md should mirror planned surfaces'
 assert brief['acceptance'] == [
     'Scaffold .agent/profile.json, .agent/state.json, .agent/plan.json, .agent/active-slice.json, and .agent/verification-evidence.json for the smoke fixture.',
     'Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap.'
 ], 'advisory startup brief should preserve acceptance'
-assert brief['risks'] == ['Smoke-test bootstrap should stay anchored to the fresh explicit handoff.'], 'advisory startup brief should preserve handoff risks'
+assert brief['risks'] == ['Smoke-test bootstrap should stay anchored to the fresh explicit startup-plan preview.'], 'advisory startup brief should preserve startup-plan risks'
 assert 'First slice goal: Scaffold canonical completion files and verify the packaged startup contract.' in brief['notes'], 'advisory startup brief should preserve the first_slice_goal in notes'
 assert 'Verification commands: npm run smoke-test' in brief['notes'], 'advisory startup brief should preserve verification_commands in notes'
 assert evidence['artifact_type'] == 'completion-verification-evidence', 'verification-evidence.json artifact_type mismatch after bootstrap'
@@ -271,8 +282,9 @@ assert 'Do not proactively tell the user to run /cook' in handoff_text, 'ordinar
 assert '/cook is optional workflow mode' in handoff_text, 'ordinary handoff reminder should position /cook as optional workflow mode'
 assert 'In ordinary chat, do not load or follow completion-protocol, and do not call completion_role.' in handoff_text, 'ordinary handoff reminder should forbid workflow-role routing before explicit /cook'
 assert 'If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.' in handoff_text, 'ordinary handoff reminder should avoid blocking implementation on /cook'
-assert 'the extension should call a primary-agent handoff synthesis step from the current task context' in handoff_text, 'ordinary handoff reminder should describe same-entry primary-agent handoff synthesis for /cook'
+assert 'the extension should call a primary-agent startup-plan synthesis step from the current task context' in handoff_text, 'ordinary handoff reminder should describe same-entry primary-agent startup-plan synthesis for /cook'
 assert 'Do not expect /cook to infer or guess startup intent from recent discussion alone' in handoff_text, 'ordinary handoff reminder should forbid /cook-side guessing'
+assert 'the approved startup plan should be written into .agent and then handed to completion-regrounder' in handoff_text, 'ordinary handoff reminder should mention startup-plan persistence and regrounder slice derivation'
 assert 'do not silently rewrite discussion into canonical workflow state' in handoff_text, 'ordinary handoff reminder should preserve non-canonical ordinary-chat behavior'
 assert not auto_resume.exists(), 'ordinary non-/cook turn should not queue auto-resume before /cook activation'
 assert 'Skipped completion workflow auto-resume prompt (test mode)' not in output, 'ordinary non-/cook turn should not attempt auto-resume'
@@ -374,6 +386,54 @@ active_path = Path('.agent/active-slice.json')
 active = json.loads(active_path.read_text())
 active['evaluation_profile'] = profile['evaluation_profile']
 active_path.write_text(json.dumps(active, indent=2) + '\n')
+PY
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+path = Path('.agent/startup-plan.json')
+startup = json.loads(path.read_text())
+startup.pop('task_type', None)
+path.write_text(json.dumps(startup, indent=2) + '\n')
+PY
+
+if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
+  echo "expected control-plane verification to fail when startup-plan.json omits task_type" >&2
+  exit 1
+fi
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+profile = json.loads(Path('.agent/profile.json').read_text())
+startup_path = Path('.agent/startup-plan.json')
+startup = json.loads(startup_path.read_text())
+startup['task_type'] = profile['task_type']
+startup_path.write_text(json.dumps(startup, indent=2) + '\n')
+PY
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+path = Path('.agent/startup-plan.json')
+startup = json.loads(path.read_text())
+startup['mission_anchor'] = 'drifted-startup-plan-mission'
+path.write_text(json.dumps(startup, indent=2) + '\n')
+PY
+
+if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
+  echo "expected control-plane verification to fail when startup-plan.json mission_anchor drifts from canonical workflow state" >&2
+  exit 1
+fi
+
+python3 - <<'PY'
+import json
+from pathlib import Path
+state = json.loads(Path('.agent/state.json').read_text())
+startup_path = Path('.agent/startup-plan.json')
+startup = json.loads(startup_path.read_text())
+startup['mission_anchor'] = state['mission_anchor']
+startup_path.write_text(json.dumps(startup, indent=2) + '\n')
 PY
 
 python3 - <<'PY'

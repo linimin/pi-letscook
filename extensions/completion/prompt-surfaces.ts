@@ -24,6 +24,26 @@ export type AdvisoryStartupBrief = {
 	evaluation_profile?: string;
 };
 
+export type ApprovedStartupPlan = {
+	artifact_type: "completion-startup-plan";
+	schema_version: 1;
+	status: "approved";
+	source: AdvisoryStartupBrief["source"];
+	captured_at: string;
+	mission_anchor: string;
+	goal_text: string;
+	task_type?: string;
+	evaluation_profile?: string;
+	scope: string[];
+	constraints: string[];
+	acceptance: string[];
+	risks: string[];
+	notes: string[];
+	planned_surfaces: string[];
+	verification_intent: string[];
+	sequencing_hints: string[];
+};
+
 export function buildCookHandoffBoundaryReminder(): string {
 	return [
 		"You are in ordinary main chat unless the user explicitly runs /cook.",
@@ -33,10 +53,11 @@ export function buildCookHandoffBoundaryReminder(): string {
 		"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role.",
 		"If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.",
 		"If the user asks follow-up questions or wants to keep refining scope, continue helping naturally in ordinary chat.",
-		"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context, then show Start/Cancel confirmation without making the user rerun /cook.",
-		"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should use explicit primary-agent handoff data, whether it already exists or is synthesized in the same /cook entry.",
-		"Only provide a preview startup brief or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior.",
+		"If the user explicitly runs /cook, the extension should call a primary-agent startup-plan synthesis step from the current task context, show Start/Cancel confirmation in the same /cook entry, and only write the approved plan into .agent after Start.",
+		"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should use primary-agent-authored startup-plan data, whether it already exists as preview intake or is synthesized in the same /cook entry.",
+		"Only provide a preview startup plan or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior.",
 		"Any preview capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
+		"When /cook starts, the approved startup plan should be written into .agent and then handed to completion-regrounder so canonical slices can be derived from repo truth.",
 		"When you continue in ordinary chat, do not pretend /cook already started and do not silently rewrite discussion into canonical workflow state.",
 	].join(" ");
 }
@@ -88,6 +109,27 @@ function buildAdvisoryStartupBriefNotes(analysis: ContextProposalAnalysis): stri
 	return notes.length > 0 ? notes : ["No additional operator notes were derived from recent discussion."];
 }
 
+function startupPlanSourceForProposal(source: ContextProposal["source"]): AdvisoryStartupBrief["source"] {
+	return source === "handoff_capsule"
+		? "primary_agent_handoff"
+		: source === "deferred_primary_agent_handoff"
+			? "deferred_primary_agent_handoff"
+			: "recent_discussion";
+}
+
+function extractDelimitedNoteValues(notes: string[], prefix: string): string[] {
+	return notes.flatMap((note) => {
+		if (!note.startsWith(prefix)) return [];
+		return note.slice(prefix.length).split("|").map((item) => item.trim()).filter(Boolean);
+	});
+}
+
+function extractSequencingHints(notes: string[]): string[] {
+	return notes.filter((note) =>
+		note.startsWith("First slice goal:") || note.startsWith("First slice non-goals:") || note.startsWith("Why this slice first:"),
+	);
+}
+
 export function buildAdvisoryStartupBrief(args: {
 	proposal: Pick<ContextProposal, "goalText" | "mission" | "scope" | "constraints" | "acceptance" | "source">;
 	analysis: ContextProposalAnalysis;
@@ -95,12 +137,7 @@ export function buildAdvisoryStartupBrief(args: {
 }): AdvisoryStartupBrief {
 	return {
 		kind: "startup_brief",
-		source:
-			args.proposal.source === "handoff_capsule"
-				? "primary_agent_handoff"
-				: args.proposal.source === "deferred_primary_agent_handoff"
-					? "deferred_primary_agent_handoff"
-					: "recent_discussion",
+		source: startupPlanSourceForProposal(args.proposal.source),
 		confirmed: true,
 		captured_at: args.capturedAt ?? new Date().toISOString(),
 		goal_text: args.proposal.goalText,
@@ -113,6 +150,81 @@ export function buildAdvisoryStartupBrief(args: {
 		task_type: args.analysis.taskType,
 		evaluation_profile: args.analysis.evaluationProfile,
 	};
+}
+
+export function buildApprovedStartupPlan(args: {
+	proposal: Pick<ContextProposal, "goalText" | "mission" | "scope" | "constraints" | "acceptance" | "source">;
+	analysis: ContextProposalAnalysis;
+	missionAnchor?: string;
+	capturedAt?: string;
+}): ApprovedStartupPlan {
+	const capturedAt = args.capturedAt ?? new Date().toISOString();
+	const notes = buildAdvisoryStartupBriefNotes(args.analysis);
+	return {
+		artifact_type: "completion-startup-plan",
+		schema_version: 1,
+		status: "approved",
+		source: startupPlanSourceForProposal(args.proposal.source),
+		captured_at: capturedAt,
+		mission_anchor: args.missionAnchor ?? args.proposal.mission,
+		goal_text: args.proposal.goalText,
+		task_type: args.analysis.taskType,
+		evaluation_profile: args.analysis.evaluationProfile,
+		scope: [...args.proposal.scope],
+		constraints: [...args.proposal.constraints],
+		acceptance: [...args.proposal.acceptance],
+		risks: [...args.analysis.risks],
+		notes: [...notes],
+		planned_surfaces: extractDelimitedNoteValues(notes, "Implementation surfaces:"),
+		verification_intent: extractDelimitedNoteValues(notes, "Verification commands:"),
+		sequencing_hints: extractSequencingHints(notes),
+	};
+}
+
+export function buildApprovedStartupPlanMarkdown(plan: ApprovedStartupPlan): string {
+	const lines = [
+		"# Approved Startup Plan",
+		"",
+		`Mission anchor: ${plan.mission_anchor}`,
+		`Source: ${plan.source}`,
+		`Captured at: ${plan.captured_at}`,
+	];
+	if (plan.task_type) lines.push(`Task type: ${plan.task_type}`);
+	if (plan.evaluation_profile) lines.push(`Evaluation profile: ${plan.evaluation_profile}`);
+	lines.push("", "## Goal", "", plan.goal_text);
+	if (plan.scope.length > 0) {
+		lines.push("", "## Scope", "");
+		for (const item of plan.scope) lines.push(`- ${item}`);
+	}
+	if (plan.constraints.length > 0) {
+		lines.push("", "## Constraints", "");
+		for (const item of plan.constraints) lines.push(`- ${item}`);
+	}
+	if (plan.acceptance.length > 0) {
+		lines.push("", "## Acceptance", "");
+		for (const item of plan.acceptance) lines.push(`- ${item}`);
+	}
+	if (plan.risks.length > 0) {
+		lines.push("", "## Risks", "");
+		for (const item of plan.risks) lines.push(`- ${item}`);
+	}
+	if (plan.planned_surfaces.length > 0) {
+		lines.push("", "## Planned surfaces", "");
+		for (const item of plan.planned_surfaces) lines.push(`- ${item}`);
+	}
+	if (plan.verification_intent.length > 0) {
+		lines.push("", "## Verification intent", "");
+		for (const item of plan.verification_intent) lines.push(`- ${item}`);
+	}
+	if (plan.sequencing_hints.length > 0) {
+		lines.push("", "## Sequencing hints", "");
+		for (const item of plan.sequencing_hints) lines.push(`- ${item}`);
+	}
+	if (plan.notes.length > 0) {
+		lines.push("", "## Notes", "");
+		for (const item of plan.notes) lines.push(`- ${item}`);
+	}
+	return `${lines.join("\n")}\n`;
 }
 
 export function buildContextProposalCritiqueText(analysis: ContextProposalAnalysis): string {
@@ -147,7 +259,7 @@ export function buildContextProposalCritiqueText(analysis: ContextProposalAnalys
 		for (const item of analysis.suppressedNegatedTopics) lines.push(`- ${item}`);
 	}
 	if (lines.length === 0) {
-		return "No additional operator notes or risks were derived for this startup brief.";
+		return "No additional operator notes or risks were derived for this startup plan.";
 	}
 	return lines.join("\n");
 }
@@ -196,7 +308,7 @@ export function buildContextProposalConfirmationActions(mainChatRerunGuidance: s
 		{
 			id: "start",
 			label: "Start",
-			description: "Accept this startup brief and let /cook write or refocus canonical workflow state.",
+			description: "Accept this startup plan and let /cook write or refocus canonical workflow state.",
 		},
 		{
 			id: "cancel",
@@ -216,8 +328,8 @@ export function buildContextProposalConfirmationLayout(args: {
 }): ContextProposalConfirmationLayout {
 	return {
 		title: args.title,
-		intro: "Review the startup brief (mission, scope, constraints, acceptance, and notes/risks) plus the routing details before /cook writes canonical workflow state. This gate is approval-only: either Start it as-is or Cancel, discuss changes in the main chat, and rerun /cook.",
-		proposalHeading: "Startup brief",
+		intro: "Review the startup plan (mission, scope, constraints, acceptance, and notes/risks) plus the routing details before /cook writes canonical workflow state. This gate is approval-only: either Start it as-is or Cancel, discuss changes in the main chat, and rerun /cook.",
+		proposalHeading: "Startup plan",
 		proposalBody: buildContextProposalDisplayText(args.proposal),
 		critiqueHeading: "Notes and risks",
 		critiqueBody: buildContextProposalCritiqueText(args.analysis),
@@ -417,6 +529,15 @@ type CompletionVerificationEvidenceSummary = {
 	summary: string;
 };
 
+type CompletionStartupPlanSummary = {
+	path: string;
+	status: string;
+	source?: string;
+	plannedSurfaces: string[];
+	verificationIntent: string[];
+	summary: string;
+};
+
 export function buildSystemReminder(args: {
 	missionAnchor?: string;
 	taskType?: string;
@@ -440,11 +561,12 @@ export function buildSystemReminder(args: {
 	implementationSurfacesLine?: string;
 	verificationCommandsLine?: string;
 	evidence: CompletionVerificationEvidenceSummary;
+	startupPlan: CompletionStartupPlanSummary;
 	evaluationRoleReminderText?: string;
 }): string {
 	const lines = [
 		"Completion workflow detected.",
-		"Canonical truth lives in .agent/state.json, .agent/plan.json, .agent/active-slice.json, .agent/slice-history.jsonl, .agent/stop-check-history.jsonl, and .agent/verification-evidence.json.",
+		"Canonical truth lives in .agent/state.json, .agent/startup-plan.json, .agent/plan.json, .agent/active-slice.json, .agent/slice-history.jsonl, .agent/stop-check-history.jsonl, and .agent/verification-evidence.json.",
 		`Mission anchor: ${args.missionAnchor ?? "(unknown)"}`,
 		`Task type: ${args.taskType ?? "(missing)"}`,
 		`Evaluation profile: ${args.evaluationProfile ?? "(missing)"}`,
@@ -461,6 +583,7 @@ export function buildSystemReminder(args: {
 		"Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.",
 		"If canonical state is stale, invalid, ambiguous, or missing, route to completion-regrounder.",
 		"When recovering from compaction, prefer a deterministic restart from canonical files over conversational inference.",
+		`Approved startup plan: ${args.startupPlan.path} (${args.startupPlan.status})`,
 	];
 	if (args.exactActiveContract) {
 		lines.push("Selected/in-progress/committed/done .agent/active-slice.json is the canonical implementation contract.");
@@ -474,6 +597,14 @@ export function buildSystemReminder(args: {
 	else if (args.implementationSurfaces.length > 0) lines.push(`Active implementation surfaces: ${args.implementationSurfaces.join(", ")}`);
 	if (args.verificationCommandsLine) lines.push(args.verificationCommandsLine);
 	else if (args.verificationCommands.length > 0) lines.push(`Active verification commands: ${args.verificationCommands.join(" | ")}`);
+	if (args.startupPlan.source) lines.push(`Approved startup plan source: ${args.startupPlan.source}`);
+	if (args.startupPlan.plannedSurfaces.length > 0) {
+		lines.push(`Approved startup plan surfaces: ${args.startupPlan.plannedSurfaces.join(" | ")}`);
+	}
+	if (args.startupPlan.verificationIntent.length > 0) {
+		lines.push(`Approved startup plan verification intent: ${args.startupPlan.verificationIntent.join(" | ")}`);
+	}
+	lines.push(`Approved startup plan summary: ${args.startupPlan.summary}`);
 	lines.push(`Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})`);
 	if (args.evidence.subjectType) lines.push(`Verification evidence subject: ${args.evidence.subjectType}`);
 	if (args.evidence.outcome) lines.push(`Verification evidence outcome: ${args.evidence.outcome}`);
@@ -502,6 +633,7 @@ export function buildResumeCapsule(args: {
 	activeSliceMatchesPlan: "yes" | "no" | "unknown";
 	activeSliceContractDrift: string;
 	implementerHandoffSnapshot: "present" | "missing_or_unclear";
+	startupPlan: CompletionStartupPlanSummary;
 	evidence: CompletionVerificationEvidenceSummary;
 	activeSlice: {
 		sliceId?: string;
@@ -543,6 +675,14 @@ export function buildResumeCapsule(args: {
 		`active_slice_contract_drift_fields: ${args.activeSliceContractDrift}`,
 		`implementer_handoff_snapshot: ${args.implementerHandoffSnapshot}`,
 		`history_counts: reviewed=${args.history.reviewed}, audited=${args.history.audited}, accepted=${args.history.accepted}, reopened=${args.history.reopened}, judgments=${args.history.judgments}`,
+		"",
+		"startup_plan:",
+		`- path: ${args.startupPlan.path}`,
+		`- status: ${args.startupPlan.status}`,
+		`- source: ${args.startupPlan.source ?? "(missing)"}`,
+		`- planned_surfaces: ${args.startupPlan.plannedSurfaces.length > 0 ? args.startupPlan.plannedSurfaces.join(" | ") : "(none)"}`,
+		`- verification_intent: ${args.startupPlan.verificationIntent.length > 0 ? args.startupPlan.verificationIntent.join(" | ") : "(none)"}`,
+		`- summary: ${args.startupPlan.summary}`,
 		"",
 		"verification_evidence:",
 		`- path: ${args.evidence.path}`,
@@ -591,8 +731,9 @@ export function buildResumeCapsule(args: {
 		"- Treat this block as continuity support derived from canonical .agent state.",
 		"- For selected/in-progress/committed/done slices, .agent/active-slice.json is the canonical implementation contract and the selected plan slice must mirror it exactly.",
 		"- Preserve exact slice_id, goal, contract_ids, acceptance criteria, blocked_on, priority, why_now, implementation surfaces, verification commands, locked notes, must-fix findings, basis_commit, and before-slice counters where still true.",
+		"- .agent/startup-plan.json is the approved workflow plan captured at /cook entry. completion-regrounder must treat it as planning input, then reconcile canonical slices against repo truth instead of copying it blindly into plan.json.",
 		"- When populated, .agent/verification-evidence.json is the durable canonical verification record for the selected slice or current HEAD and should be consumed instead of temp-only artifacts or conversational summaries.",
-		"- After compaction, re-read .agent/state.json, .agent/plan.json, .agent/active-slice.json, .agent/slice-history.jsonl, .agent/stop-check-history.jsonl, and .agent/verification-evidence.json before resuming long-running completion work.",
+		"- After compaction, re-read .agent/state.json, .agent/startup-plan.json, .agent/plan.json, .agent/active-slice.json, .agent/slice-history.jsonl, .agent/stop-check-history.jsonl, and .agent/verification-evidence.json before resuming long-running completion work.",
 		"- Invoke completion-regrounder before continuing when requires_reground is true or unknown.",
 		"- Invoke completion-regrounder before continuing when next_mandatory_role or next_mandatory_action is unknown or ambiguous.",
 		"- Invoke completion-regrounder before continuing when active_slice_matches_plan is no, active_slice_contract_drift_fields is not none, or implementer_handoff_snapshot is missing_or_unclear.",

@@ -5,33 +5,33 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
-echo "[release-check] running control-plane validation, tracked .agent contract coverage, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, legacy cleanup, evaluator calibration, and rubric contract coverage"
+echo "[release-check] running control-plane validation, tracked .agent contract coverage, slice-surface parity, /cook startup-plan parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, legacy cleanup, evaluator calibration, and rubric contract coverage"
 bash .agent/verify_completion_control_plane.sh
 git ls-files --error-unmatch .agent/README.md .agent/mission.md .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null
 
-echo "[release-check] verifying public /cook parity and primary-agent-handoff docs/help"
+echo "[release-check] verifying public /cook parity and startup-plan docs/help"
 python3 - <<'PY'
 from pathlib import Path
 
 checks = {
     "README.md": [
         "You can still implement directly in ordinary chat when you do not need workflow state.",
-        "When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent handoff.",
-        "If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.",
-        "Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent handoff in the same entry when needed.",
+        "When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent startup-plan preview.",
+        "After **Start**, the approved startup plan is written into `.agent/startup-plan.json` / `.agent/startup-plan.md`, and `completion-regrounder` uses it to derive canonical slices from current repo truth.",
+        "Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent startup plan in the same entry when needed.",
     ],
     "CHANGELOG.md": [
-        "changed `/cook` entry again so it now calls a same-entry primary-agent handoff synthesis step when no fresh explicit handoff exists, then proceeds directly to Start / Cancel without requiring a second `/cook` run",
-        "kept `/cook` from guessing startup purely from recent discussion by requiring that same-entry synthesis step to produce explicit primary-agent handoff data before workflow state can start",
+        "rewrote `/cook` startup around an approved startup plan that is captured under `.agent/startup-plan.json` / `.agent/startup-plan.md` after Start instead of leaving startup intent only as advisory intake in `state.json`",
+        "kept `/cook` confirm-first while handing the approved startup plan to `completion-regrounder`, which now derives canonical slices from repo truth instead of treating startup intake like an implementation-ready first-slice contract",
     ],
     "extensions/completion/prompt-surfaces.ts": [
-        '"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context, then show Start/Cancel confirmation without making the user rerun /cook."',
-        '"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should use explicit primary-agent handoff data, whether it already exists or is synthesized in the same /cook entry."',
+        '"If the user explicitly runs /cook, the extension should call a primary-agent startup-plan synthesis step from the current task context, show Start/Cancel confirmation in the same /cook entry, and only write the approved plan into .agent after Start."',
+        '"When /cook starts, the approved startup plan should be written into .agent and then handed to completion-regrounder so canonical slices can be derived from repo truth."',
         '"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role."',
     ],
     "extensions/completion/index.ts": [
-        '"/cook failed closed because the primary-agent handoff step could not prepare a concrete startup handoff from the current task context. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook."',
-        'description: "/cook workflow: start or replace workflow only from an explicit primary-agent handoff, or resume the current workflow from canonical state"',
+        '"/cook failed closed because the startup-plan step could not prepare a concrete workflow startup plan from the current task context. Clarify the mission, scope, acceptance, or verification intent in the main chat, then rerun /cook."',
+        'description: "/cook workflow: capture the approved startup plan into .agent, let completion-regrounder split canonical slices, or resume the current workflow from canonical state"',
         '"Do not call completion_role from ordinary chat; it is reserved for explicit /cook workflow driver turns."',
     ],
     "extensions/completion/policy-guards.ts": [

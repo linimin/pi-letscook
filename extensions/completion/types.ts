@@ -18,6 +18,8 @@ export type CompletionFiles = {
 	statePath: string;
 	planPath: string;
 	activePath: string;
+	startupPlanPath: string;
+	startupPlanMarkdownPath: string;
 	sliceHistoryPath: string;
 	stopHistoryPath: string;
 	verificationEvidencePath: string;
@@ -30,6 +32,7 @@ export type CompletionStateSnapshot = {
 	state?: JsonRecord;
 	plan?: JsonRecord;
 	active?: JsonRecord;
+	startupPlan?: JsonRecord;
 	verificationEvidence?: JsonRecord;
 	activeSlice?: JsonRecord;
 };

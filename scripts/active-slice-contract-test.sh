@@ -157,7 +157,7 @@ capsule = {
         "Keep scripts/active-slice-contract-test.sh aligned with the packaged startup contract."
     ],
     "risks": [
-        "Active-slice fixture bootstrap must stay anchored to the fresh explicit handoff."
+        "Active-slice fixture bootstrap must stay anchored to the fresh explicit startup-plan preview."
     ],
     "notes": [
         "This handoff exists only to scaffold canonical files before the fixture rewrites them for contract parity coverage."

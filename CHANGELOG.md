@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.67
+
+### Changed
+
+- rewrote `/cook` startup around an approved startup plan that is captured under `.agent/startup-plan.json` / `.agent/startup-plan.md` after Start instead of leaving startup intent only as advisory intake in `state.json`
+- kept `/cook` confirm-first while handing the approved startup plan to `completion-regrounder`, which now derives canonical slices from repo truth instead of treating startup intake like an implementation-ready first-slice contract
+- relaxed primary-agent `/cook` preview requirements so explicit startup plans may carry optional sequencing hints (`first_slice_goal`, `implementation_surfaces`, `verification_commands`) without requiring them before workflow startup can begin
+- updated workflow reminders, recovery capsules, regrounder/bootstrapper instructions, and public docs so canonical startup-plan persistence and regrounder-owned slice derivation stay truthful
+
 ## 0.1.66
 
 ### Changed

@@ -34,8 +34,9 @@ Then run `/reload` in Pi.
 2. Run `/reload` in Pi.
 3. In the main chat, either implement directly with the agent or refine the concrete repo change you want.
 4. When you want workflow mode, run `/cook`.
-5. Review the startup brief and choose **Start** or **Cancel**.
-6. Later, run `/cook` again to resume from canonical state or confirm a replacement or next-round handoff.
+5. Review the startup plan and choose **Start** or **Cancel**.
+6. After **Start**, `/cook` records the approved startup plan under `.agent/` and hands the workflow to `completion-regrounder` to split canonical slices.
+7. Later, run `/cook` again to resume from canonical state or confirm a replacement or next-round startup plan.
 
 ```text
 /cook
@@ -52,16 +53,15 @@ Then run `/reload` in Pi.
 
 ## What `/cook` expects
 
-- enough current task context for a primary-agent handoff synthesis step to produce a concrete workflow startup handoff
-- a mission and first slice concrete enough for the primary-agent handoff step to author a truthful implementation-startable handoff
-- acceptance and verification intent that can support a truthful first workflow round
+- enough current task context for a primary-agent startup-plan synthesis step to produce a concrete workflow startup plan
+- a mission, scope, acceptance, and verification intent concrete enough for `completion-regrounder` to derive truthful slices after startup
 - README/CHANGELOG updates still count as concrete repo changes
-- assistant-produced summaries and plan/spec/design-doc/proposal-only artifacts still do not count unless the primary-agent handoff step turns them into a concrete `cook_handoff` capsule
-- `/cook` first prefers a fresh explicit `cook_handoff` capsule when one already exists, but otherwise calls the primary-agent handoff synthesis step in the same `/cook` entry
+- assistant-produced summaries and plan/spec/design-doc/proposal-only artifacts still do not count unless the primary-agent startup-plan step turns them into concrete startup intake for `/cook`
+- `/cook` first prefers a fresh explicit `cook_handoff` preview when one already exists, but otherwise calls the primary-agent startup-plan synthesis step in the same `/cook` entry
 
-If the primary-agent handoff step still cannot prepare a concrete handoff, `/cook` fails closed, leaves canonical `.agent/**` state unchanged, and tells you to refine the mission, first slice, or verification intent in the main chat before rerunning `/cook`.
+If the startup-plan step still cannot prepare a concrete startup plan, `/cook` fails closed, leaves canonical `.agent/**` state unchanged, and tells you to refine the mission, scope, acceptance, or verification intent in the main chat before rerunning `/cook`.
 
-If a fresh explicit handoff exists but is still workflow-worthy rather than implementation-startable, `/cook` also fails closed instead of silently treating that capsule as planning support or canonical workflow state.
+If a fresh explicit preview exists but is still workflow-worthy rather than concrete enough to seed workflow planning, `/cook` also fails closed instead of silently treating that capsule as canonical workflow state.
 
 If you pass inline arguments to `/cook`, it also fails closed and tells you to move that intent into the main chat before rerunning bare `/cook`.
 
@@ -69,16 +69,17 @@ If you pass inline arguments to `/cook`, it also fails closed and tells you to m
 
 Only explicit `/cook` enters workflow mode. Ordinary prompts stay in the main chat and go straight to the primary agent.
 
-Ordinary chat can still directly implement repo changes. `/cook` is for the cases where you want workflow control rather than just implementation help, and the primary agent should prepare the handoff before you run it.
+Ordinary chat can still directly implement repo changes. `/cook` is for the cases where you want workflow control rather than just implementation help, and the primary agent should prepare the startup plan before workflow begins.
 
-When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent handoff. If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
+When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent startup-plan preview. If one is missing, it calls a same-entry primary-agent startup-plan synthesis step from the current task context, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
 
-Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent handoff in the same entry when needed.
+Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent startup plan in the same entry when needed.
 
 Important behavior:
 - `/cook` is an optional workflow boundary and manual entry point
-- startup and next-round entry stay confirm-first, using explicit primary-agent handoff data when present and otherwise running the primary-agent handoff synthesis step in the same `/cook` entry
-- active workflows resume from canonical `.agent/**` state unless a concrete replacement handoff is available or synthesized in the same `/cook` entry
+- startup and next-round entry stay confirm-first, using explicit primary-agent startup-plan data when present and otherwise running the primary-agent startup-plan synthesis step in the same `/cook` entry
+- after **Start**, `/cook` records the approved startup plan under `.agent/startup-plan.json` / `.agent/startup-plan.md`, then `completion-regrounder` derives canonical slices from repo truth
+- active workflows resume from canonical `.agent/**` state unless a concrete replacement startup plan is available or synthesized in the same `/cook` entry
 - explicit slash commands other than `/cook` continue normally in the main chat
 - ordinary main-chat discussion may clarify, propose, or directly implement repo changes without entering workflow mode
 
@@ -94,13 +95,13 @@ I want to add login redirect handling and tests.
 
 ## What happens when you run `/cook`
 
-`/cook` first checks for a fresh explicit primary-agent handoff capsule. New-workflow entry and done-workflow next-round entry use that handoff when it already exists; otherwise `/cook` calls a same-entry primary-agent handoff synthesis step, then immediately continues to Start / Cancel if the generated handoff is concrete enough. Active workflows still resume canonical state by default unless a concrete replacement handoff is available or synthesized in the same `/cook` entry. None of this prevents ordinary-chat implementation when you choose not to enter workflow mode.
+`/cook` first checks for a fresh explicit primary-agent startup-plan preview. New-workflow entry and done-workflow next-round entry use that plan when it already exists; otherwise `/cook` calls a same-entry primary-agent startup-plan synthesis step, then immediately continues to Start / Cancel if the generated plan is concrete enough. After **Start**, the approved startup plan is written into `.agent/startup-plan.json` / `.agent/startup-plan.md`, and `completion-regrounder` uses it to derive canonical slices from current repo truth. Active workflows still resume canonical state by default unless a concrete replacement startup plan is available or synthesized in the same `/cook` entry. None of this prevents ordinary-chat implementation when you choose not to enter workflow mode.
 
 | Repo state | What you'll see |
 |---|---|
-| No workflow yet | `/cook` consumes a fresh explicit primary-agent handoff when one already exists, or synthesizes one from the primary-agent view in the same entry, then asks you to choose **Start** or **Cancel**. Stale, planning-only, or non-startable handoffs still fail closed. |
-| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If a concrete replacement handoff exists already or is synthesized in the same `/cook` entry and points to a different mission, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous or missing replacement handoff stays conservative. |
-| Previous workflow is `done` | `/cook` can start the next implementation round from a fresh explicit primary-agent handoff or from the same-entry primary-agent handoff synthesis step behind **Start** or **Cancel**. Weak or planning-only next-round handoffs still fail closed. |
+| No workflow yet | `/cook` consumes a fresh explicit primary-agent startup-plan preview when one already exists, or synthesizes one from the primary-agent view in the same entry, then asks you to choose **Start** or **Cancel**. After **Start**, the approved startup plan is persisted under `.agent/` and `completion-regrounder` derives canonical slices. Stale, planning-only, or non-startable startup plans still fail closed. |
+| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If a concrete replacement startup plan exists already or is synthesized in the same `/cook` entry and points to a different mission, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous or missing replacement startup plans stay conservative. |
+| Previous workflow is `done` | `/cook` can start the next implementation round from a fresh explicit primary-agent startup plan or from the same-entry primary-agent startup-plan synthesis step behind **Start** or **Cancel**. Weak or planning-only next-round startup plans still fail closed. |
 
 ## Confirmation and fail-closed behavior
 
@@ -114,9 +115,9 @@ I want to add login redirect handling and tests.
 
 When you accept startup or refocus, `/cook` persists the chosen workflow state in canonical `.agent/**` files before the re-ground round begins.
 
-The confirmed startup brief is also preserved there as advisory intake for later re-grounding. It does not replace `.agent/plan.json` or `.agent/active-slice.json`, which remain under regrounder authority.
+The confirmed startup plan is preserved under `.agent/startup-plan.json` / `.agent/startup-plan.md` and summarized in `state.json` as advisory intake for later re-grounding. It does not replace `.agent/plan.json` or `.agent/active-slice.json`, which remain under regrounder authority.
 
-The pre-`/cook` handoff capsule itself is not canonical workflow state. It is only startup intake for `/cook`.
+The pre-`/cook` preview capsule itself is not canonical workflow state. It is only startup intake for `/cook`.
 
 ## Observability
 
@@ -202,6 +203,8 @@ This package stores canonical workflow state under:
   verify_completion_stop.sh
   verify_completion_control_plane.sh
   state.json
+  startup-plan.json
+  startup-plan.md
   plan.json
   active-slice.json
   slice-history.jsonl
@@ -228,6 +231,8 @@ Tracked repo-contract files:
 Ignored execution-state files:
 
 - `.agent/state.json`
+- `.agent/startup-plan.json`
+- `.agent/startup-plan.md`
 - `.agent/plan.json`
 - `.agent/active-slice.json`
 - `.agent/slice-history.jsonl`
@@ -239,7 +244,7 @@ Ignored execution-state files:
 In short:
 
 - tracked `.agent` files define the repo-level workflow contract
-- ignored `.agent` files are the local control-plane state for the current run
+- ignored `.agent` files are the local control-plane state for the current run, including the approved startup plan captured at `/cook`
 
 ## Package layout
 

@@ -114,10 +114,10 @@ capsule = {
     ],
     "risks": [],
     "notes": [
-        "Use explicit primary-agent handoff startup for the refocus regression fixture."
+        "Use an explicit primary-agent startup-plan preview for the refocus regression fixture."
     ],
     "handoff_kind": "implementation_workflow_handoff",
-    "first_slice_goal": "Bootstrap the refocus regression fixture from a fresh explicit handoff.",
+    "first_slice_goal": "Bootstrap the refocus regression fixture from a fresh explicit startup-plan preview.",
     "first_slice_non_goals": [],
     "implementation_surfaces": [
         "scripts/refocus-test.sh"
@@ -128,7 +128,7 @@ capsule = {
     "why_this_slice_first": "The refocus regression fixture needs canonical state before active-workflow routing can be exercised.",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
-    "why_cook_now": "The active-workflow refocus regression needs a fresh explicit startup boundary."
+    "why_cook_now": "The active-workflow refocus regression needs a fresh explicit startup-plan preview."
 }
 messages = [
     {"role": "user", "content": "Prepare the refocus regression fixture and tell me when it is ready for /cook."},
@@ -215,7 +215,7 @@ tracked = [
 current_state = json.loads(before['state.json'])
 assert current_state['mission_anchor'] == initial_mission, 'active /cook inline-args rejection should start from the current mission anchor'
 assert not routing.exists(), 'active /cook inline-args rejection should not run active-workflow routing'
-assert not proposal.exists(), 'active /cook inline-args rejection should not open final startup-brief confirmation'
+assert not proposal.exists(), 'active /cook inline-args rejection should not open final startup-plan confirmation'
 assert not chooser.exists(), 'active /cook inline-args rejection should not open the existing-workflow chooser'
 assert '/cook no longer accepts inline arguments.' in output, 'active /cook inline-args rejection should explain the bare-only entry contract'
 after = {path.name: path.read_text() for path in tracked}
@@ -243,7 +243,7 @@ capsule = {
     ],
     "risks": [],
     "notes": [
-        "Use a fresh explicit primary-agent handoff for the active-workflow replacement."
+        "Use a fresh explicit primary-agent startup-plan preview for the active-workflow replacement."
     ],
     "handoff_kind": "implementation_workflow_handoff",
     "first_slice_goal": "Replace the initial smoke-test workflow with the widget mission.",
@@ -254,14 +254,14 @@ capsule = {
     "verification_commands": [
         "npm run refocus-test"
     ],
-    "why_this_slice_first": "The fresh explicit handoff is the only supported replacement entry while a workflow is active.",
+    "why_this_slice_first": "The fresh explicit startup-plan preview is the only supported replacement entry while a workflow is active.",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "A different active workflow is ready and explicitly handed off by the primary agent."
 }
 messages = [
     {"role": "user", "content": "The smoke-test workflow is active, but a different replacement workflow may now be ready."},
-    {"role": "assistant", "content": "Use this fresh explicit handoff if you want /cook to replace the active workflow.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+    {"role": "assistant", "content": "Use this fresh explicit startup-plan preview if you want /cook to replace the active workflow.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
 ]
 print(json.dumps(messages, ensure_ascii=False))
 PY
@@ -296,7 +296,7 @@ assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json eva
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after refocus'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after refocus'
 assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after refocus'
-assert state['advisory_startup_brief']['mission'] == new_anchor, 'refocus should preserve the confirmed startup brief as advisory intake'
+assert state['advisory_startup_brief']['mission'] == new_anchor, 'refocus should preserve the confirmed startup plan as advisory intake'
 assert plan['mission_anchor'] == new_anchor, 'plan.json mission_anchor mismatch after refocus'
 assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after refocus'
 assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after refocus'
@@ -312,7 +312,7 @@ assert active['status'] == 'idle', 'active-slice.json status should reset to idl
 assert routing['mode'] == 'bare', 'supported refocus should use bare active-workflow routing mode'
 assert 'explicitGoal' not in routing, 'supported bare refocus should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'supported bare refocus should not expose removed explicit-goal shim fields'
-assert routing['action'] == 'refocus', 'supported bare /cook should classify as refocus when a fresh explicit handoff proposes a different mission'
+assert routing['action'] == 'refocus', 'supported bare /cook should classify as refocus when a fresh explicit startup-plan preview proposes a different mission'
 assert routing['reason'] == 'fresh_explicit_handoff', 'supported bare /cook should record the explicit-handoff replacement reason'
 assert routing['proposedMissionAnchor'] == new_anchor, 'explicit handoff routing snapshot should expose the replacement mission anchor'
 assert routing['proposalSource'] == 'handoff_capsule', 'explicit handoff routing snapshot should preserve the handoff source'
@@ -331,7 +331,7 @@ if [[ "$INITIAL_MISSION" == "$UPDATED_MISSION" ]]; then
   exit 1
 fi
 
-# Fresh explicit handoff replacements must still reach the chooser and final Start/Cancel gate while the
+# Fresh explicit startup-plan preview replacements must still reach the chooser and final Start/Cancel gate while the
 # workflow is active.
 BARE_REFOCUS_MISSION='Exercise explicit active-workflow replacement coverage.'
 BARE_REFOCUS_MESSAGES="$(python3 - <<'PY'
@@ -354,7 +354,7 @@ capsule = {
     ],
     "risks": [],
     "notes": [
-        "This replacement should come only from the fresh explicit handoff, not recent discussion inference."
+        "This replacement should come only from the fresh explicit startup-plan preview, not recent discussion inference."
     ],
     "handoff_kind": "implementation_workflow_handoff",
     "first_slice_goal": "Exercise the active-workflow explicit-handoff replacement path.",
@@ -365,14 +365,14 @@ capsule = {
     "verification_commands": [
         "npm run refocus-test"
     ],
-    "why_this_slice_first": "The active workflow should only replace from a fresh explicit handoff.",
+    "why_this_slice_first": "The active workflow should only replace from a fresh explicit startup-plan preview.",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "The primary agent explicitly handed off a replacement workflow while the current one is active."
 }
 messages = [
     {"role": "user", "content": "The current workflow is active, but there is a fresh explicit replacement handoff ready."},
-    {"role": "assistant", "content": "Use this fresh explicit handoff if you want /cook to replace the active workflow.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+    {"role": "assistant", "content": "Use this fresh explicit startup-plan preview if you want /cook to replace the active workflow.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
 ]
 print(json.dumps(messages, ensure_ascii=False))
 PY
@@ -417,7 +417,7 @@ assert routing['proposedMissionAnchor'] == replacement_mission, 'explicit-handof
 assert routing['proposalSource'] == 'handoff_capsule', 'explicit-handoff routing should preserve the handoff source'
 assert chooser['title'].startswith('Existing completion workflow found'), 'bare chooser snapshot should describe the existing-workflow prompt'
 assert chooser['choices'][0].startswith('Continue current workflow'), 'bare chooser should keep the continue option'
-assert chooser['choices'][1].startswith('Start new workflow from explicit primary-agent handoff'), 'bare chooser should offer the explicit-handoff replacement option'
+assert chooser['choices'][1].startswith('Start new workflow from explicit primary-agent startup plan'), 'bare chooser should offer the explicit-startup-plan replacement option'
 assert 'Start/Cancel confirmation' in chooser['choices'][1], 'bare chooser should mention the approval-only replacement confirmation'
 assert chooser['choices'][2].startswith('Cancel'), 'bare chooser should keep the cancel option'
 assert 'Discuss changes in the main chat and rerun /cook.' in output, 'bare chooser cancel should redirect users back to the main chat and rerun /cook'
@@ -504,7 +504,7 @@ assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json eva
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after bare refocus'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after bare refocus'
 assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after bare refocus'
-assert state['advisory_startup_brief']['mission'] == new_anchor, 'bare refocus should preserve the confirmed startup brief as advisory intake'
+assert state['advisory_startup_brief']['mission'] == new_anchor, 'bare refocus should preserve the confirmed startup plan as advisory intake'
 assert plan['mission_anchor'] == new_anchor, 'plan.json mission_anchor mismatch after bare refocus'
 assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after bare refocus'
 assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after bare refocus'
@@ -540,7 +540,7 @@ capsule = {
         "Do not rewrite canonical state before the final Start confirmation."
     ],
     "acceptance": [
-        "Replace the active workflow using the synthesized primary-agent handoff.",
+        "Replace the active workflow using the synthesized primary-agent startup plan.",
         "Keep deterministic coverage for same-entry active replacement."
     ],
     "risks": [],
@@ -556,7 +556,7 @@ capsule = {
     "verification_commands": [
         "npm run refocus-test"
     ],
-    "why_this_slice_first": "Active replacement should work when the primary-agent handoff is synthesized in the same /cook entry.",
+    "why_this_slice_first": "Active replacement should work when the primary-agent startup plan is synthesized in the same /cook entry.",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "The user explicitly chose workflow mode and the replacement handoff can be synthesized immediately."

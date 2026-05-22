@@ -1,6 +1,6 @@
 ---
 name: cook-handoff-boundary
-description: Ordinary-chat contract for treating `/cook` as an optional workflow mode while requiring `/cook` to use primary-agent-authored handoff data instead of guessing from recent discussion.
+description: Ordinary-chat contract for treating `/cook` as an optional workflow mode while requiring `/cook` to capture a primary-agent-authored startup plan instead of guessing from recent discussion.
 ---
 
 # /cook Handoff Boundary
@@ -58,20 +58,20 @@ But even in those cases:
 
 If the user explicitly runs or clearly chooses `/cook` workflow mode, the system behavior should be:
 
-1. check for a fresh explicit primary-agent `cook_handoff`
-2. if none exists, call a primary-agent handoff synthesis step immediately from the current task context
-3. use that handoff to show Start / Cancel confirmation in the same `/cook` entry
-4. write canonical workflow state only after Start
+1. check for a fresh explicit primary-agent `cook_handoff` preview when one already exists
+2. if none exists, call a primary-agent startup-plan synthesis step immediately from the current task context
+3. use that startup plan to show Start / Cancel confirmation in the same `/cook` entry
+4. after Start, write the approved startup plan into `.agent/startup-plan.json` / `.agent/startup-plan.md`, then let `completion-regrounder` derive canonical slices from repo truth
 
 That means:
 
-- `/cook` must not infer or guess the startup slice from recent discussion alone
-- `/cook` should use primary-agent-authored handoff data
-- `/cook` should not require a manual rerun just to consume a handoff it can synthesize immediately from the primary-agent view
+- `/cook` must not infer or guess canonical slices from recent discussion alone
+- `/cook` should use primary-agent-authored startup-plan data
+- `/cook` should not require a manual rerun just to consume a startup plan it can synthesize immediately from the primary-agent view
 
 ## Optional Preview Behavior
 
-Only if the user explicitly asks for a preview startup brief or handoff capsule in ordinary chat may the primary agent provide one.
+Only if the user explicitly asks for a preview startup plan or handoff capsule in ordinary chat may the primary agent provide one.
 
 Optional preview capsule format:
 
@@ -82,7 +82,7 @@ Optional preview capsule format:
   "source": "primary_agent",
   "captured_at": "<ISO-8601 timestamp>",
   "source_turn_id": "<current assistant turn id>",
-  "mission": "<startable implementation mission>",
+  "mission": "<approved workflow mission>",
   "scope": ["..."],
   "constraints": ["..."],
   "non_goals": ["..."],
@@ -105,12 +105,12 @@ Optional preview capsule format:
 Notes:
 
 - `constraints` may be replaced or supplemented by `non_goals` when clearer.
-- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are required for an implementation-ready handoff.
+- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are optional sequencing hints. They help `completion-regrounder` split slices later when they are already obvious, but the approved startup plan may still be startable without them.
 - Any capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
 
 Suggested wording:
 
-> We can continue directly in ordinary chat if you want. If you prefer workflow mode, run `/cook` and it should use a primary-agent handoff for Start / Cancel confirmation rather than guessing from recent discussion.
+> We can continue directly in ordinary chat if you want. If you prefer workflow mode, run `/cook` and it should capture an approved startup plan for Start / Cancel confirmation, then hand that plan to `completion-regrounder` for slice derivation.
 
 ## Forbidden Behaviors
 
@@ -125,13 +125,13 @@ Before the user explicitly runs `/cook`, the primary agent must not:
 
 When the user does explicitly choose `/cook`, the system must not:
 
-- let `/cook` invent the startup mission from recent discussion alone
-- let `/cook` replace missing handoff data with generic transcript guessing
-- require a second `/cook` invocation when same-entry primary-agent handoff synthesis is possible
+- let `/cook` invent canonical slices from recent discussion alone
+- let `/cook` replace missing startup-plan data with generic transcript guessing
+- require a second `/cook` invocation when same-entry primary-agent startup-plan synthesis is possible
 
 ## Relationship To `completion-protocol`
 
-This skill is only about pre-`/cook` ordinary-chat behavior and `/cook` handoff expectations.
+This skill is only about pre-`/cook` ordinary-chat behavior and `/cook` startup-plan expectations.
 
 After the user explicitly enters `/cook`, the separate `completion-protocol` skill governs:
 

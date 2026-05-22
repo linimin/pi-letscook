@@ -16,7 +16,7 @@ import {
 	loadCompletionSnapshot,
 	writeJsonFile,
 } from "./state-store";
-import { buildAdvisoryStartupBrief } from "./prompt-surfaces";
+import { buildAdvisoryStartupBrief, buildApprovedStartupPlan, buildApprovedStartupPlanMarkdown } from "./prompt-surfaces";
 import type { CompletionStateSnapshot } from "./types";
 
 type ContextProposalAnalysis = {
@@ -137,7 +137,12 @@ export type CompletionDriverDeps = {
 	scaffoldCompletionFiles: (
 		root: string,
 		missionAnchor: string,
-		options?: { analysis?: ContextProposalAnalysis; continuationReason?: string; advisoryStartupBrief?: Record<string, unknown> },
+		options?: {
+			analysis?: ContextProposalAnalysis;
+			continuationReason?: string;
+			advisoryStartupBrief?: Record<string, unknown>;
+			approvedStartupPlan?: Record<string, unknown>;
+		},
 	) => Promise<{ root: string; created: string[] }>;
 	maybeWriteActiveWorkflowRoutingSnapshot: (assessment: ActiveWorkflowProposalAssessment) => void;
 	missionAnchorsLikelyEquivalent: (left: string, right: string) => boolean;
@@ -479,6 +484,7 @@ async function refocusCompletionMission(
 	analysis: ContextProposalAnalysis | undefined,
 	deps: CompletionDriverDeps,
 	advisoryStartupBrief?: Record<string, unknown>,
+	approvedStartupPlan?: Record<string, unknown>,
 ): Promise<void> {
 	const requiredStopJudges = asNumber(snapshot.profile?.required_stop_judges) ?? 3;
 	const root = snapshot.files.root;
@@ -506,10 +512,32 @@ async function refocusCompletionMission(
 		plan_basis: "user_refocus",
 	};
 	const nextActive = defaultActiveSlice(missionAnchor, { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile });
+	const nextStartupPlan =
+		approvedStartupPlan ?? {
+			artifact_type: "completion-startup-plan",
+			schema_version: 1,
+			status: "approved",
+			source: "recent_discussion",
+			captured_at: null,
+			mission_anchor: missionAnchor,
+			goal_text: rawGoal,
+			task_type: routing.taskType,
+			evaluation_profile: routing.evaluationProfile,
+			scope: [],
+			constraints: [],
+			acceptance: [],
+			risks: [],
+			notes: ["No approved startup plan summary is available for this refocused workflow."],
+			planned_surfaces: [],
+			verification_intent: [],
+			sequencing_hints: [],
+		};
 	await Promise.all([
 		fsp.writeFile(path.join(snapshot.files.agentDir, "mission.md"), buildMission(path.basename(root), missionAnchor), "utf8"),
 		writeJsonFile(snapshot.files.profilePath, nextProfile),
 		writeJsonFile(snapshot.files.statePath, nextState),
+		writeJsonFile(snapshot.files.startupPlanPath, nextStartupPlan),
+		fsp.writeFile(snapshot.files.startupPlanMarkdownPath, buildApprovedStartupPlanMarkdown(nextStartupPlan as any), "utf8"),
 		writeJsonFile(snapshot.files.planPath, nextPlan),
 		writeJsonFile(snapshot.files.activePath, nextActive),
 		writeJsonFile(snapshot.files.verificationEvidencePath, defaultVerificationEvidence()),
@@ -547,7 +575,7 @@ export async function runCookEntry(
 			return;
 		}
 		const decision = await deps.confirmContextProposal(ctx, proposal, {
-			title: "Start a completion workflow from this startup brief?",
+			title: "Start a completion workflow from this startup plan?",
 		});
 		if (!decision) {
 			deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled recent-discussion workflow proposal", deps), "info");
@@ -557,6 +585,12 @@ export async function runCookEntry(
 		kickoffMissionAnchor = decision.missionAnchor;
 		kickoffAnalysis = decision.analysis;
 		const startupRouting = deps.finalizeContextProposalAnalysis(kickoffAnalysis, [goal ?? kickoffMissionAnchor ?? projectName]);
+		const advisoryStartupBrief = buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis });
+		const approvedStartupPlan = buildApprovedStartupPlan({
+			proposal,
+			analysis: decision.analysis,
+			missionAnchor: kickoffMissionAnchor ?? projectName,
+		});
 		const created = await deps.scaffoldCompletionFiles(root, kickoffMissionAnchor ?? projectName, {
 			analysis: startupRouting,
 			continuationReason: deps.buildContextProposalContinuationReason(
@@ -564,11 +598,12 @@ export async function runCookEntry(
 				goal ?? kickoffMissionAnchor ?? projectName,
 				startupRouting,
 			),
-			advisoryStartupBrief: buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis }),
+			advisoryStartupBrief,
+			approvedStartupPlan,
 		});
 		deps.emitCommandText(
 			ctx,
-			`Initialized completion control plane in ${created.root}${created.created.length > 0 ? ` (${created.created.length} files created)` : ""}`,
+			`Initialized completion control plane in ${created.root}${created.created.length > 0 ? ` (${created.created.length} files created)` : ""} and recorded the approved startup plan under .agent/startup-plan.json`,
 			"info",
 		);
 		snapshot = await loadCompletionSnapshot(root);
@@ -592,7 +627,7 @@ export async function runCookEntry(
 				return;
 			}
 			const decision = await deps.confirmContextProposal(ctx, proposal, {
-				title: "The previous completion workflow is done. Start the next workflow round from this startup brief?",
+				title: "The previous completion workflow is done. Start the next workflow round from this startup plan?",
 			});
 			if (!decision) {
 				deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled next workflow round proposal", deps), "info");
@@ -601,16 +636,23 @@ export async function runCookEntry(
 			goal = decision.goalText;
 			kickoffIntent = "refocus";
 			kickoffMissionAnchor = decision.missionAnchor;
+			const advisoryStartupBrief = buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis });
+			const approvedStartupPlan = buildApprovedStartupPlan({
+				proposal,
+				analysis: decision.analysis,
+				missionAnchor: decision.missionAnchor,
+			});
 			await refocusCompletionMission(
 				snapshot,
 				decision.missionAnchor,
 				decision.goalText,
 				decision.analysis,
 				deps,
-				buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis }),
+				advisoryStartupBrief,
+				approvedStartupPlan,
 			);
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
-			deps.emitCommandText(ctx, `Started a new completion workflow round from explicit primary-agent handoff: ${decision.missionAnchor}`, "info");
+			deps.emitCommandText(ctx, `Started a new completion workflow round and recorded the approved startup plan: ${decision.missionAnchor}`, "info");
 		} else {
 			const assessment = await assessActiveWorkflowProposalRouting(ctx, snapshot, deps);
 			if (assessment.action === "blocked") {
@@ -624,16 +666,16 @@ export async function runCookEntry(
 			const explicitReplacement = assessment.reason === "fresh_explicit_handoff";
 			const decision = await confirmExistingWorkflowProposal(ctx, snapshot, assessment.proposal, deps, {
 				intro: explicitReplacement
-					? "A fresh explicit primary-agent handoff proposes replacing the current workflow. Choose how /cook should proceed:"
+					? "A fresh explicit primary-agent startup plan proposes replacing the current workflow. Choose how /cook should proceed:"
 					: "A replacement workflow is ready. Choose how /cook should proceed:",
 				proposedMissionLabel: explicitReplacement
-					? "Proposed mission from explicit primary-agent handoff"
+					? "Proposed mission from explicit primary-agent startup plan"
 					: "Proposed mission",
 				refocusChoiceLabel: explicitReplacement
-					? "Start new workflow from explicit primary-agent handoff\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+					? "Start new workflow from explicit primary-agent startup plan\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: "Start new workflow\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state.",
 				alternateChoiceLabel: explicitReplacement
-					? "Start alternate workflow from explicit primary-agent handoff\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+					? "Start alternate workflow from explicit primary-agent startup plan\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: undefined,
 				comparison: "strict",
 			});
@@ -648,8 +690,8 @@ export async function runCookEntry(
 			const selectedProposal = decision.proposal;
 			const proposalDecision = await deps.confirmContextProposal(ctx, selectedProposal, {
 				title: assessment.reason === "fresh_explicit_handoff"
-					? "Start the replacement workflow from this explicit startup brief?"
-					: "Start the replacement workflow from this startup brief?",
+					? "Start the replacement workflow from this explicit startup plan?"
+					: "Start the replacement workflow from this startup plan?",
 			});
 			if (!proposalDecision) {
 				deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled replacement workflow proposal", deps), "info");
@@ -658,20 +700,27 @@ export async function runCookEntry(
 			goal = proposalDecision.goalText;
 			kickoffIntent = "refocus";
 			kickoffMissionAnchor = proposalDecision.missionAnchor;
+			const advisoryStartupBrief = buildAdvisoryStartupBrief({ proposal: selectedProposal, analysis: proposalDecision.analysis });
+			const approvedStartupPlan = buildApprovedStartupPlan({
+				proposal: selectedProposal,
+				analysis: proposalDecision.analysis,
+				missionAnchor: proposalDecision.missionAnchor,
+			});
 			await refocusCompletionMission(
 				snapshot,
 				proposalDecision.missionAnchor,
 				proposalDecision.goalText,
 				proposalDecision.analysis,
 				deps,
-				buildAdvisoryStartupBrief({ proposal: selectedProposal, analysis: proposalDecision.analysis }),
+				advisoryStartupBrief,
+				approvedStartupPlan,
 			);
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
 			deps.emitCommandText(
 				ctx,
 				assessment.reason === "fresh_explicit_handoff"
-					? `Refocused completion mission from explicit primary-agent handoff to: ${proposalDecision.missionAnchor}`
-					: `Refocused completion mission to: ${proposalDecision.missionAnchor}`,
+					? `Refocused completion mission from explicit primary-agent startup plan and rewrote the approved startup plan to: ${proposalDecision.missionAnchor}`
+					: `Refocused completion mission and rewrote the approved startup plan to: ${proposalDecision.missionAnchor}`,
 				"info",
 			);
 		}

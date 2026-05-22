@@ -82,15 +82,23 @@ function trackedDiffFiles(fromCommit, toCommit) {
 
 const profile = readJson('.agent/profile.json');
 const state = readJson('.agent/state.json');
+const startupPlan = readJson('.agent/startup-plan.json');
 const plan = readJson('.agent/plan.json');
 const active = readJson('.agent/active-slice.json');
 const evidence = readJson('.agent/verification-evidence.json');
+let startupPlanMarkdown = '';
+try {
+  startupPlanMarkdown = fs.readFileSync('.agent/startup-plan.md', 'utf8');
+} catch (error) {
+  fail('.agent/startup-plan.md must be present and readable: ' + error.message);
+}
 
 ensureTrackedContractFiles();
 
 for (const [file, record] of [
   ['.agent/profile.json', profile],
   ['.agent/state.json', state],
+  ['.agent/startup-plan.json', startupPlan],
   ['.agent/plan.json', plan],
   ['.agent/active-slice.json', active],
 ]) {
@@ -101,11 +109,37 @@ for (const [file, record] of [
 const taskType = asString(profile.task_type);
 const evaluationProfile = asString(profile.evaluation_profile);
 if (asString(state.task_type) !== taskType) fail('.agent/state.json task_type must match .agent/profile.json task_type');
+if (asString(startupPlan.task_type) !== taskType) fail('.agent/startup-plan.json task_type must match .agent/profile.json task_type');
 if (asString(plan.task_type) !== taskType) fail('.agent/plan.json task_type must match .agent/profile.json task_type');
 if (asString(active.task_type) !== taskType) fail('.agent/active-slice.json task_type must match .agent/profile.json task_type');
 if (asString(state.evaluation_profile) !== evaluationProfile) fail('.agent/state.json evaluation_profile must match .agent/profile.json evaluation_profile');
+if (asString(startupPlan.evaluation_profile) !== evaluationProfile) fail('.agent/startup-plan.json evaluation_profile must match .agent/profile.json evaluation_profile');
 if (asString(plan.evaluation_profile) !== evaluationProfile) fail('.agent/plan.json evaluation_profile must match .agent/profile.json evaluation_profile');
 if (asString(active.evaluation_profile) !== evaluationProfile) fail('.agent/active-slice.json evaluation_profile must match .agent/profile.json evaluation_profile');
+
+if (asString(startupPlan.artifact_type) !== 'completion-startup-plan') {
+  fail('.agent/startup-plan.json artifact_type must be completion-startup-plan');
+}
+if (asString(startupPlan.status) !== 'approved') {
+  fail('.agent/startup-plan.json status must be approved');
+}
+const startupPlanMissionAnchor = asString(startupPlan.mission_anchor);
+if (!startupPlanMissionAnchor) fail('.agent/startup-plan.json mission_anchor must be present');
+if (startupPlanMissionAnchor !== asString(state.mission_anchor)) fail('.agent/startup-plan.json mission_anchor must match .agent/state.json mission_anchor');
+if (startupPlanMissionAnchor !== asString(plan.mission_anchor)) fail('.agent/startup-plan.json mission_anchor must match .agent/plan.json mission_anchor');
+if (startupPlanMissionAnchor !== asString(active.mission_anchor)) fail('.agent/startup-plan.json mission_anchor must match .agent/active-slice.json mission_anchor');
+if (!asString(startupPlan.goal_text)) fail('.agent/startup-plan.json goal_text must be present');
+for (const field of ['scope', 'constraints', 'acceptance', 'risks', 'notes', 'planned_surfaces', 'verification_intent', 'sequencing_hints']) {
+  if (!Array.isArray(startupPlan[field])) fail('.agent/startup-plan.json is missing ' + field);
+}
+if (startupPlanMarkdown.trim().length === 0) fail('.agent/startup-plan.md must not be empty');
+if (startupPlanMissionAnchor && !startupPlanMarkdown.includes(startupPlanMissionAnchor)) {
+  fail('.agent/startup-plan.md must mention the startup-plan mission_anchor');
+}
+const startupPlanGoalText = asString(startupPlan.goal_text);
+if (startupPlanGoalText && !startupPlanMarkdown.includes(startupPlanGoalText)) {
+  fail('.agent/startup-plan.md must render the startup-plan goal_text');
+}
 
 if (asString(evidence.artifact_type) !== 'completion-verification-evidence') {
   fail('.agent/verification-evidence.json artifact_type must be completion-verification-evidence');
