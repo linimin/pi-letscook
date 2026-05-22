@@ -182,17 +182,16 @@ bash .agent/verify_completion_control_plane.sh >/dev/null
 ROOT="$TMPDIR/repo"
 SYSTEM_REMINDER="$TMPDIR/system-reminder.txt"
 BOOTSTRAP_SESSION="$TMPDIR/session-canonical-evidence-bootstrap.jsonl"
-BOOTSTRAP_MESSAGES="$(python3 - <<'PY'
+BOOTSTRAP_DISCUSSION=$'Prepare the canonical evidence bootstrap fixture and tell me when it is ready for /cook.'
+GENERATED_HANDOFF="$(python3 - <<'PY'
 import json
 capsule = {
     "kind": "cook_handoff",
     "source": "primary_agent",
-    "captured_at": "2026-01-01T00:00:02.000Z",
-    "source_turn_id": "m0002",
     "mission": "Exercise canonical evidence fixture bootstrap.",
     "scope": [
         "Materialize canonical completion files for the evidence artifact fixture.",
-        "Keep the verification-evidence bootstrap on the supported explicit-handoff startup path."
+        "Keep the verification-evidence bootstrap on the supported same-entry synthesis startup path."
     ],
     "constraints": [
         "Use supported bare /cook startup only."
@@ -202,7 +201,7 @@ capsule = {
         "Keep scripts/canonical-evidence-artifact-test.sh aligned with packaged bootstrap behavior."
     ],
     "risks": [
-        "Evidence-artifact bootstrap must stay anchored to the fresh explicit startup-plan preview."
+        "Evidence-artifact bootstrap must stay anchored to same-entry primary-agent startup-plan synthesis."
     ],
     "notes": [
         "This fixture exists only to scaffold canonical files before rewriting them for evidence parity coverage."
@@ -224,20 +223,16 @@ capsule = {
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "The fixture bootstrap is concrete enough to create canonical control-plane files."
 }
-messages = [
-    {"role": "user", "content": "Prepare the canonical evidence bootstrap fixture and tell me when it is ready for /cook."},
-    {"role": "assistant", "content": "The canonical evidence bootstrap fixture is ready for /cook. Run /cook to confirm it.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
-]
-print(json.dumps(messages, ensure_ascii=False))
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
 PY
 )"
 mkdir -p "$ROOT"
 cd "$ROOT"
 git init -q
-write_session_messages "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_MESSAGES"
+write_session "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_DISCUSSION"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$GENERATED_HANDOFF" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-canonical-evidence-bootstrap.out" 2>"$TMPDIR/pi-canonical-evidence-bootstrap.err"
@@ -292,7 +287,7 @@ startup_plan = {
     'schema_version': 1,
     'artifact_type': 'completion-startup-plan',
     'status': 'approved',
-    'source': 'primary_agent_handoff',
+    'source': 'deferred_primary_agent_handoff',
     'captured_at': '2026-05-03T00:00:00Z',
     'mission_anchor': mission,
     'goal_text': 'Mission: Exercise canonical verification evidence parity.\n\nScope:\n- Persist canonical verification evidence for the selected slice.\n- Keep the verifier fail-closed on stale or missing evidence.\n\nAcceptance:\n- Canonical verification evidence is recorded for the selected slice.\n- Fail-closed verification rejects missing or stale evidence.',
@@ -399,7 +394,7 @@ Path('.agent/startup-plan.json').write_text(json.dumps(startup_plan, indent=2) +
 Path('.agent/startup-plan.md').write_text(
     '# Approved Startup Plan\n\n'
     f'Mission anchor: {mission}\n'
-    'Source: primary_agent_handoff\n'
+    'Source: deferred_primary_agent_handoff\n'
     'Captured at: 2026-05-03T00:00:00Z\n'
     f'Task type: {task_type}\n'
     f'Evaluation profile: {evaluation_profile}\n\n'

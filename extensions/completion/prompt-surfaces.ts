@@ -54,9 +54,9 @@ export function buildCookHandoffBoundaryReminder(): string {
 		"If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.",
 		"If the user asks follow-up questions or wants to keep refining scope, continue helping naturally in ordinary chat.",
 		"If the user explicitly runs /cook, the extension should call a primary-agent startup-plan synthesis step from the current task context, show Start/Cancel confirmation in the same /cook entry, and only write the approved plan into .agent after Start.",
-		"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should use primary-agent-authored startup-plan data, whether it already exists as preview intake or is synthesized in the same /cook entry.",
+		"Do not expect /cook to infer or guess startup intent from recent discussion alone, and do not expect /cook to directly reuse an old preview capsule; /cook should always synthesize the startup plan fresh in the same entry from current task context.",
 		"Only provide a preview startup plan or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior.",
-		"Any preview capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
+		"Any preview capsule is advisory only until /cook reruns same-entry primary-agent startup-plan synthesis: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
 		"When /cook starts, the approved startup plan should be written into .agent and then handed to completion-regrounder so canonical slices can be derived from repo truth.",
 		"When you continue in ordinary chat, do not pretend /cook already started and do not silently rewrite discussion into canonical workflow state.",
 	].join(" ");
@@ -106,7 +106,7 @@ function buildAdvisoryStartupBriefNotes(analysis: ContextProposalAnalysis): stri
 		...analysis.critique,
 		...analysis.possibleNoise.map((item) => `Possible noise: ${item}`),
 	];
-	return notes.length > 0 ? notes : ["No additional operator notes were derived from recent discussion."];
+	return notes.length > 0 ? notes : ["No additional operator notes were captured for the approved startup plan."];
 }
 
 function startupPlanSourceForProposal(source: ContextProposal["source"]): AdvisoryStartupBrief["source"] {

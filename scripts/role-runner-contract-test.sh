@@ -30,9 +30,9 @@ assertIncludes('extensions/completion/role-runner.ts', 'const transcription = ex
 assertIncludes('extensions/completion/role-runner.ts', 'env: { ...process.env, PI_COMPLETION_ROLE: params.role },');
 assertIncludes('extensions/completion/role-runner.ts', 'async function runContextProposalAnalystSubprocess(');
 assertIncludes('extensions/completion/role-runner.ts', 'export async function analyzeContextProposalWithAgent(');
-assertIncludes('extensions/completion/index.ts', 'import { analyzeContextProposalWithAgent, runCompletionRole } from "./role-runner";');
+assertIncludes('extensions/completion/index.ts', 'import { runCompletionRole } from "./role-runner";');
 assertIncludes('extensions/completion/index.ts', 'const result = await runCompletionRole({');
-assertIncludes('extensions/completion/index.ts', 'await analyzeContextProposalWithAgent({');
+assertNotIncludes('extensions/completion/index.ts', 'analyzeContextProposalWithAgent');
 assertNotIncludes('extensions/completion/index.ts', 'const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-proposal-analyst-", CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT);');
 assertNotIncludes('extensions/completion/index.ts', 'const invocation = getPiInvocation(args);');
 assertNotIncludes('extensions/completion/index.ts', 'async function loadAgentDefinition(');

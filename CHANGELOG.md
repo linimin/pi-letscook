@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- simplified `/cook` startup sourcing so workflow proposals now come only from same-entry primary-agent startup-plan synthesis
+- stopped `/cook` from directly adopting old preview capsules or falling back to transcript-derived startup proposals
+- kept preview capsules advisory-only for humans while active-workflow replacement and next-round startup now depend on same-entry primary-agent synthesis from current task context
+
 ## 0.1.67
 
 ### Changed

@@ -38,7 +38,7 @@ type ContextProposalAlternate = {
 	analysis: ContextProposalAnalysis;
 	goalText: string;
 	basisPreview: string;
-	source: "session" | "analyst" | "handoff_capsule";
+	source: "session" | "analyst" | "handoff_capsule" | "deferred_primary_agent_handoff";
 };
 
 type ContextProposal = ContextProposalAlternate & {
@@ -71,10 +71,10 @@ type ActiveWorkflowProposalAssessment = {
 	proposal?: ContextProposal;
 	blockedFailureMessage?: string;
 	reason:
-		| "matching_mission"
-		| "missing_explicit_handoff"
-		| "fresh_explicit_handoff"
-		| "fresh_explicit_handoff_not_startable";
+		| "matching_generated_startup_plan"
+		| "no_generated_startup_plan"
+		| "generated_replacement_startup_plan"
+		| "generated_startup_plan_not_startable";
 };
 
 type ExistingWorkflowChooserOptions = {
@@ -126,7 +126,6 @@ export type CompletionDriverDeps = {
 	) => string;
 	completionResumePrompt: (taskType: string, evaluationProfile: string) => string;
 	deriveCookContextProposal: (ctx: DriverContext, projectName: string) => Promise<CookContextProposalResult>;
-	deriveCookStartupProposal: (ctx: DriverContext, projectName: string) => Promise<CookContextProposalResult>;
 	confirmContextProposal: (
 		ctx: { hasUI: boolean; ui: any },
 		proposal: ContextProposal,
@@ -332,7 +331,7 @@ async function assessActiveWorkflowProposalRouting(
 			action: "blocked",
 			currentMissionAnchor: currentMission,
 			blockedFailureMessage: proposalResult.blockedFailureMessage,
-			reason: "fresh_explicit_handoff_not_startable",
+			reason: "generated_startup_plan_not_startable",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
@@ -342,7 +341,7 @@ async function assessActiveWorkflowProposalRouting(
 		const assessment: ActiveWorkflowProposalAssessment = {
 			action: "continue",
 			currentMissionAnchor: currentMission,
-			reason: "missing_explicit_handoff",
+			reason: "no_generated_startup_plan",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
@@ -352,7 +351,7 @@ async function assessActiveWorkflowProposalRouting(
 			action: "continue",
 			currentMissionAnchor: currentMission,
 			proposal,
-			reason: "matching_mission",
+			reason: "matching_generated_startup_plan",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
@@ -361,7 +360,7 @@ async function assessActiveWorkflowProposalRouting(
 		action: "refocus",
 		currentMissionAnchor: currentMission,
 		proposal,
-		reason: "fresh_explicit_handoff",
+		reason: "generated_replacement_startup_plan",
 	};
 	deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 	return assessment;
@@ -424,8 +423,8 @@ async function confirmExistingWorkflowProposal(
 	const continueChoice = "Continue current workflow\n\nKeep the current mission and treat the new goal as extra direction only.";
 	const buildRefocusChoice = (candidate: ContextProposalAlternate, variant: "primary" | "alternate") =>
 		variant === "primary"
-			? `${options.refocusChoiceLabel ?? "Start new workflow from recent discussion\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`
-			: `${options.alternateChoiceLabel ?? "Start alternate workflow from recent discussion\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`;
+			? `${options.refocusChoiceLabel ?? "Start new workflow from synthesized startup plan\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`
+			: `${options.alternateChoiceLabel ?? "Start alternate workflow from synthesized startup plan\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`;
 	const refocusChoices = candidateProposals.map((candidate, index) => buildRefocusChoice(candidate, index === 0 ? "primary" : "alternate"));
 	const cancelChoice = `Cancel\n\nKeep the current workflow unchanged. ${deps.mainChatRerunGuidance}`;
 	deps.maybeWriteTestSnapshot(
@@ -578,7 +577,7 @@ export async function runCookEntry(
 			title: "Start a completion workflow from this startup plan?",
 		});
 		if (!decision) {
-			deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled recent-discussion workflow proposal", deps), "info");
+			deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled synthesized startup plan", deps), "info");
 			return;
 		}
 		goal = decision.goalText;
@@ -663,19 +662,19 @@ export async function runCookEntry(
 				await resumeActiveWorkflowFromCanonicalState(pi, ctx, snapshot, deps);
 				return;
 			}
-			const explicitReplacement = assessment.reason === "fresh_explicit_handoff";
+			const generatedReplacement = assessment.reason === "generated_replacement_startup_plan";
 			const decision = await confirmExistingWorkflowProposal(ctx, snapshot, assessment.proposal, deps, {
-				intro: explicitReplacement
-					? "A fresh explicit primary-agent startup plan proposes replacing the current workflow. Choose how /cook should proceed:"
+				intro: generatedReplacement
+					? "A same-entry primary-agent startup plan proposes replacing the current workflow. Choose how /cook should proceed:"
 					: "A replacement workflow is ready. Choose how /cook should proceed:",
-				proposedMissionLabel: explicitReplacement
-					? "Proposed mission from explicit primary-agent startup plan"
+				proposedMissionLabel: generatedReplacement
+					? "Proposed mission from same-entry primary-agent startup plan"
 					: "Proposed mission",
-				refocusChoiceLabel: explicitReplacement
-					? "Start new workflow from explicit primary-agent startup plan\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+				refocusChoiceLabel: generatedReplacement
+					? "Start new workflow from same-entry primary-agent startup plan\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: "Start new workflow\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state.",
-				alternateChoiceLabel: explicitReplacement
-					? "Start alternate workflow from explicit primary-agent startup plan\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+				alternateChoiceLabel: generatedReplacement
+					? "Start alternate workflow from same-entry primary-agent startup plan\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: undefined,
 				comparison: "strict",
 			});
@@ -689,8 +688,8 @@ export async function runCookEntry(
 			}
 			const selectedProposal = decision.proposal;
 			const proposalDecision = await deps.confirmContextProposal(ctx, selectedProposal, {
-				title: assessment.reason === "fresh_explicit_handoff"
-					? "Start the replacement workflow from this explicit startup plan?"
+				title: assessment.reason === "generated_replacement_startup_plan"
+					? "Start the replacement workflow from this synthesized startup plan?"
 					: "Start the replacement workflow from this startup plan?",
 			});
 			if (!proposalDecision) {
@@ -718,8 +717,8 @@ export async function runCookEntry(
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
 			deps.emitCommandText(
 				ctx,
-				assessment.reason === "fresh_explicit_handoff"
-					? `Refocused completion mission from explicit primary-agent startup plan and rewrote the approved startup plan to: ${proposalDecision.missionAnchor}`
+				assessment.reason === "generated_replacement_startup_plan"
+					? `Refocused completion mission from same-entry primary-agent startup plan and rewrote the approved startup plan to: ${proposalDecision.missionAnchor}`
 					: `Refocused completion mission and rewrote the approved startup plan to: ${proposalDecision.missionAnchor}`,
 				"info",
 			);

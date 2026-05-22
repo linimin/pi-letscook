@@ -1374,12 +1374,21 @@ function cookHandoffStartabilityFailures(
 	return failures;
 }
 
-function buildNonStartableCookHandoffMessage(failures: string[]): string {
-	return [
-		"/cook failed closed because a fresh explicit primary-agent startup plan exists, but it is not concrete enough to seed workflow planning yet.",
-		"Tighten the startup plan in the main chat so it captures a concrete mission, repo-change-oriented acceptance, and truthful verification intent, then rerun /cook.",
-		`Blocking details: ${failures.join("; ")}.`,
-	].join(" ");
+function buildNonStartableCookHandoffMessage(
+	failures: string[],
+	context: "explicit_preview" | "same_entry_synthesis" = "explicit_preview",
+): string {
+	return context === "same_entry_synthesis"
+		? [
+			"/cook failed closed because the same-entry primary-agent startup-plan synthesis step returned a startup plan that is still not concrete enough to seed workflow planning yet.",
+			"Clarify the mission, scope, acceptance, or verification intent in the main chat, then rerun /cook so the primary agent can synthesize a tighter startup plan.",
+			`Blocking details: ${failures.join("; ")}.`,
+		].join(" ")
+		: [
+			"/cook failed closed because a fresh explicit primary-agent startup plan exists, but it is not concrete enough to seed workflow planning yet.",
+			"Tighten the startup plan in the main chat so it captures a concrete mission, repo-change-oriented acceptance, and truthful verification intent, then rerun /cook.",
+			`Blocking details: ${failures.join("; ")}.`,
+		].join(" ");
 }
 
 function isStartableCookHandoffCapsule(
@@ -1470,6 +1479,32 @@ function buildContextProposalFromCookHandoffCapsule(
 	return finalizeContextProposal(proposal, projectName, deps);
 }
 
+export function assessCookHandoffText(
+	text: string,
+	projectName: string,
+	deps: ProposalParseDeps,
+	options?: {
+		messageId?: string;
+		timestampMs?: number;
+		context?: "explicit_preview" | "same_entry_synthesis";
+	},
+): CookHandoffProposalAssessment {
+	const capsules = parseCookHandoffCapsulesFromText(text, options?.messageId, options?.timestampMs, deps);
+	for (let capsuleIndex = capsules.length - 1; capsuleIndex >= 0; capsuleIndex -= 1) {
+		const capsule = capsules[capsuleIndex];
+		const failures = cookHandoffStartabilityFailures(capsule, deps);
+		if (failures.length > 0) {
+			return {
+				status: "fresh_but_not_startable",
+				message: buildNonStartableCookHandoffMessage(failures, options?.context ?? "explicit_preview"),
+			};
+		}
+		const proposal = buildContextProposalFromCookHandoffCapsule(capsule, projectName, deps);
+		if (proposal) return { status: "startable", proposal };
+	}
+	return { status: "none" };
+}
+
 export function assessLatestCookHandoffProposal(
 	recentMessages: RecentSessionMessage[],
 	projectName: string,
@@ -1489,7 +1524,7 @@ export function assessLatestCookHandoffProposal(
 			if (failures.length > 0) {
 				return {
 					status: "fresh_but_not_startable",
-					message: buildNonStartableCookHandoffMessage(failures),
+					message: buildNonStartableCookHandoffMessage(failures, "explicit_preview"),
 				};
 			}
 			const proposal = buildContextProposalFromCookHandoffCapsule(capsule, projectName, deps);

@@ -58,15 +58,15 @@ But even in those cases:
 
 If the user explicitly runs or clearly chooses `/cook` workflow mode, the system behavior should be:
 
-1. check for a fresh explicit primary-agent `cook_handoff` preview when one already exists
-2. if none exists, call a primary-agent startup-plan synthesis step immediately from the current task context
-3. use that startup plan to show Start / Cancel confirmation in the same `/cook` entry
-4. after Start, write the approved startup plan into `.agent/startup-plan.json` / `.agent/startup-plan.md`, then let `completion-regrounder` derive canonical slices from repo truth
+1. call a primary-agent startup-plan synthesis step immediately from the current task context
+2. use that synthesized startup plan to show Start / Cancel confirmation in the same `/cook` entry
+3. after Start, write the approved startup plan into `.agent/startup-plan.json` / `.agent/startup-plan.md`, then let `completion-regrounder` derive canonical slices from repo truth
 
 That means:
 
 - `/cook` must not infer or guess canonical slices from recent discussion alone
-- `/cook` should use primary-agent-authored startup-plan data
+- `/cook` should always synthesize the startup plan fresh in the same entry from current task context
+- `/cook` should not directly reuse an old preview capsule as canonical or approval-ready workflow state
 - `/cook` should not require a manual rerun just to consume a startup plan it can synthesize immediately from the primary-agent view
 
 ## Optional Preview Behavior
@@ -106,7 +106,7 @@ Notes:
 
 - `constraints` may be replaced or supplemented by `non_goals` when clearer.
 - `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are optional sequencing hints. They help `completion-regrounder` split slices later when they are already obvious, but the approved startup plan may still be startable without them.
-- Any capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
+- Any capsule is advisory preview only. It is not canonical `.agent/**` state, not active-slice state, not a second repo contract source, and not something `/cook` should directly reuse without same-entry primary-agent synthesis.
 
 Suggested wording:
 
@@ -127,6 +127,7 @@ When the user does explicitly choose `/cook`, the system must not:
 
 - let `/cook` invent canonical slices from recent discussion alone
 - let `/cook` replace missing startup-plan data with generic transcript guessing
+- let `/cook` directly consume an old preview capsule instead of rerunning same-entry primary-agent startup-plan synthesis
 - require a second `/cook` invocation when same-entry primary-agent startup-plan synthesis is possible
 
 ## Relationship To `completion-protocol`

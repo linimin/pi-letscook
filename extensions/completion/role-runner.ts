@@ -103,7 +103,10 @@ const PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT = [
 	"Author the approved workflow startup plan now from the primary-agent view of the task so /cook can persist it under .agent before completion-regrounder derives canonical slices.",
 	"Capture the agreed mission, scope, constraints or non_goals, acceptance, risks, notes, and any concrete planning hints that will help completion-regrounder split slices later.",
 	"If a bounded first slice, likely implementation surfaces, or likely verification commands are already obvious, include first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, and why_this_slice_first as optional hints only. They are not required when the overall startup plan is already concrete enough to begin workflow planning.",
-	"Do not make /cook infer or rediscover the mission from recent discussion later; author the startup plan now from the primary-agent view of the task.",
+	"Prefer the latest user-authored task context plus canonical workflow context over older assistant-authored previews or stale planning text.",
+	"Do not directly reuse an old preview capsule as-is; either synthesize a fresh startup plan from the current task context or return a brief plain sentence saying no concrete startup plan should replace canonical state yet.",
+	"If canonical workflow context already exists and the latest discussion does not clearly ask to replace the mission or start the next round, return a brief plain sentence instead of inventing a replacement startup plan.",
+	"Do not make /cook infer or rediscover the mission later; author the startup plan now from the primary-agent view of the task.",
 	"Do not emit markdown commentary before or after the capsule.",
 	"If the task is not concrete enough for workflow startup, do not invent missing detail.",
 ].join(" ");
@@ -343,7 +346,8 @@ function buildPrimaryAgentHandoffPrompt(projectName: string, recentEntries: Rece
 	lines.push(
 		"",
 		"Task:",
-		"The user explicitly invoked /cook. Prepare the primary-agent startup plan that /cook should consume immediately for Start/Cancel confirmation, persistence under .agent, and later slice derivation by completion-regrounder.",
+		"The user explicitly invoked /cook. Prepare the primary-agent startup plan that /cook should synthesize immediately for Start/Cancel confirmation, persistence under .agent, and later slice derivation by completion-regrounder.",
+		"If the latest discussion does not justify a concrete new startup plan, return a brief plain sentence instead of speculative JSON.",
 	);
 	return lines.join("\n");
 }

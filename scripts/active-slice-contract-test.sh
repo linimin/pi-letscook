@@ -137,17 +137,16 @@ NODE
 ROOT="$TMPDIR/repo"
 PROMPT="$TMPDIR/resume-prompt.txt"
 BOOTSTRAP_SESSION="$TMPDIR/session-active-slice-bootstrap.jsonl"
-BOOTSTRAP_MESSAGES="$(python3 - <<'PY'
+BOOTSTRAP_DISCUSSION=$'Prepare the active-slice contract bootstrap fixture and tell me when it is ready for /cook.'
+GENERATED_HANDOFF="$(python3 - <<'PY'
 import json
 capsule = {
     "kind": "cook_handoff",
     "source": "primary_agent",
-    "captured_at": "2026-01-01T00:00:02.000Z",
-    "source_turn_id": "m0002",
     "mission": "Exercise active-slice contract parity.",
     "scope": [
         "Bootstrap canonical completion files for the active-slice contract fixture.",
-        "Keep the fixture on the shipped explicit-handoff startup path."
+        "Keep the fixture on the shipped same-entry synthesis startup path."
     ],
     "constraints": [
         "Use supported bare /cook startup only."
@@ -157,7 +156,7 @@ capsule = {
         "Keep scripts/active-slice-contract-test.sh aligned with the packaged startup contract."
     ],
     "risks": [
-        "Active-slice fixture bootstrap must stay anchored to the fresh explicit startup-plan preview."
+        "Active-slice fixture bootstrap must stay anchored to same-entry primary-agent startup-plan synthesis."
     ],
     "notes": [
         "This handoff exists only to scaffold canonical files before the fixture rewrites them for contract parity coverage."
@@ -179,20 +178,16 @@ capsule = {
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "The fixture bootstrap is concrete enough to scaffold canonical control-plane files."
 }
-messages = [
-    {"role": "user", "content": "Prepare the active-slice contract bootstrap fixture and tell me when it is ready for /cook."},
-    {"role": "assistant", "content": "The active-slice contract bootstrap fixture is ready for /cook. Run /cook to confirm it.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
-]
-print(json.dumps(messages, ensure_ascii=False))
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
 PY
 )"
 mkdir -p "$ROOT"
 cd "$ROOT"
 git init -q
-write_session_messages "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_MESSAGES"
+write_session "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_DISCUSSION"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$GENERATED_HANDOFF" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-active-slice-bootstrap.out" 2>"$TMPDIR/pi-active-slice-bootstrap.err"
