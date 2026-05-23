@@ -11,7 +11,7 @@ import {
 	type ContextProposal,
 	type RecentDiscussionEntry,
 } from "./proposal";
-import { contextProposalAnalystProgressLines } from "./prompt-surfaces";
+import { contextProposalAnalystProgressLines, primaryAgentHandoffProgressLines } from "./prompt-surfaces";
 import {
 	applyLiveRoleEvent,
 	buildInlineRunningLines,
@@ -108,7 +108,12 @@ const PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT = [
 ].join(" ");
 const PRIMARY_AGENT_HANDOFF_ROLE = "cook-primary-agent-handoff";
 
-class StartupAnalystOverlay extends Container {
+type CookStartupOverlayOptions = {
+	title: string;
+	footer: string;
+};
+
+class CookStartupOverlay extends Container {
 	private readonly border: DynamicBorder;
 	private readonly title: Text;
 	private readonly body: Text;
@@ -116,7 +121,10 @@ class StartupAnalystOverlay extends Container {
 	private lines: string[] = [];
 	onAbort?: () => void;
 
-	constructor(private readonly theme: any) {
+	constructor(
+		private readonly theme: any,
+		private readonly options: CookStartupOverlayOptions,
+	) {
 		super();
 		this.border = new DynamicBorder((s: string) => this.theme.fg("accent", s));
 		this.title = new Text("", 1, 0);
@@ -136,9 +144,9 @@ class StartupAnalystOverlay extends Container {
 	}
 
 	private updateDisplay(): void {
-		this.title.setText(this.theme.fg("accent", this.theme.bold("/cook proposal analyst")));
+		this.title.setText(this.theme.fg("accent", this.theme.bold(this.options.title)));
 		this.body.setText(formatInlineRunningText(this.theme, this.lines, { primaryAssistant: true }));
-		this.footer.setText(this.theme.fg("muted", "Esc/Ctrl+C cancel • This analysis runs before /cook writes canonical workflow state"));
+		this.footer.setText(this.theme.fg("muted", this.options.footer));
 	}
 
 	override handleInput(data: string): void {
@@ -192,12 +200,15 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath, "--model", modelArg, prompt];
 	const invocation = getPiInvocation(args);
 	const liveActivity = createLiveRoleActivity(STARTUP_ANALYST_ROLE);
+	liveActivity.toolActivity = undefined;
+	liveActivity.toolRecentActivity = [];
+	liveActivity.recentActivity = [];
 	liveActivity.progress = "Analyzing recent discussion";
 	liveActivity.currentAction = "Reading recent discussion and preparing a startup proposal";
 	liveActivity.assistantSummary = liveActivity.progress;
 	liveActivity.recentActivity = pushRecentActivity(liveActivity.recentActivity, `assistant: ${liveActivity.progress}`);
 	const messages: RoleMessage[] = [];
-	let overlay: StartupAnalystOverlay | undefined;
+	let overlay: CookStartupOverlay | undefined;
 	let finishOverlay: ((value: string | undefined) => void) | undefined;
 	let overlaySettled = false;
 	const settleOverlay = (value: string | undefined) => {
@@ -313,7 +324,10 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 		if (ui) {
 			return await ui.custom<string | undefined>((_tui, theme, _kb, done) => {
 				finishOverlay = done;
-				overlay = new StartupAnalystOverlay(theme);
+				overlay = new CookStartupOverlay(theme, {
+					title: "/cook proposal analyst",
+					footer: "Esc/Ctrl+C cancel • This analysis runs before /cook writes canonical workflow state",
+				});
 				overlay.setLines(contextProposalAnalystProgressLines(liveActivity, buildInlineRunningLines));
 				run().then(settleOverlay).catch(() => settleOverlay(undefined));
 				return overlay;
@@ -353,52 +367,147 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 	if (!modelArg) return undefined;
 	const cwd = params.getCtxCwd(ctx);
 	const runCwd = findCompletionRoot(cwd) ?? findRepoRoot(cwd) ?? cwd;
+	const rootKey = completionRootKey(undefined, cwd);
 	const prompt = buildPrimaryAgentHandoffPrompt(projectName, recentEntries, params.workflowContextLines ?? []);
 	const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-primary-agent-handoff-", PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT);
 	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath, "--model", modelArg, prompt];
 	const invocation = getPiInvocation(args);
 	const liveActivity = createLiveRoleActivity(PRIMARY_AGENT_HANDOFF_ROLE);
-	liveActivity.progress = "Preparing primary-agent /cook handoff";
-	liveActivity.currentAction = "Authoring explicit startup handoff from current task context";
-	liveActivity.assistantSummary = liveActivity.progress;
-	try {
-		const output = await new Promise<string | undefined>((resolve) => {
-			const proc = spawn(invocation.command, invocation.args, {
-				cwd: runCwd,
-				env: process.env,
-				stdio: ["ignore", "pipe", "pipe"],
-				shell: false,
-			});
-			let buffer = "";
-			const messages: RoleMessage[] = [];
-			const processLine = (line: string) => {
-				if (!line.trim()) return;
-				try {
-					const event = JSON.parse(line) as JsonRecord;
-					applyLiveRoleEvent(liveActivity, event, messages);
-				} catch {
-					// ignore malformed lines
-				}
-			};
-			proc.stdout.on("data", (chunk) => {
-				buffer += chunk.toString();
-				const lines = buffer.split("\n");
-				buffer = lines.pop() ?? "";
-				for (const line of lines) processLine(line);
-			});
-			proc.stderr.on("data", () => {
-				// ignore stderr unless no assistant output arrives
-			});
-			proc.on("close", (code) => {
-				if (buffer.trim()) processLine(buffer);
-				resolve(code === 0 ? liveActivity.lastAssistantText?.trim() || undefined : undefined);
-			});
-			proc.on("error", () => resolve(undefined));
+	liveActivity.toolActivity = undefined;
+	liveActivity.toolRecentActivity = [];
+	liveActivity.recentActivity = [];
+	liveActivity.currentAction = "Reading current task context";
+	liveActivity.rationale = "Loading canonical workflow context";
+	liveActivity.nextStep = "Synthesizing startup plan";
+	liveActivity.verifying = "Waiting for model response...";
+	let overlay: CookStartupOverlay | undefined;
+	let finishOverlay: ((value: string | undefined) => void) | undefined;
+	let overlaySettled = false;
+	const settleOverlay = (value: string | undefined) => {
+		if (overlaySettled) return;
+		overlaySettled = true;
+		finishOverlay?.(value);
+	};
+	const updateActivity = (fresh = false) => {
+		if (fresh) liveActivity.updatedAt = nowMs();
+		params.liveRoleActivityByRoot.set(rootKey, cloneLiveRoleActivity(liveActivity, { status: "running" }));
+		void refreshCompletionStatus({
+			ctx,
+			liveRoleActivityByRoot: params.liveRoleActivityByRoot,
+			completionStatusKey: params.completionStatusKey,
+			safeUiCall: params.safeUiCall,
+			getCtxCwd: params.getCtxCwd,
+			getCtxHasUI: params.getCtxHasUI,
+			getCtxUi: params.getCtxUi,
 		});
-		return output;
-	} finally {
-		await fsp.rm(systemPromptTemp.dir, { recursive: true, force: true });
+		overlay?.setLines(primaryAgentHandoffProgressLines(liveActivity, buildInlineRunningLines));
+	};
+	const heartbeat = setInterval(() => updateActivity(false), ANALYST_HEARTBEAT_MS);
+	const run = async (): Promise<string | undefined> => {
+		try {
+			updateActivity(true);
+			const output = await new Promise<string | undefined>((resolve) => {
+				const proc = spawn(invocation.command, invocation.args, {
+					cwd: runCwd,
+					env: process.env,
+					stdio: ["ignore", "pipe", "pipe"],
+					shell: false,
+				});
+				let settled = false;
+				const resolveOnce = (value: string | undefined) => {
+					if (settled) return;
+					settled = true;
+					resolve(value);
+				};
+				const abort = () => {
+					proc.kill("SIGTERM");
+					resolveOnce(undefined);
+				};
+				const handleSigint = () => abort();
+				let buffer = "";
+				const messages: RoleMessage[] = [];
+				const processLine = (line: string) => {
+					if (!line.trim()) return;
+					try {
+						const event = JSON.parse(line) as JsonRecord;
+						if (applyLiveRoleEvent(liveActivity, event, messages)) updateActivity(true);
+					} catch {
+						// ignore malformed lines
+					}
+				};
+				proc.stdout.on("data", (chunk) => {
+					buffer += chunk.toString();
+					const lines = buffer.split("\n");
+					buffer = lines.pop() ?? "";
+					for (const line of lines) processLine(line);
+				});
+				proc.stderr.on("data", (_chunk) => {
+					// ignore handoff stderr unless the subprocess exits without assistant output
+				});
+				proc.on("close", (code) => {
+					process.off("SIGINT", handleSigint);
+					if (buffer.trim()) processLine(buffer);
+					resolveOnce(code === 0 ? liveActivity.lastAssistantText?.trim() || undefined : undefined);
+				});
+				proc.on("error", () => {
+					process.off("SIGINT", handleSigint);
+					resolveOnce(undefined);
+				});
+				process.once("SIGINT", handleSigint);
+				if (overlay) {
+					overlay.onAbort = () => {
+						process.off("SIGINT", handleSigint);
+						abort();
+					};
+				}
+			});
+			params.liveRoleActivityByRoot.set(rootKey, cloneLiveRoleActivity(liveActivity, { status: output ? "ok" : "error" }));
+			await refreshCompletionStatus({
+				ctx,
+				liveRoleActivityByRoot: params.liveRoleActivityByRoot,
+				completionStatusKey: params.completionStatusKey,
+				safeUiCall: params.safeUiCall,
+				getCtxCwd: params.getCtxCwd,
+				getCtxHasUI: params.getCtxHasUI,
+				getCtxUi: params.getCtxUi,
+			});
+			return output;
+		} finally {
+			clearInterval(heartbeat);
+			setTimeout(() => {
+				const current = params.liveRoleActivityByRoot.get(rootKey);
+				if (current && current.role === PRIMARY_AGENT_HANDOFF_ROLE && current.status !== "running") {
+					params.liveRoleActivityByRoot.delete(rootKey);
+					void refreshCompletionStatus({
+						ctx,
+						liveRoleActivityByRoot: params.liveRoleActivityByRoot,
+						completionStatusKey: params.completionStatusKey,
+						safeUiCall: params.safeUiCall,
+						getCtxCwd: params.getCtxCwd,
+						getCtxHasUI: params.getCtxHasUI,
+						getCtxUi: params.getCtxUi,
+					});
+				}
+			}, 10_000);
+			await fsp.rm(systemPromptTemp.dir, { recursive: true, force: true });
+		}
+	};
+	if (params.getCtxHasUI(ctx)) {
+		const ui = params.getCtxUi(ctx);
+		if (ui) {
+			return await ui.custom<string | undefined>((_tui, theme, _kb, done) => {
+				finishOverlay = done;
+				overlay = new CookStartupOverlay(theme, {
+					title: "/cook startup plan",
+					footer: "Esc/Ctrl+C cancel • This startup-plan synthesis runs before /cook writes canonical workflow state",
+				});
+				overlay.setLines(primaryAgentHandoffProgressLines(liveActivity, buildInlineRunningLines));
+				run().then(settleOverlay).catch(() => settleOverlay(undefined));
+				return overlay;
+			});
+		}
 	}
+	return await run();
 }
 
 export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWithAgentParams): Promise<string | undefined> {

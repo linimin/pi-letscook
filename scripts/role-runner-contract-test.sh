@@ -30,6 +30,8 @@ assertIncludes('extensions/completion/role-runner.ts', 'const transcription = ex
 assertIncludes('extensions/completion/role-runner.ts', 'env: { ...process.env, PI_COMPLETION_ROLE: params.role },');
 assertIncludes('extensions/completion/role-runner.ts', 'async function runContextProposalAnalystSubprocess(');
 assertIncludes('extensions/completion/role-runner.ts', 'export async function analyzeContextProposalWithAgent(');
+assertIncludes('extensions/completion/role-runner.ts', 'class CookStartupOverlay extends Container');
+assertIncludes('extensions/completion/role-runner.ts', 'overlay = new CookStartupOverlay(theme, {');
 assertIncludes('extensions/completion/index.ts', 'import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";');
 assertIncludes('extensions/completion/index.ts', 'const result = await runCompletionRole({');
 assertIncludes('extensions/completion/index.ts', 'const raw = await generateCookHandoffWithAgent({');

@@ -48,7 +48,7 @@ assertIncludes('extensions/completion/proposal.ts', 'export function serializeRe
 assertIncludes('extensions/completion/proposal.ts', 'export function extractJsonObjectFromText(');
 
 assertIncludes('extensions/completion/role-runner.ts', 'export async function analyzeContextProposalWithAgent(');
-assertIncludes('extensions/completion/role-runner.ts', 'class StartupAnalystOverlay extends Container');
+assertIncludes('extensions/completion/role-runner.ts', 'class CookStartupOverlay extends Container');
 assertIncludes('extensions/completion/role-runner.ts', 'async function runContextProposalAnalystSubprocess(');
 
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'export function buildSystemReminder(');

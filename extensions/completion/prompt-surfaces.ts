@@ -277,14 +277,14 @@ export function buildContextProposalAnalystPrompt(projectName: string, discussio
 	return lines.join("\n");
 }
 
-export function contextProposalAnalystProgressLines(
+function buildCookStartupProgressLines(
 	activity: LiveRoleActivity,
 	buildInlineRunningLines: (details: {
 		role?: string;
 		startedAt?: number;
 		updatedAt?: number;
 		currentAction?: string;
-		toolActivity?: string[];
+		toolActivity?: string;
 		toolRecentActivity?: string[];
 		recentActivity?: string[];
 		assistantSummary?: string;
@@ -294,6 +294,7 @@ export function contextProposalAnalystProgressLines(
 		verifying?: string;
 		stateDeltas?: string[];
 	}) => string[],
+	footerLine: string,
 ): string[] {
 	return [
 		...buildInlineRunningLines({
@@ -312,8 +313,50 @@ export function contextProposalAnalystProgressLines(
 			stateDeltas: activity.stateDeltas,
 		}),
 		"",
-		"This step only prepares a proposal for confirmation.",
+		footerLine,
 	];
+}
+
+export function contextProposalAnalystProgressLines(
+	activity: LiveRoleActivity,
+	buildInlineRunningLines: (details: {
+		role?: string;
+		startedAt?: number;
+		updatedAt?: number;
+		currentAction?: string;
+		toolActivity?: string;
+		toolRecentActivity?: string[];
+		recentActivity?: string[];
+		assistantSummary?: string;
+		progress?: string;
+		rationale?: string;
+		nextStep?: string;
+		verifying?: string;
+		stateDeltas?: string[];
+	}) => string[],
+): string[] {
+	return buildCookStartupProgressLines(activity, buildInlineRunningLines, "This step only prepares a proposal for confirmation.");
+}
+
+export function primaryAgentHandoffProgressLines(
+	activity: LiveRoleActivity,
+	buildInlineRunningLines: (details: {
+		role?: string;
+		startedAt?: number;
+		updatedAt?: number;
+		currentAction?: string;
+		toolActivity?: string;
+		toolRecentActivity?: string[];
+		recentActivity?: string[];
+		assistantSummary?: string;
+		progress?: string;
+		rationale?: string;
+		nextStep?: string;
+		verifying?: string;
+		stateDeltas?: string[];
+	}) => string[],
+): string[] {
+	return buildCookStartupProgressLines(activity, buildInlineRunningLines, "This step only synthesizes the startup plan for Start/Cancel confirmation.");
 }
 
 export function buildEvaluationRoleContextLines(
