@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.70
+
+### Changed
+
+- added a visible `/cook startup plan` overlay while same-entry primary-agent startup synthesis is running so users no longer wait on a silent UI before Start/Cancel appears
+- reused the same cancellable overlay/heartbeat pattern for `/cook` startup subprocesses so progress updates, elapsed time, and waiting state stay visible during startup-plan synthesis
+
 ## 0.1.69
 
 ### Changed
