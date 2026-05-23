@@ -402,6 +402,8 @@ export function buildEvaluationRoleContextLines(
 		`Canonical evaluation handoff for ${role}:`,
 		`- task_type: ${deps.currentTaskType(snapshot) ?? "(missing)"}`,
 		`- evaluation_profile: ${deps.currentEvaluationProfile(snapshot) ?? "(missing)"}`,
+		`- required_stop_judges: ${snapshot.profile?.required_stop_judges ?? "(missing)"}`,
+		`- stop_aggregation_policy: ${deps.asString(snapshot.profile?.stop_aggregation_policy) ?? "(missing)"}`,
 		`- latest_completed_slice: ${deps.asString(snapshot.state?.latest_completed_slice) ?? "(none)"}`,
 		`- active_slice_id: ${context.sliceId ?? "(none)"}`,
 		`- active_slice_status: ${context.status ?? "(unknown)"}`,

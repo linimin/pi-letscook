@@ -55,7 +55,8 @@ Optional context only:
   "schema_version": 1,
   "protocol_id": "completion",
   "project_name": "<repo-name>",
-  "required_stop_judges": 3,
+  "required_stop_judges": 2,
+  "stop_aggregation_policy": "unanimous-current-head-v1",
   "priority_policy_id": "completion-default",
   "task_type": "completion-workflow",
   "evaluation_profile": "completion-rubric-v1",
@@ -254,6 +255,21 @@ Minimum record shape:
 
 Empty history files are legal.
 
+## Final Stop Aggregation Policy
+
+The packaged default stop policy is:
+
+- `required_stop_judges: 2`
+- `stop_aggregation_policy: "unanimous-current-head-v1"`
+
+Policy meaning:
+
+- count only `judgment` records whose `head_sha` matches the current `HEAD`
+- require at least two valid current-HEAD judgments before repo-level stop verification may run
+- fail closed if any current-HEAD judgment has `can_stop = false`
+- fail closed if a current-HEAD judgment is malformed or carries non-zero blocker/high-value-gap counts
+- rerun `bash .agent/verify_completion_stop.sh` only after the required current-HEAD judgments are faithfully recorded, then hand final reconciliation back to `completion-regrounder`
+
 ## Structured Evaluation Rubric Foundation
 
 `completion-reviewer`, `completion-auditor`, and `completion-stop-judge` must emit rubric-backed evaluations using the same shared dimension names and verdict semantics.
@@ -344,7 +360,7 @@ It must not, while a slice is selected or in progress:
 6. If the latest committed slice lacks audit, invoke `completion-auditor`.
 7. If canonical reconciliation is needed after review or audit, invoke `completion-regrounder`.
 8. If all slices are done and final closure is under evaluation, invoke the required `completion-stop-judge` sessions directly.
-9. After the required judgments are recorded, rerun `bash .agent/verify_completion_stop.sh` and invoke `completion-regrounder` for final stop reconciliation.
+9. After the required current-HEAD judgments are recorded, rerun `bash .agent/verify_completion_stop.sh` and invoke `completion-regrounder` for final stop reconciliation.
 
 ## Compaction And Recovery
 

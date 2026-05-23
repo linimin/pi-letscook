@@ -423,6 +423,8 @@ export function buildCompletionStatusSurface(
 	const releaseBlockerCount = asNumber(snapshot.state?.remaining_release_blockers) ?? 0;
 	const highValueGapCount = asNumber(snapshot.state?.remaining_high_value_gaps) ?? 0;
 	const remainingStopJudgeCount = asNumber(snapshot.state?.remaining_stop_judges) ?? 0;
+	const requiredStopJudges = asNumber(snapshot.profile?.required_stop_judges) ?? 0;
+	const stopAggregationPolicy = asString(snapshot.profile?.stop_aggregation_policy);
 	const activeRole = liveActivity?.status === "running" ? liveActivity.role : undefined;
 	const liveSignal = liveActivitySignal(liveActivity);
 	const livePreview = livePreviewForStatus(liveActivity);
@@ -469,6 +471,8 @@ export function buildCompletionStatusSurface(
 		releaseBlockerCount,
 		highValueGapCount,
 		remainingStopJudgeCount,
+		requiredStopJudges,
+		stopAggregationPolicy,
 		activeRole,
 		livePreview,
 		liveState: liveSignal?.state,

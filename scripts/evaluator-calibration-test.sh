@@ -22,7 +22,10 @@ const assertIncludes = (file, snippet) => {
 
 assertIncludes('package.json', '"evaluator-calibration-test": "bash ./scripts/evaluator-calibration-test.sh"');
 assertIncludes('scripts/release-check.sh', 'npm run evaluator-calibration-test');
-assertIncludes('.agent/verify_completion_stop.sh', 'npm run evaluator-calibration-test >/dev/null');
+assertIncludes('.agent/verify_completion_stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
+assertIncludes('.agent/verify_completion_stop.sh', 'Current HEAD has a can_stop=no judgment');
+assertIncludes('.agent/verify_completion_stop.sh', 'valid current-HEAD judgments');
+assertIncludes('.agent/verify_completion_stop.sh', 'npm run release-check >/dev/null');
 assertIncludes('README.md', 'Evaluator calibration now also fails closed on semantically lenient but well-formed reports.');
 assertIncludes('README.md', '`npm run evaluator-calibration-test` drives the packaged transcription path through reviewer yes-with-follow-up, auditor open-contracts-with-`Next mandatory slice: none`, and stop-judge yes-with-open-contracts fixtures while still accepting truthful passing reports.');
 assertIncludes('README.md', 'It also rejects the reproducible `none; ...` bypass family for reviewer follow-up, auditor worktree blockers, and stop-judge open-contract reporting, while still accepting only the exact reviewer routing text `Smallest follow-up slice: none; proceed to completion-auditor.` with terminal punctuation or whitespace only.');

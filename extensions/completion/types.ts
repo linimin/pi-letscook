@@ -74,6 +74,8 @@ export type CompletionStatusSurface = {
 	releaseBlockerCount?: number;
 	highValueGapCount?: number;
 	remainingStopJudgeCount?: number;
+	requiredStopJudges?: number;
+	stopAggregationPolicy?: string;
 	activeRole?: string;
 	livePreview?: string;
 	liveState?: "active" | "waiting" | "stalled";

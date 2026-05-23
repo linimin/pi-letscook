@@ -81,6 +81,8 @@ assertIncludes('extensions/completion/prompt-surfaces.ts', '`Task type: ${args.t
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`Evaluation profile: ${args.evaluationProfile ?? "(missing)"}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- task_type: ${deps.currentTaskType(snapshot) ?? "(missing)"}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- evaluation_profile: ${deps.currentEvaluationProfile(snapshot) ?? "(missing)"}`');
+assertIncludes('extensions/completion/prompt-surfaces.ts', '`- required_stop_judges: ${snapshot.profile?.required_stop_judges ?? "(missing)"}`');
+assertIncludes('extensions/completion/prompt-surfaces.ts', '`- stop_aggregation_policy: ${deps.asString(snapshot.profile?.stop_aggregation_policy) ?? "(missing)"}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Canonical evaluation handoff for ${role}:');
 assertIncludes('extensions/completion/index.ts', 'buildEvaluationRoleReminderText(snapshot, nextRole)');
 assertIncludes('extensions/completion/role-runner.ts', 'import { parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";');
@@ -97,6 +99,9 @@ assertIncludes('extensions/completion/role-reporting.js', 'Stop-judge output mus
 assertIncludes('extensions/completion/role-reporting.js', 'Stop-judge output must answer \'Tracked and unignored worktree is clean\' with yes or no.');
 assertIncludes('package.json', '"rubric-contract-test": "bash ./scripts/rubric-contract-test.sh"');
 assertIncludes('scripts/release-check.sh', 'npm run rubric-contract-test');
+assertIncludes('.agent/verify_completion_stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
+assertIncludes('.agent/verify_completion_stop.sh', 'Current HEAD has a can_stop=no judgment');
+assertIncludes('.agent/verify_completion_stop.sh', 'valid current-HEAD judgments');
 assertIncludes('.agent/verify_completion_stop.sh', 'npm run release-check >/dev/null');
 NODE
 

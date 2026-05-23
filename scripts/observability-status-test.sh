@@ -34,6 +34,8 @@ elif mode == 'static':
     assert data['releaseBlockerCount'] == 1, data
     assert data['highValueGapCount'] == 4, data
     assert data['remainingStopJudgeCount'] == 2, data
+    assert data['requiredStopJudges'] == 2, data
+    assert data['stopAggregationPolicy'] == 'unanimous-current-head-v1', data
     assert not data.get('statusText'), data
     widget = data['widgetLines']
     assert 'phase: implement' in widget, widget
@@ -55,6 +57,8 @@ elif mode == 'live':
         'tool activity separated from role judgment',
         'waiting threshold uses updatedAt timestamps',
     ], data
+    assert data['requiredStopJudges'] == 2, data
+    assert data['stopAggregationPolicy'] == 'unanimous-current-head-v1', data
     assert not data.get('statusText'), data
     widget = data['widgetLines']
     assert widget == [], widget
@@ -98,7 +102,8 @@ cat > .agent/profile.json <<'JSON'
   "schema_version": 1,
   "protocol_id": "completion",
   "project_name": "status-surface-fixture",
-  "required_stop_judges": 3,
+  "required_stop_judges": 2,
+  "stop_aggregation_policy": "unanimous-current-head-v1",
   "priority_policy_id": "completion-default",
   "docs_surfaces": ["README.md"]
 }

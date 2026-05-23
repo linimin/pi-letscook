@@ -468,13 +468,15 @@ async function refocusCompletionMission(
 	deps: CompletionDriverDeps,
 	advisoryStartupBrief?: Record<string, unknown>,
 ): Promise<void> {
-	const requiredStopJudges = asNumber(snapshot.profile?.required_stop_judges) ?? 3;
+	const requiredStopJudges = asNumber(snapshot.profile?.required_stop_judges) ?? 2;
+	const stopAggregationPolicy = asString(snapshot.profile?.stop_aggregation_policy) ?? "unanimous-current-head-v1";
 	const root = snapshot.files.root;
 	const routing = deps.finalizeContextProposalAnalysis(analysis, [rawGoal, missionAnchor]);
 	const docsSurfaces = asStringArray(snapshot.profile?.docs_surfaces);
 	const nextProfile = buildProfileRecord({
 		projectName: asString(snapshot.profile?.project_name) ?? path.basename(root),
 		requiredStopJudges,
+		stopAggregationPolicy,
 		priorityPolicyId: asString(snapshot.profile?.priority_policy_id) ?? "completion-default",
 		docsSurfaces: docsSurfaces.length > 0 ? docsSurfaces : await detectDocsSurfaces(root),
 		taskType: routing.taskType,
@@ -485,7 +487,7 @@ async function refocusCompletionMission(
 			taskType: routing.taskType,
 			evaluationProfile: routing.evaluationProfile,
 			continuationReason: deps.buildContextProposalContinuationReason("User refocused workflow via /cook:", rawGoal, routing),
-		}, advisoryStartupBrief),
+		}, advisoryStartupBrief, { requiredStopJudges }),
 		remaining_stop_judges: requiredStopJudges,
 		next_mandatory_action: "Reconcile canonical state from current repo truth for the refocused mission",
 	};

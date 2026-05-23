@@ -8,6 +8,8 @@ import type { CompletionStateSnapshot, JsonRecord } from "./types";
 const PROTOCOL_ID = "completion";
 const DEFAULT_TASK_TYPE = "completion-workflow";
 const DEFAULT_EVALUATION_PROFILE = "completion-rubric-v1";
+const DEFAULT_REQUIRED_STOP_JUDGES = 2;
+const DEFAULT_STOP_AGGREGATION_POLICY = "unanimous-current-head-v1";
 const TRACKED_CONTRACT_FILES = [
 	".agent/README.md",
 	".agent/mission.md",
@@ -197,6 +199,7 @@ async function detectVerifierCommand(root: string): Promise<string | undefined> 
 		const scripts = isRecord(packageJson.scripts) ? packageJson.scripts : undefined;
 		const packageManager = asString((packageJson as JsonRecord).packageManager) ?? "";
 		const runner = packageManager.startsWith("pnpm") ? "pnpm" : packageManager.startsWith("yarn") ? "yarn" : packageManager.startsWith("bun") ? "bun" : "npm";
+		if (scripts && asString(scripts["release-check"])) return runner === "npm" ? "npm run release-check >/dev/null" : `${runner} run release-check >/dev/null`;
 		if (scripts && asString(scripts.test)) return runner === "npm" ? "npm test" : `${runner} test`;
 		if (scripts && asString(scripts.check)) return runner === "npm" ? "npm run check" : `${runner} check`;
 		if (scripts && asString(scripts.lint)) return runner === "npm" ? "npm run lint" : `${runner} lint`;
@@ -214,6 +217,7 @@ async function detectVerifierCommand(root: string): Promise<string | undefined> 
 export function buildProfileRecord(args: {
 	projectName: string;
 	requiredStopJudges: number;
+	stopAggregationPolicy?: string;
 	priorityPolicyId?: string;
 	docsSurfaces: string[];
 	taskType?: string;
@@ -224,6 +228,7 @@ export function buildProfileRecord(args: {
 		protocol_id: PROTOCOL_ID,
 		project_name: args.projectName,
 		required_stop_judges: args.requiredStopJudges,
+		stop_aggregation_policy: args.stopAggregationPolicy ?? DEFAULT_STOP_AGGREGATION_POLICY,
 		priority_policy_id: args.priorityPolicyId ?? "completion-default",
 		task_type: args.taskType ?? DEFAULT_TASK_TYPE,
 		evaluation_profile: args.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
@@ -239,8 +244,10 @@ export function defaultState(
 	missionAnchor: string,
 	routing?: { taskType?: string; evaluationProfile?: string; continuationReason?: string },
 	advisoryStartupBrief?: JsonRecord,
+	stopPolicy?: { requiredStopJudges?: number },
 ): JsonRecord {
 	const confirmedAt = asString(advisoryStartupBrief?.captured_at) ?? new Date().toISOString();
+	const requiredStopJudges = stopPolicy?.requiredStopJudges ?? DEFAULT_REQUIRED_STOP_JUDGES;
 	return {
 		schema_version: 1,
 		mission_anchor: missionAnchor,
@@ -264,7 +271,7 @@ export function defaultState(
 		release_blocker_ids: [],
 		next_mandatory_action: "Reconcile canonical state from current repo truth",
 		next_mandatory_role: "completion-regrounder",
-		remaining_stop_judges: 3,
+		remaining_stop_judges: requiredStopJudges,
 		last_reground_at: null,
 		last_auditor_verdict: null,
 		contract_status: "unknown",
@@ -360,7 +367,7 @@ export function defaultVerificationEvidence(): JsonRecord {
 }
 
 export function buildAgentReadme(projectName: string): string {
-	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Canonical tracked contract files\n\n- \`.agent/README.md\`\n- \`.agent/mission.md\`\n- \`.agent/profile.json\`\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored canonical execution state\n\n- \`.agent/state.json\`\n- \`.agent/startup-brief.json\`\n- \`.agent/plan.json\`\n- \`.agent/active-slice.json\`\n- \`.agent/slice-history.jsonl\`\n- \`.agent/stop-check-history.jsonl\`\n- \`.agent/verification-evidence.json\`\n- \`.agent/*.log\`\n- \`.agent/tmp/\`\n\n\`.agent/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/plan.json\` or \`.agent/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical \`.agent/**\` state plus current repo truth.\n\nProject: ${projectName}\n`;
+	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Canonical tracked contract files\n\n- \`.agent/README.md\`\n- \`.agent/mission.md\`\n- \`.agent/profile.json\`\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored canonical execution state\n\n- \`.agent/state.json\`\n- \`.agent/startup-brief.json\`\n- \`.agent/plan.json\`\n- \`.agent/active-slice.json\`\n- \`.agent/slice-history.jsonl\`\n- \`.agent/stop-check-history.jsonl\`\n- \`.agent/verification-evidence.json\`\n- \`.agent/*.log\`\n- \`.agent/tmp/\`\n\n\`.agent/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`.\n\n\`.agent/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/plan.json\` or \`.agent/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical \`.agent/**\` state plus current repo truth.\n\nProject: ${projectName}\n`;
 }
 
 export function buildMission(projectName: string, missionAnchor: string): string {
@@ -371,7 +378,114 @@ export function buildVerifyStopScript(verifierCommand?: string): string {
 	const repoCheck = verifierCommand
 		? `echo "[completion] running repo-level verification: ${verifierCommand}"\n${verifierCommand}`
 		: `echo "[completion] no repo-specific verifier auto-detected; control-plane verification only"`;
-	return `#!/usr/bin/env bash\nset -euo pipefail\n\nbash .agent/verify_completion_control_plane.sh\n${repoCheck}\n`;
+	return `#!/usr/bin/env bash
+set -euo pipefail
+
+# .agent/verification-evidence.json parity is enforced by .agent/verify_completion_control_plane.sh before stop-wave policy checks.
+bash .agent/verify_completion_control_plane.sh
+
+CURRENT_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
+export COMPLETION_STOP_HEAD="$CURRENT_HEAD"
+
+node <<'NODE'
+const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
+
+function fail(message) {
+  console.error(message);
+  process.exit(1);
+}
+
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    fail('Failed to read ' + file + ': ' + error.message);
+  }
+}
+
+function asString(value) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function asNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function gitHeadSha() {
+  const result = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (result.status !== 0) {
+    fail('git rev-parse HEAD failed: ' + (asString(result.stderr) ?? 'unknown git error'));
+  }
+  return asString(result.stdout);
+}
+
+const profile = readJson('.agent/profile.json');
+const state = readJson('.agent/state.json');
+const requiredStopJudges = asNumber(profile.required_stop_judges);
+if (!Number.isInteger(requiredStopJudges) || requiredStopJudges < 1) {
+  fail('.agent/profile.json required_stop_judges must be a positive integer before stop verification can run.');
+}
+const stopAggregationPolicy = asString(profile.stop_aggregation_policy);
+if (stopAggregationPolicy !== '${DEFAULT_STOP_AGGREGATION_POLICY}') {
+  fail('.agent/profile.json stop_aggregation_policy must be ${DEFAULT_STOP_AGGREGATION_POLICY} before stop verification can run.');
+}
+
+const currentPhase = asString(state.current_phase) ?? 'unknown';
+const stopWaveActive = currentPhase === 'stop_wave' || currentPhase === 'done';
+const rawHistory = fs.existsSync('.agent/stop-check-history.jsonl') ? fs.readFileSync('.agent/stop-check-history.jsonl', 'utf8') : '';
+const seededHeadSha = asString(process.env.COMPLETION_STOP_HEAD);
+if (!seededHeadSha && !stopWaveActive && rawHistory.trim().length === 0) {
+  console.log('[completion] current phase ' + currentPhase + ' is not stop_wave/done; current-HEAD stop judgments are not required yet');
+  process.exit(0);
+}
+const headSha = seededHeadSha ?? gitHeadSha();
+const currentHeadJudgments = [];
+for (const [index, rawLine] of rawHistory.split(/\\r?\\n/).entries()) {
+  const line = rawLine.trim();
+  if (!line) continue;
+  let parsed;
+  try {
+    parsed = JSON.parse(line);
+  } catch (error) {
+    fail('.agent/stop-check-history.jsonl contains invalid JSON at line ' + (index + 1) + ': ' + error.message);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    fail('.agent/stop-check-history.jsonl line ' + (index + 1) + ' must be a JSON object judgment record.');
+  }
+  if (parsed.type !== 'judgment') continue;
+  if (asString(parsed.head_sha) !== headSha) continue;
+  if (typeof parsed.can_stop !== 'boolean') {
+    fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry boolean can_stop.');
+  }
+  const blockerCount = asNumber(parsed.blocker_count);
+  const highValueGapCount = asNumber(parsed.high_value_gap_count);
+  if (blockerCount === undefined || highValueGapCount === undefined) {
+    fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry numeric blocker_count and high_value_gap_count.');
+  }
+  if (parsed.can_stop === false) {
+    fail('Current HEAD has a can_stop=no judgment at line ' + (index + 1) + '.');
+  }
+  if (blockerCount > 0 || highValueGapCount > 0) {
+    fail('Current-HEAD judgment at line ' + (index + 1) + ' cannot pass stop verification while blocker_count or high_value_gap_count is non-zero.');
+  }
+  currentHeadJudgments.push(parsed);
+}
+
+if (!stopWaveActive && currentHeadJudgments.length === 0) {
+  console.log('[completion] current phase ' + currentPhase + ' is not stop_wave/done; current-HEAD stop judgments are not required yet');
+  process.exit(0);
+}
+
+if (currentHeadJudgments.length < requiredStopJudges) {
+  fail('Need ' + requiredStopJudges + ' valid current-HEAD judgments for HEAD ' + headSha + '; found ' + currentHeadJudgments.length + '.');
+}
+
+console.log('[completion] stop-wave policy ${DEFAULT_STOP_AGGREGATION_POLICY} satisfied for HEAD ' + headSha + ' with ' + currentHeadJudgments.length + ' valid current-HEAD judgments');
+NODE
+
+${repoCheck}
+`;
 }
 
 export function buildVerifyControlPlaneScript(): string {
@@ -644,18 +758,20 @@ export async function scaffoldCompletionFiles(
 	const projectName = path.basename(root);
 	const docsSurfaces = await detectDocsSurfaces(root);
 	const verifierCommand = await detectVerifierCommand(root);
+	const requiredStopJudges = DEFAULT_REQUIRED_STOP_JUDGES;
+	const stopAggregationPolicy = DEFAULT_STOP_AGGREGATION_POLICY;
 	const trackedFiles: Array<{ path: string; content: string; executable?: boolean }> = [
 		{ path: path.join(files.agentDir, "README.md"), content: buildAgentReadme(projectName) },
 		{ path: path.join(files.agentDir, "mission.md"), content: buildMission(projectName, missionAnchor) },
 		{
 			path: files.profilePath,
-			content: `${JSON.stringify(buildProfileRecord({ projectName, requiredStopJudges: 3, docsSurfaces, taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile }), null, 2)}\n`,
+			content: `${JSON.stringify(buildProfileRecord({ projectName, requiredStopJudges, stopAggregationPolicy, docsSurfaces, taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile }), null, 2)}\n`,
 		},
 		{ path: path.join(files.agentDir, "verify_completion_stop.sh"), content: buildVerifyStopScript(verifierCommand), executable: true },
 		{ path: path.join(files.agentDir, "verify_completion_control_plane.sh"), content: buildVerifyControlPlaneScript(), executable: true },
 		{
 			path: files.statePath,
-			content: `${JSON.stringify(defaultState(missionAnchor, { taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile, continuationReason: options?.continuationReason }, options?.advisoryStartupBrief), null, 2)}\n`,
+			content: `${JSON.stringify(defaultState(missionAnchor, { taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile, continuationReason: options?.continuationReason }, options?.advisoryStartupBrief, { requiredStopJudges }), null, 2)}\n`,
 		},
 		{
 			path: files.startupBriefPath,
