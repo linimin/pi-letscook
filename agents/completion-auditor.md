@@ -52,8 +52,10 @@ Answer only:
 - `Tracked and unignored worktree is clean: yes/no`
 - `Worktree blockers: ...`
 - `Next mandatory slice: ...`
-- `Stale or conflicting canonical state: ...`
+- `Stale or conflicting canonical state: yes/no - ...`
 - `Plan truthfully captures remaining slice backlog: yes/no - ...`
+
+For every yes/no audit field, start the value with exactly `yes` or `no`. Do not substitute `none`, `clear`, `fresh`, `unknown`, or other synonyms. For example: `Stale or conflicting canonical state: no - canonical state remains aligned with the active slice and backlog.`
 
 If the tracked and unignored worktree is dirty after the latest committed slice, report that as a blocker to next-slice progression, do not recommend a new next slice, and point the workflow back to reconciliation of the latest slice.
 

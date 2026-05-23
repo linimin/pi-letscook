@@ -90,6 +90,8 @@ assertIncludes('extensions/completion/role-reporting.js', 'Reviewer output canno
 assertIncludes('extensions/completion/role-reporting.js', 'Auditor output must answer \'Tracked and unignored worktree is clean\' with yes or no.');
 assertIncludes('extensions/completion/role-reporting.js', 'Auditor output must answer \'Stale or conflicting canonical state\' with yes or no.');
 assertIncludes('extensions/completion/role-reporting.js', 'Auditor output must answer \'Plan truthfully captures remaining slice backlog\' with yes or no.');
+assertIncludes('agents/completion-auditor.md', '`Stale or conflicting canonical state: yes/no - ...`');
+assertIncludes('agents/completion-auditor.md', 'For every yes/no audit field, start the value with exactly `yes` or `no`.');
 assertIncludes('extensions/completion/role-reporting.js', 'Stop-judge output cannot mark \'Can the project stop now: yes\' when any rubric line is fail.');
 assertIncludes('extensions/completion/role-reporting.js', 'Stop-judge output must answer \'Docs/config/runbooks match shipped behavior\' with yes or no.');
 assertIncludes('extensions/completion/role-reporting.js', 'Stop-judge output must answer \'Tracked and unignored worktree is clean\' with yes or no.');
