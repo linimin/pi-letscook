@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- preserved the confirmed `/cook` startup intent in canonical `.agent/startup-brief.json` so workflow entry is durable before regrounding authors canonical slices
+- moved workflow-session legitimacy away from in-memory routing activation, legacy `/skill:completion-protocol` prompt dependence, and transient in-flight markers toward canonical workflow-session state plus explicit `/cook` entry turns
+- simplified completion-driver continuation bookkeeping so auto-resume keeps only minimal duplicate-suppression state while explicit `/cook` kickoff/resume rely on canonical workflow-session state
+- updated smoke coverage, verifier expectations, and shipped docs/skills to describe canonical startup-brief intake plus active `/cook` workflow sessions truthfully
+
 ## 0.1.68
 
 ### Changed

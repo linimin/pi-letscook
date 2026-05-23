@@ -9,6 +9,7 @@ import {
 	currentTaskType,
 	defaultActiveSlice,
 	defaultPlan,
+	defaultStartupBrief,
 	defaultState,
 	defaultVerificationEvidence,
 	detectDocsSurfaces,
@@ -16,7 +17,7 @@ import {
 	loadCompletionSnapshot,
 	writeJsonFile,
 } from "./state-store";
-import { buildAdvisoryStartupBrief, buildApprovedStartupPlan, buildApprovedStartupPlanMarkdown } from "./prompt-surfaces";
+import { buildAdvisoryStartupBrief } from "./prompt-surfaces";
 import type { CompletionStateSnapshot } from "./types";
 
 type ContextProposalAnalysis = {
@@ -38,7 +39,7 @@ type ContextProposalAlternate = {
 	analysis: ContextProposalAnalysis;
 	goalText: string;
 	basisPreview: string;
-	source: "session" | "analyst" | "handoff_capsule" | "deferred_primary_agent_handoff";
+	source: "session" | "analyst" | "handoff_capsule";
 };
 
 type ContextProposal = ContextProposalAlternate & {
@@ -71,10 +72,10 @@ type ActiveWorkflowProposalAssessment = {
 	proposal?: ContextProposal;
 	blockedFailureMessage?: string;
 	reason:
-		| "matching_generated_startup_plan"
-		| "no_generated_startup_plan"
-		| "generated_replacement_startup_plan"
-		| "generated_startup_plan_not_startable";
+		| "matching_mission"
+		| "missing_explicit_handoff"
+		| "fresh_explicit_handoff"
+		| "fresh_explicit_handoff_not_startable";
 };
 
 type ExistingWorkflowChooserOptions = {
@@ -97,7 +98,6 @@ type DriverContext = {
 type DriverContinuationTracker = {
 	fingerprint: string;
 	attempts: number;
-	inFlight: boolean;
 	warned: boolean;
 };
 
@@ -123,9 +123,11 @@ export type CompletionDriverDeps = {
 		evaluationProfile: string,
 		intent?: "auto" | "continue" | "refocus",
 		missionAnchor?: string,
+		workflowSessionId?: string,
 	) => string;
-	completionResumePrompt: (taskType: string, evaluationProfile: string) => string;
+	completionResumePrompt: (taskType: string, evaluationProfile: string, workflowSessionId?: string) => string;
 	deriveCookContextProposal: (ctx: DriverContext, projectName: string) => Promise<CookContextProposalResult>;
+	deriveCookStartupProposal: (ctx: DriverContext, projectName: string) => Promise<CookContextProposalResult>;
 	confirmContextProposal: (
 		ctx: { hasUI: boolean; ui: any },
 		proposal: ContextProposal,
@@ -136,12 +138,7 @@ export type CompletionDriverDeps = {
 	scaffoldCompletionFiles: (
 		root: string,
 		missionAnchor: string,
-		options?: {
-			analysis?: ContextProposalAnalysis;
-			continuationReason?: string;
-			advisoryStartupBrief?: Record<string, unknown>;
-			approvedStartupPlan?: Record<string, unknown>;
-		},
+		options?: { analysis?: ContextProposalAnalysis; continuationReason?: string; advisoryStartupBrief?: Record<string, unknown> },
 	) => Promise<{ root: string; created: string[] }>;
 	maybeWriteActiveWorkflowRoutingSnapshot: (assessment: ActiveWorkflowProposalAssessment) => void;
 	missionAnchorsLikelyEquivalent: (left: string, right: string) => boolean;
@@ -192,6 +189,7 @@ export function completionContinuationFingerprint(snapshot: CompletionStateSnaps
 	const nextMandatoryRole = asString(snapshot.state?.next_mandatory_role);
 	if (!nextMandatoryRole) return undefined;
 	return JSON.stringify({
+		workflow_session_id: asString(snapshot.state?.workflow_session_id) ?? null,
 		mission_anchor: asString(snapshot.state?.mission_anchor) ?? asString(snapshot.plan?.mission_anchor) ?? null,
 		task_type: currentTaskType(snapshot) ?? null,
 		evaluation_profile: currentEvaluationProfile(snapshot) ?? null,
@@ -209,22 +207,14 @@ function noteQueuedDriverPrompt(rootKey: string, fingerprint: string): void {
 	const tracker = driverContinuationByRoot.get(rootKey);
 	if (tracker && tracker.fingerprint === fingerprint) {
 		tracker.attempts += 1;
-		tracker.inFlight = false;
 		tracker.warned = false;
 		return;
 	}
 	driverContinuationByRoot.set(rootKey, {
 		fingerprint,
 		attempts: 1,
-		inFlight: false,
 		warned: false,
 	});
-}
-
-export function markQueuedDriverPromptInFlight(rootKey: string, fingerprint: string): void {
-	const tracker = driverContinuationByRoot.get(rootKey);
-	if (!tracker || tracker.fingerprint !== fingerprint) return;
-	tracker.inFlight = true;
 }
 
 function clearDriverContinuationTracker(rootKey: string): void {
@@ -245,7 +235,6 @@ function rememberParkedDriverContinuation(rootKey: string, fingerprint: string):
 	const tracker = driverContinuationByRoot.get(rootKey);
 	if (!tracker || tracker.fingerprint !== fingerprint) return;
 	tracker.warned = true;
-	tracker.inFlight = false;
 }
 
 function summarizeProposalForChoice(proposal: ContextProposalAlternate): string {
@@ -259,15 +248,16 @@ function summarizeProposalForChoice(proposal: ContextProposalAlternate): string 
 async function queueCompletionDriverPrompt(
 	pi: ExtensionAPI,
 	ctx: { cwd: string; hasUI: boolean; ui: any },
-	rootKey: string,
-	fingerprint: string,
 	prompt: string,
 	kind: "kickoff" | "resume" | "auto-resume",
 	deps: CompletionDriverDeps,
+	tracker?: { rootKey: string; fingerprint: string },
 ): Promise<boolean> {
 	const snapshotPath = kind === "auto-resume" ? deps.completionTestAutoContinuePromptPath() : deps.completionTestDriverPromptPath();
 	deps.maybeWriteTestSnapshot(snapshotPath, `${prompt}\n`);
-	noteQueuedDriverPrompt(rootKey, fingerprint);
+	if (kind === "auto-resume" && tracker) {
+		noteQueuedDriverPrompt(tracker.rootKey, tracker.fingerprint);
+	}
 	if (deps.shouldSkipDriverKickoffForTests()) {
 		deps.emitCommandText(ctx, `Skipped completion workflow ${kind} prompt (test mode)`, "info");
 		return false;
@@ -296,26 +286,23 @@ export async function autoContinueWorkflowIfNeeded(
 	}
 	if (!isWorkflowDriverActive(snapshot) || deps.hasRunningCompletionRole(rootKey)) return;
 	const tracker = driverContinuationByRoot.get(rootKey);
-	if (tracker && tracker.fingerprint === fingerprint) {
-		if (tracker.inFlight) {
-			tracker.inFlight = false;
-			if (tracker.attempts >= DRIVER_AUTO_CONTINUE_MAX_ATTEMPTS) {
-				if (!isDriverContinuationStateParked(rootKey, fingerprint)) {
-					rememberParkedDriverContinuation(rootKey, fingerprint);
-					deps.emitCommandText(
-						ctx,
-						`Completion workflow is parked before mandatory role dispatch: ${asString(snapshot.state?.next_mandatory_role) ?? "(unknown)"}. Rerun /cook to continue from canonical state.`,
-						"warning",
-					);
-				}
-				return;
-			}
-		} else {
-			return;
+	if (tracker && tracker.fingerprint === fingerprint && tracker.attempts >= DRIVER_AUTO_CONTINUE_MAX_ATTEMPTS) {
+		if (!isDriverContinuationStateParked(rootKey, fingerprint)) {
+			rememberParkedDriverContinuation(rootKey, fingerprint);
+			deps.emitCommandText(
+				ctx,
+				`Completion workflow is parked before mandatory role dispatch: ${asString(snapshot.state?.next_mandatory_role) ?? "(unknown)"}. Rerun /cook to continue from canonical state.`,
+				"warning",
+			);
 		}
+		return;
 	}
-	const resumePrompt = deps.completionResumePrompt(currentTaskType(snapshot) ?? "(missing)", currentEvaluationProfile(snapshot) ?? "(missing)");
-	await queueCompletionDriverPrompt(pi, ctx, rootKey, fingerprint, resumePrompt, "auto-resume", deps);
+	const resumePrompt = deps.completionResumePrompt(
+		currentTaskType(snapshot) ?? "(missing)",
+		currentEvaluationProfile(snapshot) ?? "(missing)",
+		asString(snapshot.state?.workflow_session_id),
+	);
+	await queueCompletionDriverPrompt(pi, ctx, resumePrompt, "auto-resume", deps, { rootKey, fingerprint });
 }
 
 async function assessActiveWorkflowProposalRouting(
@@ -331,7 +318,7 @@ async function assessActiveWorkflowProposalRouting(
 			action: "blocked",
 			currentMissionAnchor: currentMission,
 			blockedFailureMessage: proposalResult.blockedFailureMessage,
-			reason: "generated_startup_plan_not_startable",
+			reason: "fresh_explicit_handoff_not_startable",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
@@ -341,7 +328,7 @@ async function assessActiveWorkflowProposalRouting(
 		const assessment: ActiveWorkflowProposalAssessment = {
 			action: "continue",
 			currentMissionAnchor: currentMission,
-			reason: "no_generated_startup_plan",
+			reason: "missing_explicit_handoff",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
@@ -351,7 +338,7 @@ async function assessActiveWorkflowProposalRouting(
 			action: "continue",
 			currentMissionAnchor: currentMission,
 			proposal,
-			reason: "matching_generated_startup_plan",
+			reason: "matching_mission",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
@@ -360,7 +347,7 @@ async function assessActiveWorkflowProposalRouting(
 		action: "refocus",
 		currentMissionAnchor: currentMission,
 		proposal,
-		reason: "generated_replacement_startup_plan",
+		reason: "fresh_explicit_handoff",
 	};
 	deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 	return assessment;
@@ -374,16 +361,13 @@ async function resumeActiveWorkflowFromCanonicalState(
 ): Promise<void> {
 	const mission = currentMissionAnchor(snapshot);
 	pi.setSessionName(`completion: ${mission.slice(0, 60)}`);
-	const resumePrompt = deps.completionResumePrompt(currentTaskType(snapshot) ?? "(missing)", currentEvaluationProfile(snapshot) ?? "(missing)");
-	const rootKey = deps.completionRootKey(snapshot, deps.getCtxCwd(ctx));
-	const fingerprint = completionContinuationFingerprint(snapshot) ?? JSON.stringify({
-		kind: "resume",
-		mission_anchor: mission,
-		current_phase: asString(snapshot.state?.current_phase) ?? null,
-		next_mandatory_role: asString(snapshot.state?.next_mandatory_role) ?? null,
-	});
+	const resumePrompt = deps.completionResumePrompt(
+		currentTaskType(snapshot) ?? "(missing)",
+		currentEvaluationProfile(snapshot) ?? "(missing)",
+		asString(snapshot.state?.workflow_session_id),
+	);
 	const resumeKind = deps.shouldTestAutoContinueOnSessionStart() && deps.completionTestAutoContinuePromptPath() ? "auto-resume" : "resume";
-	await queueCompletionDriverPrompt(pi, ctx, rootKey, fingerprint, resumePrompt, resumeKind, deps);
+	await queueCompletionDriverPrompt(pi, ctx, resumePrompt, resumeKind, deps);
 }
 
 async function confirmExistingWorkflowProposal(
@@ -423,8 +407,8 @@ async function confirmExistingWorkflowProposal(
 	const continueChoice = "Continue current workflow\n\nKeep the current mission and treat the new goal as extra direction only.";
 	const buildRefocusChoice = (candidate: ContextProposalAlternate, variant: "primary" | "alternate") =>
 		variant === "primary"
-			? `${options.refocusChoiceLabel ?? "Start new workflow from synthesized startup plan\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`
-			: `${options.alternateChoiceLabel ?? "Start alternate workflow from synthesized startup plan\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`;
+			? `${options.refocusChoiceLabel ?? "Start new workflow from recent discussion\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`
+			: `${options.alternateChoiceLabel ?? "Start alternate workflow from recent discussion\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`;
 	const refocusChoices = candidateProposals.map((candidate, index) => buildRefocusChoice(candidate, index === 0 ? "primary" : "alternate"));
 	const cancelChoice = `Cancel\n\nKeep the current workflow unchanged. ${deps.mainChatRerunGuidance}`;
 	deps.maybeWriteTestSnapshot(
@@ -483,7 +467,6 @@ async function refocusCompletionMission(
 	analysis: ContextProposalAnalysis | undefined,
 	deps: CompletionDriverDeps,
 	advisoryStartupBrief?: Record<string, unknown>,
-	approvedStartupPlan?: Record<string, unknown>,
 ): Promise<void> {
 	const requiredStopJudges = asNumber(snapshot.profile?.required_stop_judges) ?? 3;
 	const root = snapshot.files.root;
@@ -511,32 +494,11 @@ async function refocusCompletionMission(
 		plan_basis: "user_refocus",
 	};
 	const nextActive = defaultActiveSlice(missionAnchor, { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile });
-	const nextStartupPlan =
-		approvedStartupPlan ?? {
-			artifact_type: "completion-startup-plan",
-			schema_version: 1,
-			status: "approved",
-			source: "recent_discussion",
-			captured_at: null,
-			mission_anchor: missionAnchor,
-			goal_text: rawGoal,
-			task_type: routing.taskType,
-			evaluation_profile: routing.evaluationProfile,
-			scope: [],
-			constraints: [],
-			acceptance: [],
-			risks: [],
-			notes: ["No approved startup plan summary is available for this refocused workflow."],
-			planned_surfaces: [],
-			verification_intent: [],
-			sequencing_hints: [],
-		};
 	await Promise.all([
 		fsp.writeFile(path.join(snapshot.files.agentDir, "mission.md"), buildMission(path.basename(root), missionAnchor), "utf8"),
 		writeJsonFile(snapshot.files.profilePath, nextProfile),
 		writeJsonFile(snapshot.files.statePath, nextState),
-		writeJsonFile(snapshot.files.startupPlanPath, nextStartupPlan),
-		fsp.writeFile(snapshot.files.startupPlanMarkdownPath, buildApprovedStartupPlanMarkdown(nextStartupPlan as any), "utf8"),
+		writeJsonFile(snapshot.files.startupBriefPath, defaultStartupBrief(missionAnchor, { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile }, advisoryStartupBrief)),
 		writeJsonFile(snapshot.files.planPath, nextPlan),
 		writeJsonFile(snapshot.files.activePath, nextActive),
 		writeJsonFile(snapshot.files.verificationEvidencePath, defaultVerificationEvidence()),
@@ -574,22 +536,16 @@ export async function runCookEntry(
 			return;
 		}
 		const decision = await deps.confirmContextProposal(ctx, proposal, {
-			title: "Start a completion workflow from this startup plan?",
+			title: "Start a completion workflow from this startup brief?",
 		});
 		if (!decision) {
-			deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled synthesized startup plan", deps), "info");
+			deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled recent-discussion workflow proposal", deps), "info");
 			return;
 		}
 		goal = decision.goalText;
 		kickoffMissionAnchor = decision.missionAnchor;
 		kickoffAnalysis = decision.analysis;
 		const startupRouting = deps.finalizeContextProposalAnalysis(kickoffAnalysis, [goal ?? kickoffMissionAnchor ?? projectName]);
-		const advisoryStartupBrief = buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis });
-		const approvedStartupPlan = buildApprovedStartupPlan({
-			proposal,
-			analysis: decision.analysis,
-			missionAnchor: kickoffMissionAnchor ?? projectName,
-		});
 		const created = await deps.scaffoldCompletionFiles(root, kickoffMissionAnchor ?? projectName, {
 			analysis: startupRouting,
 			continuationReason: deps.buildContextProposalContinuationReason(
@@ -597,12 +553,11 @@ export async function runCookEntry(
 				goal ?? kickoffMissionAnchor ?? projectName,
 				startupRouting,
 			),
-			advisoryStartupBrief,
-			approvedStartupPlan,
+			advisoryStartupBrief: buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis }),
 		});
 		deps.emitCommandText(
 			ctx,
-			`Initialized completion control plane in ${created.root}${created.created.length > 0 ? ` (${created.created.length} files created)` : ""} and recorded the approved startup plan under .agent/startup-plan.json`,
+			`Initialized completion control plane in ${created.root}${created.created.length > 0 ? ` (${created.created.length} files created)` : ""}`,
 			"info",
 		);
 		snapshot = await loadCompletionSnapshot(root);
@@ -626,7 +581,7 @@ export async function runCookEntry(
 				return;
 			}
 			const decision = await deps.confirmContextProposal(ctx, proposal, {
-				title: "The previous completion workflow is done. Start the next workflow round from this startup plan?",
+				title: "The previous completion workflow is done. Start the next workflow round from this startup brief?",
 			});
 			if (!decision) {
 				deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled next workflow round proposal", deps), "info");
@@ -635,23 +590,16 @@ export async function runCookEntry(
 			goal = decision.goalText;
 			kickoffIntent = "refocus";
 			kickoffMissionAnchor = decision.missionAnchor;
-			const advisoryStartupBrief = buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis });
-			const approvedStartupPlan = buildApprovedStartupPlan({
-				proposal,
-				analysis: decision.analysis,
-				missionAnchor: decision.missionAnchor,
-			});
 			await refocusCompletionMission(
 				snapshot,
 				decision.missionAnchor,
 				decision.goalText,
 				decision.analysis,
 				deps,
-				advisoryStartupBrief,
-				approvedStartupPlan,
+				buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis }),
 			);
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
-			deps.emitCommandText(ctx, `Started a new completion workflow round and recorded the approved startup plan: ${decision.missionAnchor}`, "info");
+			deps.emitCommandText(ctx, `Started a new completion workflow round from explicit primary-agent handoff: ${decision.missionAnchor}`, "info");
 		} else {
 			const assessment = await assessActiveWorkflowProposalRouting(ctx, snapshot, deps);
 			if (assessment.action === "blocked") {
@@ -662,19 +610,19 @@ export async function runCookEntry(
 				await resumeActiveWorkflowFromCanonicalState(pi, ctx, snapshot, deps);
 				return;
 			}
-			const generatedReplacement = assessment.reason === "generated_replacement_startup_plan";
+			const explicitReplacement = assessment.reason === "fresh_explicit_handoff";
 			const decision = await confirmExistingWorkflowProposal(ctx, snapshot, assessment.proposal, deps, {
-				intro: generatedReplacement
-					? "A same-entry primary-agent startup plan proposes replacing the current workflow. Choose how /cook should proceed:"
+				intro: explicitReplacement
+					? "A fresh explicit primary-agent handoff proposes replacing the current workflow. Choose how /cook should proceed:"
 					: "A replacement workflow is ready. Choose how /cook should proceed:",
-				proposedMissionLabel: generatedReplacement
-					? "Proposed mission from same-entry primary-agent startup plan"
+				proposedMissionLabel: explicitReplacement
+					? "Proposed mission from explicit primary-agent handoff"
 					: "Proposed mission",
-				refocusChoiceLabel: generatedReplacement
-					? "Start new workflow from same-entry primary-agent startup plan\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+				refocusChoiceLabel: explicitReplacement
+					? "Start new workflow from explicit primary-agent handoff\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: "Start new workflow\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state.",
-				alternateChoiceLabel: generatedReplacement
-					? "Start alternate workflow from same-entry primary-agent startup plan\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+				alternateChoiceLabel: explicitReplacement
+					? "Start alternate workflow from explicit primary-agent handoff\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: undefined,
 				comparison: "strict",
 			});
@@ -688,9 +636,9 @@ export async function runCookEntry(
 			}
 			const selectedProposal = decision.proposal;
 			const proposalDecision = await deps.confirmContextProposal(ctx, selectedProposal, {
-				title: assessment.reason === "generated_replacement_startup_plan"
-					? "Start the replacement workflow from this synthesized startup plan?"
-					: "Start the replacement workflow from this startup plan?",
+				title: assessment.reason === "fresh_explicit_handoff"
+					? "Start the replacement workflow from this explicit startup brief?"
+					: "Start the replacement workflow from this startup brief?",
 			});
 			if (!proposalDecision) {
 				deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled replacement workflow proposal", deps), "info");
@@ -699,27 +647,20 @@ export async function runCookEntry(
 			goal = proposalDecision.goalText;
 			kickoffIntent = "refocus";
 			kickoffMissionAnchor = proposalDecision.missionAnchor;
-			const advisoryStartupBrief = buildAdvisoryStartupBrief({ proposal: selectedProposal, analysis: proposalDecision.analysis });
-			const approvedStartupPlan = buildApprovedStartupPlan({
-				proposal: selectedProposal,
-				analysis: proposalDecision.analysis,
-				missionAnchor: proposalDecision.missionAnchor,
-			});
 			await refocusCompletionMission(
 				snapshot,
 				proposalDecision.missionAnchor,
 				proposalDecision.goalText,
 				proposalDecision.analysis,
 				deps,
-				advisoryStartupBrief,
-				approvedStartupPlan,
+				buildAdvisoryStartupBrief({ proposal: selectedProposal, analysis: proposalDecision.analysis }),
 			);
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
 			deps.emitCommandText(
 				ctx,
-				assessment.reason === "generated_replacement_startup_plan"
-					? `Refocused completion mission from same-entry primary-agent startup plan and rewrote the approved startup plan to: ${proposalDecision.missionAnchor}`
-					: `Refocused completion mission and rewrote the approved startup plan to: ${proposalDecision.missionAnchor}`,
+				assessment.reason === "fresh_explicit_handoff"
+					? `Refocused completion mission from explicit primary-agent handoff to: ${proposalDecision.missionAnchor}`
+					: `Refocused completion mission to: ${proposalDecision.missionAnchor}`,
 				"info",
 			);
 		}
@@ -733,17 +674,9 @@ export async function runCookEntry(
 		currentEvaluationProfile(snapshot) ?? "(missing)",
 		kickoffIntent,
 		kickoffMissionAnchor,
+		asString(snapshot.state?.workflow_session_id),
 	);
-	const rootKey = deps.completionRootKey(snapshot, deps.getCtxCwd(ctx));
-	const fingerprint = completionContinuationFingerprint(snapshot) ?? JSON.stringify({
-		kind: "kickoff",
-		mission_anchor: kickoffMissionAnchor,
-		goal: kickoffGoal,
-		intent: kickoffIntent,
-		task_type: currentTaskType(snapshot) ?? "(missing)",
-		evaluation_profile: currentEvaluationProfile(snapshot) ?? "(missing)",
-	});
-	await queueCompletionDriverPrompt(pi, ctx, rootKey, fingerprint, kickoffPrompt, "kickoff", deps);
+	await queueCompletionDriverPrompt(pi, ctx, kickoffPrompt, "kickoff", deps);
 }
 
 export function registerCookCommand(pi: ExtensionAPI, deps: CompletionDriverDeps): void {

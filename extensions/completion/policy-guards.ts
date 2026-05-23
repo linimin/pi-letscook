@@ -72,7 +72,7 @@ export function toolCallBlockReason(args: {
 	}
 
 	if (toolName === "completion_role" && !completionRoleDispatchAllowed) {
-		return "completion_role may only be used from an explicit /cook workflow driver turn.";
+		return "completion_role may only be used from an active /cook workflow session.";
 	}
 
 	if (toolName === "edit" || toolName === "write") {

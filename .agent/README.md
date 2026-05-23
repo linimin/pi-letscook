@@ -13,8 +13,7 @@ This repository uses the `completion` workflow for long-running coding tasks.
 ## Ignored canonical execution state
 
 - `.agent/state.json`
-- `.agent/startup-plan.json`
-- `.agent/startup-plan.md`
+- `.agent/startup-brief.json`
 - `.agent/plan.json`
 - `.agent/active-slice.json`
 - `.agent/slice-history.jsonl`
@@ -23,7 +22,7 @@ This repository uses the `completion` workflow for long-running coding tasks.
 - `.agent/*.log`
 - `.agent/tmp/`
 
-`.agent/startup-plan.json` plus `.agent/startup-plan.md` preserve the approved workflow startup plan captured at `/cook`. `completion-regrounder` consumes that plan as planning input, then derives canonical slices in `.agent/plan.json` from current repo truth.
+`.agent/startup-brief.json` preserves the confirmed `/cook` startup intent as canonical intake for re-grounding. It does not replace `.agent/plan.json` or `.agent/active-slice.json`, which remain under regrounder authority.
 
 `.agent/verification-evidence.json` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.
 

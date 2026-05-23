@@ -3,7 +3,6 @@ import { spawnSync } from "node:child_process";
 import { promises as fsp } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildApprovedStartupPlanMarkdown } from "./prompt-surfaces";
 import type { CompletionStateSnapshot, JsonRecord } from "./types";
 
 const PROTOCOL_ID = "completion";
@@ -46,10 +45,9 @@ export function resolveFiles(root: string) {
 		statePath: path.join(agentDir, "state.json"),
 		planPath: path.join(agentDir, "plan.json"),
 		activePath: path.join(agentDir, "active-slice.json"),
-		startupPlanPath: path.join(agentDir, "startup-plan.json"),
-		startupPlanMarkdownPath: path.join(agentDir, "startup-plan.md"),
 		sliceHistoryPath: path.join(agentDir, "slice-history.jsonl"),
 		stopHistoryPath: path.join(agentDir, "stop-check-history.jsonl"),
+		startupBriefPath: path.join(agentDir, "startup-brief.json"),
 		verificationEvidencePath: path.join(agentDir, "verification-evidence.json"),
 		compactionMarkerPath: path.join(tmpDir, "post-compaction-recovery.json"),
 	};
@@ -144,7 +142,7 @@ export async function loadCompletionSnapshot(startCwd: string): Promise<Completi
 	const state = await readJson(files.statePath);
 	const plan = await readJson(files.planPath);
 	const active = await readJson(files.activePath);
-	const startupPlan = await readJson(files.startupPlanPath);
+	const startupBrief = await readJson(files.startupBriefPath);
 	const verificationEvidence = await readJson(files.verificationEvidencePath);
 	return {
 		files,
@@ -152,7 +150,7 @@ export async function loadCompletionSnapshot(startCwd: string): Promise<Completi
 		state,
 		plan,
 		active,
-		startupPlan,
+		startupBrief,
 		verificationEvidence,
 		activeSlice: findActiveSlice(plan, active),
 	};
@@ -233,15 +231,25 @@ export function buildProfileRecord(args: {
 	};
 }
 
+function buildWorkflowSessionId(): string {
+	return `wf-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function defaultState(
 	missionAnchor: string,
 	routing?: { taskType?: string; evaluationProfile?: string; continuationReason?: string },
 	advisoryStartupBrief?: JsonRecord,
 ): JsonRecord {
+	const confirmedAt = asString(advisoryStartupBrief?.captured_at) ?? new Date().toISOString();
 	return {
 		schema_version: 1,
 		mission_anchor: missionAnchor,
 		advisory_startup_brief: advisoryStartupBrief ?? null,
+		workflow_entry_status: "active",
+		workflow_entry_source: "/cook",
+		workflow_entry_confirmed_at: confirmedAt,
+		workflow_session_id: buildWorkflowSessionId(),
+		startup_brief_path: ".agent/startup-brief.json",
 		current_phase: "reground",
 		continuation_policy: "continue",
 		continuation_reason: routing?.continuationReason ?? "Fresh completion bootstrap requires canonical re-ground",
@@ -280,32 +288,6 @@ export function defaultPlan(
 	};
 }
 
-export function defaultStartupPlan(
-	missionAnchor: string,
-	routing?: { taskType?: string; evaluationProfile?: string },
-	approvedStartupPlan?: JsonRecord,
-): JsonRecord {
-	return approvedStartupPlan ?? {
-		schema_version: 1,
-		artifact_type: "completion-startup-plan",
-		status: "approved",
-		source: "recent_discussion",
-		captured_at: null,
-		mission_anchor: missionAnchor,
-		goal_text: `Mission: ${missionAnchor}`,
-		task_type: routing?.taskType ?? DEFAULT_TASK_TYPE,
-		evaluation_profile: routing?.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
-		scope: [],
-		constraints: [],
-		acceptance: [],
-		risks: [],
-		notes: ["No approved startup plan has been recorded yet."],
-		planned_surfaces: [],
-		verification_intent: [],
-		sequencing_hints: [],
-	};
-}
-
 export function defaultActiveSlice(
 	missionAnchor: string,
 	routing?: { taskType?: string; evaluationProfile?: string },
@@ -334,6 +316,32 @@ export function defaultActiveSlice(
 	};
 }
 
+export function defaultStartupBrief(
+	missionAnchor: string,
+	routing?: { taskType?: string; evaluationProfile?: string },
+	advisoryStartupBrief?: JsonRecord,
+): JsonRecord {
+	return {
+		schema_version: 1,
+		artifact_type: "completion-startup-brief",
+		source: asString(advisoryStartupBrief?.source) ?? "primary_agent",
+		confirmed: true,
+		confirmed_at: asString(advisoryStartupBrief?.captured_at) ?? new Date().toISOString(),
+		mission: asString(advisoryStartupBrief?.mission) ?? missionAnchor,
+		goal_text: asString(advisoryStartupBrief?.goal_text) ?? `Mission: ${missionAnchor}`,
+		scope: asStringArray(advisoryStartupBrief?.scope),
+		constraints: asStringArray(advisoryStartupBrief?.constraints),
+		acceptance: asStringArray(advisoryStartupBrief?.acceptance),
+		risks: asStringArray(advisoryStartupBrief?.risks),
+		notes:
+			asStringArray(advisoryStartupBrief?.notes).length > 0
+				? asStringArray(advisoryStartupBrief?.notes)
+				: ["No additional startup notes were preserved for this workflow entry."],
+		task_type: asString(advisoryStartupBrief?.task_type) ?? routing?.taskType ?? DEFAULT_TASK_TYPE,
+		evaluation_profile: asString(advisoryStartupBrief?.evaluation_profile) ?? routing?.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
+	};
+}
+
 export function defaultVerificationEvidence(): JsonRecord {
 	return {
 		schema_version: 1,
@@ -352,7 +360,7 @@ export function defaultVerificationEvidence(): JsonRecord {
 }
 
 export function buildAgentReadme(projectName: string): string {
-	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Canonical tracked contract files\n\n- \`.agent/README.md\`\n- \`.agent/mission.md\`\n- \`.agent/profile.json\`\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored canonical execution state\n\n- \`.agent/state.json\`\n- \`.agent/startup-plan.json\`\n- \`.agent/startup-plan.md\`\n- \`.agent/plan.json\`\n- \`.agent/active-slice.json\`\n- \`.agent/slice-history.jsonl\`\n- \`.agent/stop-check-history.jsonl\`\n- \`.agent/verification-evidence.json\`\n- \`.agent/*.log\`\n- \`.agent/tmp/\`\n\n\`.agent/startup-plan.json\` plus \`.agent/startup-plan.md\` preserve the approved workflow startup plan captured at \`/cook\`. \`completion-regrounder\` consumes that plan as planning input, then derives canonical slices in \`.agent/plan.json\` from current repo truth.\n\n\`.agent/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical \`.agent/**\` state plus current repo truth.\n\nProject: ${projectName}\n`;
+	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Canonical tracked contract files\n\n- \`.agent/README.md\`\n- \`.agent/mission.md\`\n- \`.agent/profile.json\`\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored canonical execution state\n\n- \`.agent/state.json\`\n- \`.agent/startup-brief.json\`\n- \`.agent/plan.json\`\n- \`.agent/active-slice.json\`\n- \`.agent/slice-history.jsonl\`\n- \`.agent/stop-check-history.jsonl\`\n- \`.agent/verification-evidence.json\`\n- \`.agent/*.log\`\n- \`.agent/tmp/\`\n\n\`.agent/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/plan.json\` or \`.agent/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical \`.agent/**\` state plus current repo truth.\n\nProject: ${projectName}\n`;
 }
 
 export function buildMission(projectName: string, missionAnchor: string): string {
@@ -455,23 +463,15 @@ function trackedDiffFiles(fromCommit, toCommit) {
 
 const profile = readJson('.agent/profile.json');
 const state = readJson('.agent/state.json');
-const startupPlan = readJson('.agent/startup-plan.json');
 const plan = readJson('.agent/plan.json');
 const active = readJson('.agent/active-slice.json');
 const evidence = readJson('.agent/verification-evidence.json');
-let startupPlanMarkdown = '';
-try {
-  startupPlanMarkdown = fs.readFileSync('.agent/startup-plan.md', 'utf8');
-} catch (error) {
-  fail('.agent/startup-plan.md must be present and readable: ' + error.message);
-}
 
 ensureTrackedContractFiles();
 
 for (const [file, record] of [
   ['.agent/profile.json', profile],
   ['.agent/state.json', state],
-  ['.agent/startup-plan.json', startupPlan],
   ['.agent/plan.json', plan],
   ['.agent/active-slice.json', active],
 ]) {
@@ -482,37 +482,11 @@ for (const [file, record] of [
 const taskType = asString(profile.task_type);
 const evaluationProfile = asString(profile.evaluation_profile);
 if (asString(state.task_type) !== taskType) fail('.agent/state.json task_type must match .agent/profile.json task_type');
-if (asString(startupPlan.task_type) !== taskType) fail('.agent/startup-plan.json task_type must match .agent/profile.json task_type');
 if (asString(plan.task_type) !== taskType) fail('.agent/plan.json task_type must match .agent/profile.json task_type');
 if (asString(active.task_type) !== taskType) fail('.agent/active-slice.json task_type must match .agent/profile.json task_type');
 if (asString(state.evaluation_profile) !== evaluationProfile) fail('.agent/state.json evaluation_profile must match .agent/profile.json evaluation_profile');
-if (asString(startupPlan.evaluation_profile) !== evaluationProfile) fail('.agent/startup-plan.json evaluation_profile must match .agent/profile.json evaluation_profile');
 if (asString(plan.evaluation_profile) !== evaluationProfile) fail('.agent/plan.json evaluation_profile must match .agent/profile.json evaluation_profile');
 if (asString(active.evaluation_profile) !== evaluationProfile) fail('.agent/active-slice.json evaluation_profile must match .agent/profile.json evaluation_profile');
-
-if (asString(startupPlan.artifact_type) !== 'completion-startup-plan') {
-  fail('.agent/startup-plan.json artifact_type must be completion-startup-plan');
-}
-if (asString(startupPlan.status) !== 'approved') {
-  fail('.agent/startup-plan.json status must be approved');
-}
-const startupPlanMissionAnchor = asString(startupPlan.mission_anchor);
-if (!startupPlanMissionAnchor) fail('.agent/startup-plan.json mission_anchor must be present');
-if (startupPlanMissionAnchor !== asString(state.mission_anchor)) fail('.agent/startup-plan.json mission_anchor must match .agent/state.json mission_anchor');
-if (startupPlanMissionAnchor !== asString(plan.mission_anchor)) fail('.agent/startup-plan.json mission_anchor must match .agent/plan.json mission_anchor');
-if (startupPlanMissionAnchor !== asString(active.mission_anchor)) fail('.agent/startup-plan.json mission_anchor must match .agent/active-slice.json mission_anchor');
-if (!asString(startupPlan.goal_text)) fail('.agent/startup-plan.json goal_text must be present');
-for (const field of ['scope', 'constraints', 'acceptance', 'risks', 'notes', 'planned_surfaces', 'verification_intent', 'sequencing_hints']) {
-  if (!Array.isArray(startupPlan[field])) fail('.agent/startup-plan.json is missing ' + field);
-}
-if (startupPlanMarkdown.trim().length === 0) fail('.agent/startup-plan.md must not be empty');
-if (startupPlanMissionAnchor && !startupPlanMarkdown.includes(startupPlanMissionAnchor)) {
-  fail('.agent/startup-plan.md must mention the startup-plan mission_anchor');
-}
-const startupPlanGoalText = asString(startupPlan.goal_text);
-if (startupPlanGoalText && !startupPlanMarkdown.includes(startupPlanGoalText)) {
-  fail('.agent/startup-plan.md must render the startup-plan goal_text');
-}
 
 if (asString(evidence.artifact_type) !== 'completion-verification-evidence') {
   fail('.agent/verification-evidence.json artifact_type must be completion-verification-evidence');
@@ -660,12 +634,7 @@ export type ScaffoldResult = {
 export async function scaffoldCompletionFiles(
 	root: string,
 	missionAnchor: string,
-	options?: {
-		analysis?: { taskType?: string; evaluationProfile?: string };
-		continuationReason?: string;
-		advisoryStartupBrief?: JsonRecord;
-		approvedStartupPlan?: JsonRecord;
-	},
+	options?: { analysis?: { taskType?: string; evaluationProfile?: string }; continuationReason?: string; advisoryStartupBrief?: JsonRecord },
 ): Promise<ScaffoldResult> {
 	const files = resolveFiles(root);
 	const created: string[] = [];
@@ -675,10 +644,6 @@ export async function scaffoldCompletionFiles(
 	const projectName = path.basename(root);
 	const docsSurfaces = await detectDocsSurfaces(root);
 	const verifierCommand = await detectVerifierCommand(root);
-	const startupPlanRecord =
-		options?.approvedStartupPlan ??
-		(await readJson(files.startupPlanPath)) ??
-		defaultStartupPlan(missionAnchor, { taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile });
 	const trackedFiles: Array<{ path: string; content: string; executable?: boolean }> = [
 		{ path: path.join(files.agentDir, "README.md"), content: buildAgentReadme(projectName) },
 		{ path: path.join(files.agentDir, "mission.md"), content: buildMission(projectName, missionAnchor) },
@@ -693,12 +658,8 @@ export async function scaffoldCompletionFiles(
 			content: `${JSON.stringify(defaultState(missionAnchor, { taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile, continuationReason: options?.continuationReason }, options?.advisoryStartupBrief), null, 2)}\n`,
 		},
 		{
-			path: files.startupPlanPath,
-			content: `${JSON.stringify(startupPlanRecord, null, 2)}\n`,
-		},
-		{
-			path: files.startupPlanMarkdownPath,
-			content: buildApprovedStartupPlanMarkdown(startupPlanRecord as any),
+			path: files.startupBriefPath,
+			content: `${JSON.stringify(defaultStartupBrief(missionAnchor, { taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile }, options?.advisoryStartupBrief), null, 2)}\n`,
 		},
 		{ path: files.planPath, content: `${JSON.stringify(defaultPlan(missionAnchor, { taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile }), null, 2)}\n` },
 		{ path: files.activePath, content: `${JSON.stringify(defaultActiveSlice(missionAnchor, { taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile }), null, 2)}\n` },
@@ -721,7 +682,6 @@ export function currentTaskType(snapshot: CompletionStateSnapshot): string | und
 	return (
 		asString(snapshot.active?.task_type) ??
 		asString(snapshot.state?.task_type) ??
-		asString(snapshot.startupPlan?.task_type) ??
 		asString(snapshot.plan?.task_type) ??
 		asString(snapshot.profile?.task_type)
 	);
@@ -731,7 +691,6 @@ export function currentEvaluationProfile(snapshot: CompletionStateSnapshot): str
 	return (
 		asString(snapshot.active?.evaluation_profile) ??
 		asString(snapshot.state?.evaluation_profile) ??
-		asString(snapshot.startupPlan?.evaluation_profile) ??
 		asString(snapshot.plan?.evaluation_profile) ??
 		asString(snapshot.profile?.evaluation_profile)
 	);
@@ -740,7 +699,6 @@ export function currentEvaluationProfile(snapshot: CompletionStateSnapshot): str
 export function currentMissionAnchor(snapshot: CompletionStateSnapshot): string {
 	return (
 		asString(snapshot.state?.mission_anchor) ??
-		asString(snapshot.startupPlan?.mission_anchor) ??
 		asString(snapshot.plan?.mission_anchor) ??
 		asString(snapshot.active?.mission_anchor) ??
 		path.basename(snapshot.files.root)

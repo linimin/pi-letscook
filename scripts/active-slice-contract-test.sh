@@ -242,6 +242,11 @@ acceptance = [
 state = {
     'schema_version': 1,
     'mission_anchor': mission,
+    'workflow_entry_status': 'active',
+    'workflow_entry_source': '/cook',
+    'workflow_entry_confirmed_at': '2026-05-03T00:00:00Z',
+    'workflow_session_id': 'active-slice-fixture-session',
+    'startup_brief_path': '.agent/startup-brief.json',
     'current_phase': 'implement',
     'continuation_policy': 'continue',
     'continuation_reason': 'Fixture for active-slice contract regression coverage.',
@@ -316,6 +321,22 @@ active = {
 }
 
 Path('.agent/state.json').write_text(json.dumps(state, indent=2) + '\n')
+Path('.agent/startup-brief.json').write_text(json.dumps({
+    'schema_version': 1,
+    'artifact_type': 'completion-startup-brief',
+    'source': 'primary_agent',
+    'confirmed': True,
+    'confirmed_at': '2026-05-03T00:00:00Z',
+    'mission': mission,
+    'goal_text': f'Mission: {mission}',
+    'scope': ['Exercise active-slice contract parity.'],
+    'constraints': ['Keep the fixture scoped to active-slice contract coverage.'],
+    'acceptance': acceptance,
+    'risks': ['Fixture drift can hide active-slice contract regressions.'],
+    'notes': ['Fixture startup brief for active-slice contract regression coverage.'],
+    'task_type': task_type,
+    'evaluation_profile': evaluation_profile,
+}, indent=2) + '\n')
 Path('.agent/plan.json').write_text(json.dumps(plan, indent=2) + '\n')
 Path('.agent/active-slice.json').write_text(json.dumps(active, indent=2) + '\n')
 Path('.agent/verification-evidence.json').write_text(json.dumps({
