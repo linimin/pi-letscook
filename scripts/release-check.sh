@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
-echo "[release-check] running control-plane validation, tracked .agent contract coverage, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, legacy cleanup, evaluator calibration, and rubric contract coverage"
+echo "[release-check] running control-plane validation, tracked .agent contract coverage, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, completion-role gating, legacy cleanup, evaluator calibration, and rubric contract coverage"
 bash .agent/verify_completion_control_plane.sh
 git ls-files --error-unmatch .agent/README.md .agent/mission.md .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null
 
@@ -34,6 +34,8 @@ checks = {
         'description: "/cook workflow: start or replace workflow only from an explicit primary-agent handoff, or resume the current workflow from canonical state"',
         '"Do not call completion_role from ordinary chat; it is reserved for active /cook workflow sessions."',
         '`COMPLETION WORKFLOW DRIVER\\nStart or continue the completion workflow for this repo.',
+        'function isCompletionRoleDispatchAllowedTurn(',
+        'return asString(snapshot?.state?.continuation_policy) === "continue";',
     ],
     "extensions/completion/policy-guards.ts": [
         'return "completion_role may only be used from an active /cook workflow session.";',
@@ -81,6 +83,7 @@ bash ./scripts/role-runner-contract-test.sh
 bash ./scripts/canonical-evidence-artifact-test.sh
 bash ./scripts/active-slice-contract-test.sh
 npm run observability-status-test
+npm run completion-role-gating-test
 bash ./scripts/legacy-cleanup-test.sh
 npm run evaluator-calibration-test
 npm run rubric-contract-test

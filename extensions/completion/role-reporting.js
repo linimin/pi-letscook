@@ -115,7 +115,7 @@ function isPureNoneLike(value) {
 function isReviewerProceedToAuditorRoutingValue(value) {
   const raw = asString(value);
   if (!raw) return false;
-  return /^none\s*;\s*proceed to completion-auditor(?:[\p{P}\s]*)$/iu.test(raw);
+  return /^none(?:\s*[,;:/-]\s*|\s+)proceed to (?:completion-)?auditor(?:[\p{P}\s]*)$/iu.test(raw);
 }
 
 function isReviewerNoFollowUpValue(value) {

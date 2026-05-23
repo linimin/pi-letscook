@@ -262,6 +262,29 @@ function isCompletionWorkflowSessionTurn(snapshot: CompletionStateSnapshot | und
 	return isCompletionDriverPromptTurn(snapshot, ctx) || isCookCommandTurn(ctx);
 }
 
+function isOrdinaryMainChatTurnDuringActiveWorkflow(
+	snapshot: CompletionStateSnapshot | undefined,
+	ctx: { sessionManager?: any },
+): boolean {
+	if (!hasActiveWorkflowEntry(snapshot)) return false;
+	const latest = latestUserOrCustomTurnText(ctx);
+	if (!latest) return false;
+	if (isCookCommandTurn(ctx)) return false;
+	if (isCompletionDriverPromptTurn(snapshot, ctx)) return false;
+	return true;
+}
+
+function isCompletionRoleDispatchAllowedTurn(
+	snapshot: CompletionStateSnapshot | undefined,
+	ctx: { sessionManager?: any },
+): boolean {
+	if (hasCompletionRoutingActivation(snapshot)) return true;
+	if (!hasActiveWorkflowEntry(snapshot)) return false;
+	if (isCompletionWorkflowSessionTurn(snapshot, ctx)) return true;
+	if (isOrdinaryMainChatTurnDuringActiveWorkflow(snapshot, ctx)) return false;
+	return asString(snapshot?.state?.continuation_policy) === "continue";
+}
+
 function shouldInjectCompletionWorkflowContext(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
 	return isCompletionWorkflowSessionTurn(snapshot, ctx);
 }
@@ -1081,7 +1104,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		const snapshot = await loadCompletionSnapshot(cwd);
 		const completionActive = Boolean(snapshot) && asString(snapshot?.state?.continuation_policy) !== "done";
 		const root = snapshot?.files.root ?? findRepoRoot(cwd) ?? cwd;
-		const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowSessionTurn(snapshot, ctx);
+		const completionRoleDispatchAllowed = Boolean(role) || isCompletionRoleDispatchAllowedTurn(snapshot, ctx);
 		const reason = toolCallBlockReason({
 			toolName: event.toolName,
 			input: isRecord(event.input) ? event.input : undefined,
