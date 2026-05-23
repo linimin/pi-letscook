@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.71
+
+### Changed
+
+- clarified the packaged `completion-auditor` output contract so `Stale or conflicting canonical state` must begin with `yes` or `no`, matching the canonical transcription gate
+- added rubric-contract coverage to keep the stricter auditor yes/no guidance from drifting and to reduce avoidable transcription warnings during audit
+
 ## 0.1.70
 
 ### Changed
