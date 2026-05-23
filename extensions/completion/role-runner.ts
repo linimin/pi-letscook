@@ -97,18 +97,14 @@ const STARTUP_ANALYST_ROLE = "cook-proposal-analyst";
 const ANALYST_HEARTBEAT_MS = 5_000;
 
 const PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT = [
-	"You are the primary agent preparing an explicit /cook startup plan after the user already chose workflow mode.",
-	"Return either exactly one fenced ```cook_handoff JSON block or one brief plain sentence explaining why no concrete startup plan can be prepared.",
-	"If you can prepare a plan, the JSON must use kind cook_handoff, source primary_agent, and handoff_kind implementation_workflow_handoff.",
-	"Author the approved workflow startup plan now from the primary-agent view of the task so /cook can persist it under .agent before completion-regrounder derives canonical slices.",
-	"Capture the agreed mission, scope, constraints or non_goals, acceptance, risks, notes, and any concrete planning hints that will help completion-regrounder split slices later.",
-	"If a bounded first slice, likely implementation surfaces, or likely verification commands are already obvious, include first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, and why_this_slice_first as optional hints only. They are not required when the overall startup plan is already concrete enough to begin workflow planning.",
-	"Prefer the latest user-authored task context plus canonical workflow context over older assistant-authored previews or stale planning text.",
-	"Do not directly reuse an old preview capsule as-is; either synthesize a fresh startup plan from the current task context or return a brief plain sentence saying no concrete startup plan should replace canonical state yet.",
-	"If canonical workflow context already exists and the latest discussion does not clearly ask to replace the mission or start the next round, return a brief plain sentence instead of inventing a replacement startup plan.",
-	"Do not make /cook infer or rediscover the mission later; author the startup plan now from the primary-agent view of the task.",
+	"You are the primary agent preparing an explicit /cook handoff after the user already chose workflow mode.",
+	"Return either exactly one fenced ```cook_handoff JSON block or one brief plain sentence explaining why no concrete handoff can be prepared.",
+	"If you can prepare a handoff, the JSON must use kind cook_handoff, source primary_agent, and handoff_kind implementation_workflow_handoff.",
+	"When the user has clearly accepted a concrete assistant-proposed slice, carry that slice forward into the handoff instead of broadening or re-guessing the mission.",
+	"Do not make /cook infer or rediscover the mission from recent discussion later; author the handoff now from the primary-agent view of the task.",
 	"Do not emit markdown commentary before or after the capsule.",
-	"If the task is not concrete enough for workflow startup, do not invent missing detail.",
+	"If the task is not concrete enough for implementation workflow, do not invent the slice.",
+	"A valid implementation-ready handoff must include mission, scope, constraints or non_goals, acceptance, risks, notes, first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, and why_this_slice_first.",
 ].join(" ");
 const PRIMARY_AGENT_HANDOFF_ROLE = "cook-primary-agent-handoff";
 
@@ -346,8 +342,7 @@ function buildPrimaryAgentHandoffPrompt(projectName: string, recentEntries: Rece
 	lines.push(
 		"",
 		"Task:",
-		"The user explicitly invoked /cook. Prepare the primary-agent startup plan that /cook should synthesize immediately for Start/Cancel confirmation, persistence under .agent, and later slice derivation by completion-regrounder.",
-		"If the latest discussion does not justify a concrete new startup plan, return a brief plain sentence instead of speculative JSON.",
+		"The user explicitly invoked /cook. Prepare the primary-agent handoff that /cook should consume immediately for Start/Cancel confirmation.",
 	);
 	return lines.join("\n");
 }
@@ -364,7 +359,7 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 	const invocation = getPiInvocation(args);
 	const liveActivity = createLiveRoleActivity(PRIMARY_AGENT_HANDOFF_ROLE);
 	liveActivity.progress = "Preparing primary-agent /cook handoff";
-	liveActivity.currentAction = "Authoring explicit startup plan from current task context";
+	liveActivity.currentAction = "Authoring explicit startup handoff from current task context";
 	liveActivity.assistantSummary = liveActivity.progress;
 	try {
 		const output = await new Promise<string | undefined>((resolve) => {
@@ -414,7 +409,7 @@ export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWi
 	try {
 		return await runPrimaryAgentHandoffSubprocess(params);
 	} catch (error) {
-		console.warn("[completion] primary-agent startup-plan generation failed", error);
+		console.warn("[completion] primary-agent handoff generation failed", error);
 		return undefined;
 	}
 }

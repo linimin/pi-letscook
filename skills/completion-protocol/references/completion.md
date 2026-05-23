@@ -13,8 +13,6 @@
 ## Ignored Canonical Execution State
 
 - `.agent/state.json`
-- `.agent/startup-plan.json`
-- `.agent/startup-plan.md`
 - `.agent/plan.json`
 - `.agent/active-slice.json`
 - `.agent/slice-history.jsonl`
@@ -30,7 +28,6 @@ Read these when making completion decisions:
 - `.agent/README.md`
 - `.agent/profile.json`
 - `.agent/state.json`
-- `.agent/startup-plan.json`
 - `.agent/plan.json`
 - `.agent/active-slice.json`
 - `.agent/slice-history.jsonl`
@@ -132,37 +129,6 @@ Rules:
 3. `continuation_policy == blocked` means the workflow root must report the blocker and stop.
 4. `continuation_policy == paused` means the user explicitly paused the workflow.
 5. `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
-
-## Fixed Startup Plan Model
-
-`startup-plan.json` carries the approved workflow startup plan captured at `/cook`.
-
-Required fields:
-
-- `schema_version`
-- `artifact_type` where the value is `completion-startup-plan`
-- `status` where the value is `approved`
-- `source`
-- `captured_at`
-- `mission_anchor`
-- `goal_text`
-- `task_type`
-- `evaluation_profile`
-- `scope`
-- `constraints`
-- `acceptance`
-- `risks`
-- `notes`
-- `planned_surfaces`
-- `verification_intent`
-- `sequencing_hints`
-
-Rules:
-
-1. `startup-plan.json` is canonical startup intake, not canonical slice selection.
-2. `completion-regrounder` must treat `startup-plan.json` as planning input, reconcile it against current repo truth, and derive canonical slices in `plan.json`.
-3. `startup-plan.json` must stay aligned with the current canonical mission anchor in `.agent/state.json`, `.agent/plan.json`, and `.agent/active-slice.json` until a later `/cook` refocus or next-round startup rewrites it.
-4. `startup-plan.md` is the human-readable rendering of the same approved startup plan and must remain in parity with `startup-plan.json`.
 
 `plan.json` carries the ordered persistent slice backlog.
 
@@ -372,7 +338,7 @@ It must not, while a slice is selected or in progress:
 
 1. If tracked protocol contract files are missing or first-time onboarding is required, invoke `completion-bootstrapper`.
 2. If canonical `.agent` execution state is missing, stale, invalid, contradictory, or ambiguous after compaction or recovery, invoke `completion-regrounder` first.
-3. If no slice is selected, invoke `completion-regrounder` to read `.agent/startup-plan.json`, reconcile `.agent/plan.json` against current repo truth, and return the next exact handoff payload.
+3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/plan.json` and return the next exact handoff payload.
 4. If a slice is `selected` or `in_progress` and no new commit exists for it yet, invoke `completion-implementer`.
 5. If the latest committed slice lacks review, invoke `completion-reviewer`.
 6. If the latest committed slice lacks audit, invoke `completion-auditor`.
@@ -385,7 +351,6 @@ It must not, while a slice is selected or in progress:
 After context compaction, suspected memory loss, stalled-role recovery, or any ambiguous completion state, the workflow root must re-read:
 
 - `.agent/state.json`
-- `.agent/startup-plan.json`
 - `.agent/plan.json`
 - `.agent/active-slice.json`
 - `.agent/verification-evidence.json`
@@ -401,7 +366,7 @@ The workflow root must invoke `completion-regrounder` before continuing whenever
 
 The workflow root must not continue implementation, review, audit, or stop evaluation from compacted conversation memory alone.
 
-After compaction or recovery, `completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/startup-plan.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work. If `.agent/active-slice.json` still contains a truthful exact handoff snapshot, continue from canonical state rather than asking the user to resend the original caller payload.
+After compaction or recovery, `completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work. If `.agent/active-slice.json` still contains a truthful exact handoff snapshot, continue from canonical state rather than asking the user to resend the original caller payload.
 
 ## Default Priority Policy
 

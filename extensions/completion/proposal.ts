@@ -60,11 +60,11 @@ export type CookHandoffCapsule = {
 	risks: string[];
 	notes: string[];
 	handoff_kind: "implementation_workflow_handoff";
-	first_slice_goal?: string;
+	first_slice_goal: string;
 	first_slice_non_goals: string[];
 	implementation_surfaces: string[];
 	verification_commands: string[];
-	why_this_slice_first?: string;
+	why_this_slice_first: string;
 	task_type?: string;
 	evaluation_profile?: string;
 	why_cook_now?: string;
@@ -1279,7 +1279,7 @@ function parseCookHandoffCapsulesFromText(
 		const mission = deps.asString(parsed.mission);
 		const firstSliceGoal = deps.asString(parsed.first_slice_goal ?? parsed.firstSliceGoal);
 		const whyThisSliceFirst = deps.asString(parsed.why_this_slice_first ?? parsed.whyThisSliceFirst);
-		if (!mission) continue;
+		if (!mission || !firstSliceGoal || !whyThisSliceFirst) continue;
 		const scope = deps.asStringArray(parsed.scope);
 		const constraints = deps.asStringArray(parsed.constraints);
 		const nonGoals = deps.asStringArray(parsed.non_goals ?? parsed.nonGoals);
@@ -1325,12 +1325,12 @@ function buildCookHandoffBasisPreview(capsule: CookHandoffCapsule): string {
 		...capsule.constraints,
 		...capsule.non_goals,
 		...capsule.acceptance,
+		`first_slice_goal: ${capsule.first_slice_goal}`,
+		...capsule.first_slice_non_goals.map((item) => `first_slice_non_goals: ${item}`),
+		...capsule.implementation_surfaces.map((item) => `implementation_surfaces: ${item}`),
+		...capsule.verification_commands.map((item) => `verification_commands: ${item}`),
+		`why_this_slice_first: ${capsule.why_this_slice_first}`,
 	];
-	if (capsule.first_slice_goal) parts.push(`first_slice_goal: ${capsule.first_slice_goal}`);
-	parts.push(...capsule.first_slice_non_goals.map((item) => `first_slice_non_goals: ${item}`));
-	parts.push(...capsule.implementation_surfaces.map((item) => `implementation_surfaces: ${item}`));
-	parts.push(...capsule.verification_commands.map((item) => `verification_commands: ${item}`));
-	if (capsule.why_this_slice_first) parts.push(`why_this_slice_first: ${capsule.why_this_slice_first}`);
 	if (capsule.why_cook_now) parts.push(`why_cook_now: ${capsule.why_cook_now}`);
 	return parts.join("\n").trim();
 }
@@ -1363,32 +1363,23 @@ function cookHandoffStartabilityFailures(
 	else if (!cookHandoffAcceptanceIsRepoChangeOriented(capsule)) {
 		failures.push("acceptance is not anchored to concrete repo changes or verification");
 	}
-	if (capsule.first_slice_goal) {
-		const firstSliceGoal = deps.normalizeMissionAnchorText(capsule.first_slice_goal);
-		if (!firstSliceGoal || deps.isWeakMissionAnchor(firstSliceGoal) || COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(firstSliceGoal)) {
-			failures.push("first_slice_goal is not a useful sequencing hint");
-		} else if (hasExplicitPlanningOnlyDeliverable([capsule.first_slice_goal]) || hasClearNoImplementationSignal([capsule.first_slice_goal])) {
-			failures.push("first_slice_goal is planning-only instead of a repo-change sequencing hint");
-		}
+	const firstSliceGoal = deps.normalizeMissionAnchorText(capsule.first_slice_goal);
+	if (!firstSliceGoal || deps.isWeakMissionAnchor(firstSliceGoal) || COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(firstSliceGoal)) {
+		failures.push("first_slice_goal is not a bounded implementation slice");
+	} else if (hasExplicitPlanningOnlyDeliverable([capsule.first_slice_goal]) || hasClearNoImplementationSignal([capsule.first_slice_goal])) {
+		failures.push("first_slice_goal is planning-only instead of a repo-change slice");
 	}
+	if (capsule.implementation_surfaces.length === 0) failures.push("implementation_surfaces is empty");
+	if (capsule.verification_commands.length === 0) failures.push("verification_commands is empty");
 	return failures;
 }
 
-function buildNonStartableCookHandoffMessage(
-	failures: string[],
-	context: "explicit_preview" | "same_entry_synthesis" = "explicit_preview",
-): string {
-	return context === "same_entry_synthesis"
-		? [
-			"/cook failed closed because the same-entry primary-agent startup-plan synthesis step returned a startup plan that is still not concrete enough to seed workflow planning yet.",
-			"Clarify the mission, scope, acceptance, or verification intent in the main chat, then rerun /cook so the primary agent can synthesize a tighter startup plan.",
-			`Blocking details: ${failures.join("; ")}.`,
-		].join(" ")
-		: [
-			"/cook failed closed because a fresh explicit primary-agent startup plan exists, but it is not concrete enough to seed workflow planning yet.",
-			"Tighten the startup plan in the main chat so it captures a concrete mission, repo-change-oriented acceptance, and truthful verification intent, then rerun /cook.",
-			`Blocking details: ${failures.join("; ")}.`,
-		].join(" ");
+function buildNonStartableCookHandoffMessage(failures: string[]): string {
+	return [
+		"/cook failed closed because a fresh explicit primary-agent handoff exists, but it is not concrete enough to start implementation workflow yet.",
+		"Tighten the handoff in the main chat so it names a bounded first implementation slice, repo-change-oriented acceptance, implementation_surfaces, and verification_commands, then rerun /cook.",
+		`Blocking details: ${failures.join("; ")}.`,
+	].join(" ");
 }
 
 function isStartableCookHandoffCapsule(
@@ -1444,11 +1435,11 @@ function buildContextProposalFromCookHandoffCapsule(
 				evaluationProfile: capsule.evaluation_profile,
 				critique: [
 					...capsule.notes,
-					...(capsule.first_slice_goal ? [`First slice goal: ${capsule.first_slice_goal}`] : []),
+					`First slice goal: ${capsule.first_slice_goal}`,
 					...(capsule.first_slice_non_goals.length > 0 ? [`First slice non-goals: ${capsule.first_slice_non_goals.join(" | ")}`] : []),
 					...(capsule.implementation_surfaces.length > 0 ? [`Implementation surfaces: ${capsule.implementation_surfaces.join(" | ")}`] : []),
 					...(capsule.verification_commands.length > 0 ? [`Verification commands: ${capsule.verification_commands.join(" | ")}`] : []),
-					...(capsule.why_this_slice_first ? [`Why this slice first: ${capsule.why_this_slice_first}`] : []),
+					`Why this slice first: ${capsule.why_this_slice_first}`,
 					...(capsule.why_cook_now ? [`Primary-agent /cook handoff rationale: ${capsule.why_cook_now}`] : []),
 				],
 				risks: capsule.risks,
@@ -1464,11 +1455,11 @@ function buildContextProposalFromCookHandoffCapsule(
 				...capsule.scope,
 				...constraints,
 				...capsule.acceptance,
-				...(capsule.first_slice_goal ? [capsule.first_slice_goal] : []),
+				capsule.first_slice_goal,
 				...capsule.first_slice_non_goals,
 				...capsule.implementation_surfaces,
 				...capsule.verification_commands,
-				...(capsule.why_this_slice_first ? [capsule.why_this_slice_first] : []),
+				capsule.why_this_slice_first,
 			],
 		),
 		goalText,
@@ -1477,32 +1468,6 @@ function buildContextProposalFromCookHandoffCapsule(
 		alternateProposals: [],
 	};
 	return finalizeContextProposal(proposal, projectName, deps);
-}
-
-export function assessCookHandoffText(
-	text: string,
-	projectName: string,
-	deps: ProposalParseDeps,
-	options?: {
-		messageId?: string;
-		timestampMs?: number;
-		context?: "explicit_preview" | "same_entry_synthesis";
-	},
-): CookHandoffProposalAssessment {
-	const capsules = parseCookHandoffCapsulesFromText(text, options?.messageId, options?.timestampMs, deps);
-	for (let capsuleIndex = capsules.length - 1; capsuleIndex >= 0; capsuleIndex -= 1) {
-		const capsule = capsules[capsuleIndex];
-		const failures = cookHandoffStartabilityFailures(capsule, deps);
-		if (failures.length > 0) {
-			return {
-				status: "fresh_but_not_startable",
-				message: buildNonStartableCookHandoffMessage(failures, options?.context ?? "explicit_preview"),
-			};
-		}
-		const proposal = buildContextProposalFromCookHandoffCapsule(capsule, projectName, deps);
-		if (proposal) return { status: "startable", proposal };
-	}
-	return { status: "none" };
 }
 
 export function assessLatestCookHandoffProposal(
@@ -1524,7 +1489,7 @@ export function assessLatestCookHandoffProposal(
 			if (failures.length > 0) {
 				return {
 					status: "fresh_but_not_startable",
-					message: buildNonStartableCookHandoffMessage(failures, "explicit_preview"),
+					message: buildNonStartableCookHandoffMessage(failures),
 				};
 			}
 			const proposal = buildContextProposalFromCookHandoffCapsule(capsule, projectName, deps);
