@@ -261,7 +261,7 @@ state = {
     'release_blocker_ids': [],
     'next_mandatory_action': 'Implement selected slice active-slice-fixture.',
     'next_mandatory_role': 'completion-implementer',
-    'remaining_stop_judges': 3,
+    'remaining_stop_judges': 2,
     'last_reground_at': '2026-05-03T00:00:00Z',
     'last_auditor_verdict': None,
     'contract_status': 'selected_slice_pending_implementation',
