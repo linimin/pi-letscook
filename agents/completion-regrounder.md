@@ -41,16 +41,18 @@ These lines are for workflow observability, not hidden reasoning. Keep them brie
 5. Reopen any previously `done` slice whose acceptance criteria no longer hold.
 6. Keep `.agent/state.json` and `.agent/active-slice.json` truthful, including `current_phase`, `continuation_policy`, `continuation_reason`, `next_mandatory_role`, and any exact implementer handoff snapshot fields.
 7. Reconcile canonical state after review, audit, and final stop verification waves when required.
-8. If the latest committed slice leaves the tracked and unignored worktree dirty, first classify the dirty tracked files against the latest slice's `implementation_surfaces` and the tracked reconciliation surfaces you need to touch now.
-9. If the dirty tracked files are unrelated and can be isolated safely, auto-preserve them yourself with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory reconciliation on a clean worktree, and restore them before handing control back. Do not ask the user for this routine unrelated-dirty-worktree case.
-10. If overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe, treat that dirty state as a blocker, reopen or continue the latest slice for reconciliation, set `Next role to invoke` to `completion-implementer`, and do not select or hand off any different next slice until it is reconciled.
-11. When reconciling after review, audit, or dirty-worktree follow-up for the latest committed slice, emit an explicit reconciliation record decision:
+8. When entering a fresh stop wave after all implementation slices are done, set or increment `.agent/state.json current_stop_wave_id` for the new stop-wave epoch and reset `remaining_stop_judges` from `.agent/profile.json required_stop_judges`.
+9. If a prior stop-wave epoch on the same HEAD recorded `can_stop = no`, do not permanently poison that HEAD by itself. If canonical state, docs/state parity, or verification truth have changed enough to justify a fresh stop evaluation on the same HEAD, increment `current_stop_wave_id`, preserve the old judgments as history, and restart stop-wave collection for the new epoch.
+10. If the latest committed slice leaves the tracked and unignored worktree dirty, first classify the dirty tracked files against the latest slice's `implementation_surfaces` and the tracked reconciliation surfaces you need to touch now.
+11. If the dirty tracked files are unrelated and can be isolated safely, auto-preserve them yourself with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory reconciliation on a clean worktree, and restore them before handing control back. Do not ask the user for this routine unrelated-dirty-worktree case.
+12. If overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe, treat that dirty state as a blocker, reopen or continue the latest slice for reconciliation, set `Next role to invoke` to `completion-implementer`, and do not select or hand off any different next slice until it is reconciled.
+13. When reconciling after review, audit, dirty-worktree follow-up, or stop-wave epoch restart for the latest committed slice, emit an explicit reconciliation record decision:
    - `accepted` only when the latest committed slice is truthfully accepted as-is
    - `reopened` only when the latest committed slice must be reopened for follow-up work
    - `none` when this re-ground was not a post-commit reconciliation decision
-12. If you emit `accepted` or `reopened`, also emit the exact reconciled slice id in the report.
-13. If a slice is already selected, ensure `.agent/active-slice.json` contains the exact implementer handoff snapshot and return that exact handoff payload for `completion-implementer` instead of implementing it yourself.
-14. If no slice is selected, return the exact next recommended slice and why.
+14. If you emit `accepted` or `reopened`, also emit the exact reconciled slice id in the report.
+15. If a slice is already selected, ensure `.agent/active-slice.json` contains the exact implementer handoff snapshot and return that exact handoff payload for `completion-implementer` instead of implementing it yourself.
+16. If no slice is selected, return the exact next recommended slice and why.
 
 Output format:
 

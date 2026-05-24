@@ -22,7 +22,7 @@ This repository uses the `completion` workflow for long-running coding tasks.
 - `.agent/*.log`
 - `.agent/tmp/`
 
-`.agent/profile.json` carries the stop-wave defaults for this repo, including `required_stop_judges` and `stop_aggregation_policy`. The packaged default is `required_stop_judges: 2` plus `stop_aggregation_policy: "unanimous-current-head-v1"`.
+`.agent/profile.json` carries the stop-wave defaults for this repo, including `required_stop_judges` and `stop_aggregation_policy`. The packaged default is `required_stop_judges: 2` plus `stop_aggregation_policy: "unanimous-current-head-v1"`. Canonical `.agent/state.json current_stop_wave_id` carries the current stop-wave epoch so the same HEAD may restart stop evaluation without requiring a synthetic tracked commit.
 
 `.agent/startup-brief.json` preserves the confirmed `/cook` startup intent as canonical intake for re-grounding. It does not replace `.agent/plan.json` or `.agent/active-slice.json`, which remain under regrounder authority.
 

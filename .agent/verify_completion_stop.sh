@@ -53,6 +53,11 @@ if (stopAggregationPolicy !== 'unanimous-current-head-v1') {
 
 const currentPhase = asString(state.current_phase) ?? 'unknown';
 const stopWaveActive = currentPhase === 'stop_wave' || currentPhase === 'done';
+const currentStopWaveId = asNumber(state.current_stop_wave_id) ?? 0;
+if (!Number.isInteger(currentStopWaveId) || currentStopWaveId < 0) {
+  fail('.agent/state.json current_stop_wave_id must be a non-negative integer before stop verification can run.');
+}
+const activeStopWaveId = stopWaveActive ? currentStopWaveId || 1 : currentStopWaveId;
 const rawHistory = fs.existsSync('.agent/stop-check-history.jsonl') ? fs.readFileSync('.agent/stop-check-history.jsonl', 'utf8') : '';
 const seededHeadSha = asString(process.env.COMPLETION_STOP_HEAD);
 if (!seededHeadSha && !stopWaveActive && rawHistory.trim().length === 0) {
@@ -75,6 +80,11 @@ for (const [index, rawLine] of rawHistory.split(/\r?\n/).entries()) {
   }
   if (parsed.type !== 'judgment') continue;
   if (asString(parsed.head_sha) !== headSha) continue;
+  const recordStopWaveId = asNumber(parsed.stop_wave_id) ?? 0;
+  if (!Number.isInteger(recordStopWaveId) || recordStopWaveId < 0) {
+    fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry a non-negative integer stop_wave_id.');
+  }
+  if (recordStopWaveId !== activeStopWaveId) continue;
   if (typeof parsed.can_stop !== 'boolean') {
     fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry boolean can_stop.');
   }
@@ -98,10 +108,10 @@ if (!stopWaveActive && currentHeadJudgments.length === 0) {
 }
 
 if (currentHeadJudgments.length < requiredStopJudges) {
-  fail('Need ' + requiredStopJudges + ' valid current-HEAD judgments for HEAD ' + headSha + '; found ' + currentHeadJudgments.length + '.');
+  fail('Need ' + requiredStopJudges + ' valid current-HEAD judgments for HEAD ' + headSha + ' in stop_wave_id ' + activeStopWaveId + '; found ' + currentHeadJudgments.length + '.');
 }
 
-console.log('[completion] stop-wave policy unanimous-current-head-v1 satisfied for HEAD ' + headSha + ' with ' + currentHeadJudgments.length + ' valid current-HEAD judgments');
+console.log('[completion] stop-wave policy unanimous-current-head-v1 satisfied for HEAD ' + headSha + ' in stop_wave_id ' + activeStopWaveId + ' with ' + currentHeadJudgments.length + ' valid current-HEAD judgments');
 NODE
 
 echo "[completion] running repo-level verification: npm run release-check >/dev/null"

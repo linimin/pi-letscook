@@ -87,6 +87,7 @@ Required fields:
 - `next_mandatory_action`
 - `next_mandatory_role`
 - `remaining_stop_judges`
+- `current_stop_wave_id`
 - `last_reground_at`
 - `last_auditor_verdict`
 - `contract_status`
@@ -250,6 +251,7 @@ Minimum record shape:
 - `type`
 - `recorded_at`
 - `head_sha`
+- `stop_wave_id`
 - `can_stop`
 - `blocker_count`
 - `high_value_gap_count`
@@ -265,11 +267,12 @@ The packaged default stop policy is:
 
 Policy meaning:
 
-- count only `judgment` records whose `head_sha` matches the current `HEAD`
-- require at least two valid current-HEAD judgments before repo-level stop verification may run
-- fail closed if any current-HEAD judgment has `can_stop = false`
-- fail closed if a current-HEAD judgment is malformed or carries non-zero blocker/high-value-gap counts
-- rerun `bash .agent/verify_completion_stop.sh` only after the required current-HEAD judgments are faithfully recorded, then hand final reconciliation back to `completion-regrounder`
+- `state.json current_stop_wave_id` is the current stop-wave epoch for the current mission and may be incremented to restart stop evaluation on the same `HEAD`
+- count only `judgment` records whose `head_sha` matches the current `HEAD` and whose `stop_wave_id` matches `state.json current_stop_wave_id`
+- require at least two valid current-HEAD judgments for the current stop-wave epoch before repo-level stop verification may run
+- fail closed if any current-HEAD judgment in the current stop-wave epoch has `can_stop = false`
+- fail closed if a current-HEAD judgment in the current stop-wave epoch is malformed or carries non-zero blocker/high-value-gap counts
+- rerun `bash .agent/verify_completion_stop.sh` only after the required current-HEAD judgments for the current stop-wave epoch are faithfully recorded, then hand final reconciliation back to `completion-regrounder`
 
 ## Structured Evaluation Rubric Foundation
 

@@ -118,6 +118,12 @@ if (asString(active.evaluation_profile) !== evaluationProfile) fail('.agent/acti
 const remainingStopJudges = asNumber(state.remaining_stop_judges);
 if (remainingStopJudges === undefined) fail('.agent/state.json remaining_stop_judges must be numeric');
 if (remainingStopJudges < 0) fail('.agent/state.json remaining_stop_judges must not be negative');
+const currentStopWaveId = asNumber(state.current_stop_wave_id);
+if (currentStopWaveId !== undefined) {
+  if (!Number.isInteger(currentStopWaveId) || currentStopWaveId < 0) {
+    fail('.agent/state.json current_stop_wave_id must be a non-negative integer');
+  }
+}
 
 if (asString(evidence.artifact_type) !== 'completion-verification-evidence') {
   fail('.agent/verification-evidence.json artifact_type must be completion-verification-evidence');

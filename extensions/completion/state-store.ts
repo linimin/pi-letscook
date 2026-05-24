@@ -272,6 +272,7 @@ export function defaultState(
 		next_mandatory_action: "Reconcile canonical state from current repo truth",
 		next_mandatory_role: "completion-regrounder",
 		remaining_stop_judges: requiredStopJudges,
+		current_stop_wave_id: 0,
 		last_reground_at: null,
 		last_auditor_verdict: null,
 		contract_status: "unknown",
@@ -367,7 +368,7 @@ export function defaultVerificationEvidence(): JsonRecord {
 }
 
 export function buildAgentReadme(projectName: string): string {
-	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Canonical tracked contract files\n\n- \`.agent/README.md\`\n- \`.agent/mission.md\`\n- \`.agent/profile.json\`\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored canonical execution state\n\n- \`.agent/state.json\`\n- \`.agent/startup-brief.json\`\n- \`.agent/plan.json\`\n- \`.agent/active-slice.json\`\n- \`.agent/slice-history.jsonl\`\n- \`.agent/stop-check-history.jsonl\`\n- \`.agent/verification-evidence.json\`\n- \`.agent/*.log\`\n- \`.agent/tmp/\`\n\n\`.agent/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`.\n\n\`.agent/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/plan.json\` or \`.agent/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical \`.agent/**\` state plus current repo truth.\n\nProject: ${projectName}\n`;
+	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Canonical tracked contract files\n\n- \`.agent/README.md\`\n- \`.agent/mission.md\`\n- \`.agent/profile.json\`\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored canonical execution state\n\n- \`.agent/state.json\`\n- \`.agent/startup-brief.json\`\n- \`.agent/plan.json\`\n- \`.agent/active-slice.json\`\n- \`.agent/slice-history.jsonl\`\n- \`.agent/stop-check-history.jsonl\`\n- \`.agent/verification-evidence.json\`\n- \`.agent/*.log\`\n- \`.agent/tmp/\`\n\n\`.agent/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`. Canonical \`.agent/state.json current_stop_wave_id\` carries the current stop-wave epoch so the same HEAD may restart stop evaluation without requiring a synthetic tracked commit.\n\n\`.agent/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/plan.json\` or \`.agent/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical \`.agent/**\` state plus current repo truth.\n\nProject: ${projectName}\n`;
 }
 
 export function buildMission(projectName: string, missionAnchor: string): string {
@@ -433,6 +434,11 @@ if (stopAggregationPolicy !== '${DEFAULT_STOP_AGGREGATION_POLICY}') {
 
 const currentPhase = asString(state.current_phase) ?? 'unknown';
 const stopWaveActive = currentPhase === 'stop_wave' || currentPhase === 'done';
+const currentStopWaveId = asNumber(state.current_stop_wave_id) ?? 0;
+if (!Number.isInteger(currentStopWaveId) || currentStopWaveId < 0) {
+  fail('.agent/state.json current_stop_wave_id must be a non-negative integer before stop verification can run.');
+}
+const activeStopWaveId = stopWaveActive ? currentStopWaveId || 1 : currentStopWaveId;
 const rawHistory = fs.existsSync('.agent/stop-check-history.jsonl') ? fs.readFileSync('.agent/stop-check-history.jsonl', 'utf8') : '';
 const seededHeadSha = asString(process.env.COMPLETION_STOP_HEAD);
 if (!seededHeadSha && !stopWaveActive && rawHistory.trim().length === 0) {
@@ -455,6 +461,11 @@ for (const [index, rawLine] of rawHistory.split(/\\r?\\n/).entries()) {
   }
   if (parsed.type !== 'judgment') continue;
   if (asString(parsed.head_sha) !== headSha) continue;
+  const recordStopWaveId = asNumber(parsed.stop_wave_id) ?? 0;
+  if (!Number.isInteger(recordStopWaveId) || recordStopWaveId < 0) {
+    fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry a non-negative integer stop_wave_id.');
+  }
+  if (recordStopWaveId !== activeStopWaveId) continue;
   if (typeof parsed.can_stop !== 'boolean') {
     fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry boolean can_stop.');
   }
@@ -478,10 +489,10 @@ if (!stopWaveActive && currentHeadJudgments.length === 0) {
 }
 
 if (currentHeadJudgments.length < requiredStopJudges) {
-  fail('Need ' + requiredStopJudges + ' valid current-HEAD judgments for HEAD ' + headSha + '; found ' + currentHeadJudgments.length + '.');
+  fail('Need ' + requiredStopJudges + ' valid current-HEAD judgments for HEAD ' + headSha + ' in stop_wave_id ' + activeStopWaveId + '; found ' + currentHeadJudgments.length + '.');
 }
 
-console.log('[completion] stop-wave policy ${DEFAULT_STOP_AGGREGATION_POLICY} satisfied for HEAD ' + headSha + ' with ' + currentHeadJudgments.length + ' valid current-HEAD judgments');
+console.log('[completion] stop-wave policy ${DEFAULT_STOP_AGGREGATION_POLICY} satisfied for HEAD ' + headSha + ' in stop_wave_id ' + activeStopWaveId + ' with ' + currentHeadJudgments.length + ' valid current-HEAD judgments');
 NODE
 
 ${repoCheck}

@@ -236,6 +236,7 @@ Ignored execution-state files:
 - `.agent/active-slice.json`
 - `.agent/slice-history.jsonl`
 - `.agent/stop-check-history.jsonl`
+- `state.json current_stop_wave_id` defines the current stop-wave epoch so the same HEAD can restart stop evaluation without requiring a synthetic tracked commit.
 - `.agent/verification-evidence.json`
 - `.agent/*.log`
 - `.agent/tmp/`

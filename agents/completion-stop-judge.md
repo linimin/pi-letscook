@@ -19,7 +19,7 @@ You must not:
 - append stop-check history yourself
 - create commits
 
-The workflow driver records your returned verdict into `.agent/stop-check-history.jsonl` during the final stop wave. Your output must therefore be explicit enough to transcribe faithfully as one canonical `judgment` record for the current HEAD.
+The workflow driver records your returned verdict into `.agent/stop-check-history.jsonl` during the final stop wave. Your output must therefore be explicit enough to transcribe faithfully as one canonical `judgment` record for the current HEAD and current `state.json current_stop_wave_id` epoch.
 
 During long work, emit short operator-facing progress lines when useful using these exact prefixes:
 - `PROGRESS: ...`

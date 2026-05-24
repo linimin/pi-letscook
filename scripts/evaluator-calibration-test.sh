@@ -44,9 +44,11 @@ const tempRootBase = path.join(process.cwd(), '.agent', 'tmp');
 fs.mkdirSync(tempRootBase, { recursive: true });
 const tempRoot = fs.mkdtempSync(path.join(tempRootBase, 'evaluator-calibration-'));
 const snapshotFiles = {
+  statePath: path.join(tempRoot, 'state.json'),
   sliceHistoryPath: path.join(tempRoot, 'slice-history.jsonl'),
   stopHistoryPath: path.join(tempRoot, 'stop-check-history.jsonl'),
 };
+fs.writeFileSync(snapshotFiles.statePath, JSON.stringify({ current_stop_wave_id: 1 }, null, 2));
 fs.writeFileSync(snapshotFiles.sliceHistoryPath, '');
 fs.writeFileSync(snapshotFiles.stopHistoryPath, '');
 
@@ -378,7 +380,7 @@ Brief justification: This should be rejected because remaining contracts still e
     recordedAt: 5,
   });
   assert(judged.errors.length === 0, `stop-judge passing fixture should transcribe cleanly: ${judged.errors.join(' | ')}`);
-  assert(judged.appended.includes('judgment:555555555555'), 'stop-judge passing fixture should append a judgment record');
+  assert(judged.appended.includes('judgment:555555555555:wave:1'), 'stop-judge passing fixture should append a judgment record for the active stop-wave epoch');
   assert(readJsonl(snapshotFiles.stopHistoryPath).length === 1, 'stop-judge passing fixture should create one judgment record');
 
   const judgeRejected = await transcribeCanonicalRoleReport({

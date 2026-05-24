@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.77
+
+### Fixed
+
+- introduced `current_stop_wave_id` / `stop_wave_id` stop-wave epochs so the same HEAD can restart stop evaluation after stale no-stop history without requiring a synthetic tracked commit
+- taught stop-judge transcription, verifier policy, protocol docs, and release regression coverage to scope stop-wave aggregation to the active epoch instead of permanently poisoning a HEAD on the first `can_stop=no`
+
 ## 0.1.76
 
 ### Fixed

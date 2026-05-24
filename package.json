@@ -1,6 +1,6 @@
 {
   "name": "@linimin/pi-letscook",
-  "version": "0.1.76",
+  "version": "0.1.77",
   "description": "Pi package for long-running completion workflows with canonical .agent state, role-based subagents, continuity, and verification helpers.",
   "license": "MIT",
   "private": false,
@@ -43,6 +43,7 @@
     "observability-status-test": "bash ./scripts/observability-status-test.sh",
     "completion-role-gating-test": "bash ./scripts/completion-role-gating-test.sh",
     "dirty-worktree-policy-test": "bash ./scripts/dirty-worktree-policy-test.sh",
+    "stop-wave-epoch-test": "bash ./scripts/stop-wave-epoch-test.sh",
     "evaluator-calibration-test": "bash ./scripts/evaluator-calibration-test.sh",
     "rubric-contract-test": "bash ./scripts/rubric-contract-test.sh",
     "release-check": "bash ./scripts/release-check.sh"

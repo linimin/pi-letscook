@@ -36,7 +36,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - Docs, config, and runbooks must stay truthful to shipped behavior.
 - `.agent/verify_completion_stop.sh` is a generated repo-level baseline verifier. Onboarding should create a working version from current repo truth rather than an unconditional failing placeholder.
 - The packaged default stop policy is `required_stop_judges: 2` plus `stop_aggregation_policy: "unanimous-current-head-v1"` in `.agent/profile.json`.
-- Under `unanimous-current-head-v1`, only current-HEAD `judgment` records count, any current-HEAD `can_stop = no` fails closed, and repo-level stop verification must wait until the required current-HEAD judgments are recorded.
+- Under `unanimous-current-head-v1`, only current-HEAD `judgment` records from the current stop-wave epoch count. Canonical `state.json current_stop_wave_id` tracks that epoch, may be incremented to restart stop evaluation on the same `HEAD`, and repo-level stop verification must wait until the required current-HEAD judgments for the current epoch are recorded.
 - Keep slice-specific proof in repo tests or deterministic checks. Refresh `.agent/verify_completion_stop.sh` only when the repo's top-level verification surfaces change or the verifier becomes stale.
 - The workflow topology is flat and primary-driven: the main pi session remains the workflow root and invokes at most one completion role at a time.
 - No completion role may invoke another completion role during the normal workflow.
@@ -86,7 +86,7 @@ If the workflow driver detects that the next mandatory action belongs to a compl
 6. If the latest committed slice lacks an audit result, invoke `completion-auditor`.
 7. If review or audit have returned and canonical reconciliation is needed, invoke `completion-regrounder`. `completion-regrounder` must not select or hand off a next slice while the latest committed slice leaves the tracked and unignored worktree dirty; instead it must reopen or continue that latest slice for reconciliation.
 8. If all planned slices are done and final closure is being evaluated, invoke the required `completion-stop-judge` sessions directly.
-9. After each required current-HEAD `completion-stop-judge` result is faithfully recorded, rerun `bash .agent/verify_completion_stop.sh` and invoke `completion-regrounder` for final stop reconciliation.
+9. After each required current-HEAD `completion-stop-judge` result for the current `current_stop_wave_id` is faithfully recorded, rerun `bash .agent/verify_completion_stop.sh` and invoke `completion-regrounder` for final stop reconciliation.
 
 The workflow driver must not substitute itself for any mandatory dispatch target above.
 

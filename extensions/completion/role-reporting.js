@@ -46,6 +46,10 @@ function asString(value) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function asNumber(value) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 function parseReportFields(text) {
   const fields = {};
   for (const rawLine of text.split("\n")) {
@@ -317,6 +321,16 @@ async function appendJsonlRecord(filePath, record) {
   await fs.appendFile(filePath, `${JSON.stringify(record)}\n`, "utf8");
 }
 
+async function readJsonFile(filePath) {
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function transcribeCanonicalRoleReport({ role, output, reportFields = parseReportFields(output), snapshotFiles, headSha, sliceId, recordedAt = Date.now() }) {
   const result = { appended: [], skipped: [], errors: [] };
 
@@ -370,12 +384,18 @@ async function transcribeCanonicalRoleReport({ role, output, reportFields = pars
       result.errors.push("Missing required stop-judge fields for canonical judgment transcription.");
       return result;
     }
+    const state = snapshotFiles.statePath ? await readJsonFile(snapshotFiles.statePath) : undefined;
+    const currentStopWaveId = asNumber(state?.current_stop_wave_id) ?? 1;
+    if (!Number.isInteger(currentStopWaveId) || currentStopWaveId < 0) {
+      result.errors.push("Canonical state must carry a non-negative integer current_stop_wave_id before stop-judge transcription.");
+      return result;
+    }
     const history = await readJsonl(snapshotFiles.stopHistoryPath);
     const duplicate = history.some((entry) => {
-      return entry.type === "judgment" && entry.head_sha === headSha && entry.report_text === output.trim();
+      return entry.type === "judgment" && entry.head_sha === headSha && asNumber(entry.stop_wave_id) === currentStopWaveId && entry.report_text === output.trim();
     });
     if (duplicate) {
-      result.skipped.push(`Skipped duplicate judgment record at ${headSha.slice(0, 12)}.`);
+      result.skipped.push(`Skipped duplicate judgment record for stop_wave_id ${currentStopWaveId} at ${headSha.slice(0, 12)}.`);
       return result;
     }
     await appendJsonlRecord(snapshotFiles.stopHistoryPath, {
@@ -383,6 +403,7 @@ async function transcribeCanonicalRoleReport({ role, output, reportFields = pars
       type: "judgment",
       recorded_at: recordedAt,
       head_sha: headSha,
+      stop_wave_id: currentStopWaveId,
       can_stop: canStop,
       blocker_count: blockerCount,
       high_value_gap_count: highValueGapCount,
@@ -390,7 +411,7 @@ async function transcribeCanonicalRoleReport({ role, output, reportFields = pars
       report_fields: reportFields,
       report_text: output.trim(),
     });
-    result.appended.push(`judgment:${headSha.slice(0, 12)}`);
+    result.appended.push(`judgment:${headSha.slice(0, 12)}:wave:${currentStopWaveId}`);
     return result;
   }
 
