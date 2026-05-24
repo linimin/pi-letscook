@@ -1,11 +1,27 @@
 # Changelog
 
+## 0.1.75
+
+### Fixed
+
+- stopped treating a fresh but under-specified explicit `cook_handoff` as an automatic startup blocker; `/cook` now uses the user's explicit entry as implementation intent and lets same-entry primary-agent startup synthesis tighten the first slice before it gives up
+- aligned startup, sticky-workflow, and canonical-evidence regressions with the new implementation-first `/cook` behavior so long-running workflows no longer bounce users back into handoff-authoring loops
+
+## 0.1.74
+
+### Fixed
+
+- made active `/cook` workflows sticky across subsequent turns so routine continuation, exact await-user-input replies, and mandatory completion-role dispatch no longer depend on prompt-shaped driver turns or repeated manual `/cook` re-entry
+- updated smoke, canonical-evidence, release-check, and completion-role gating regressions to enforce the new sticky active-workflow self-healing behavior
+- stopped letting fresh but under-specified explicit `cook_handoff` capsules block `/cook` startup by default; `/cook` now treats the user's entry as implementation intent and tries same-entry primary-agent startup synthesis to tighten the first slice before failing closed
+
 ## 0.1.73
 
 ### Fixed
 
-- fixed `/cook` await-user-input resumptions so a user's exact reply in the active workflow can dispatch the mandatory follow-up completion role without forcing an extra `/cook` rerun
-- kept active-workflow completion-role gating strict for ordinary main-chat turns while adding regression coverage that fails if await-user-input replies lose their workflow dispatch rights
+- made active `/cook` workflows sticky across subsequent turns so completion-role dispatch and workflow context continue to self-heal from canonical active state instead of depending on prompt-shaped driver turns
+- stopped pushing users to rerun `/cook` for routine active-workflow continuation or exact await-user-input replies when canonical workflow state is already active
+- added regression coverage so release-check fails if sticky active-workflow dispatch falls back to prompt-only gating again
 
 ## 0.1.72
 

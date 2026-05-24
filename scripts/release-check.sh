@@ -34,8 +34,8 @@ checks = {
         'description: "/cook workflow: start or replace workflow only from an explicit primary-agent handoff, or resume the current workflow from canonical state"',
         '"Do not call completion_role from ordinary chat; it is reserved for active /cook workflow sessions."',
         '`COMPLETION WORKFLOW DRIVER\\nStart or continue the completion workflow for this repo.',
-        'function isCompletionRoleDispatchAllowedTurn(',
-        'return asString(snapshot?.state?.continuation_policy) === "continue";',
+        'function isCompletionWorkflowSessionTurn(',
+        'return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);',
     ],
     "extensions/completion/policy-guards.ts": [
         'return "completion_role may only be used from an active /cook workflow session.";',

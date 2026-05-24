@@ -510,7 +510,10 @@ import sys
 from pathlib import Path
 
 reminder = Path(sys.argv[1])
-assert not reminder.exists(), 'ordinary non-/cook turn should not inject completion reminder solely from selected-slice canonical state'
+assert reminder.exists(), 'active selected-slice canonical state should inject the completion reminder on subsequent non-/cook turns'
+text = reminder.read_text()
+assert 'Completion workflow detected.' in text, 'selected-slice reminder should expose canonical workflow context'
+assert 'Verification evidence subject: selected_slice' in text, 'selected-slice reminder should expose the canonical evidence subject'
 PY
 
 python3 - <<'PY'

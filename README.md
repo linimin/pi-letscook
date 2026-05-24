@@ -61,7 +61,7 @@ Then run `/reload` in Pi.
 
 If the primary-agent handoff step still cannot prepare a concrete handoff, `/cook` fails closed, leaves canonical `.agent/**` state unchanged, and tells you to refine the mission, first slice, or verification intent in the main chat before rerunning `/cook`.
 
-If a fresh explicit handoff exists but is still workflow-worthy rather than implementation-startable, `/cook` also fails closed instead of silently treating that capsule as planning support or canonical workflow state.
+If a fresh explicit handoff exists but is still workflow-worthy rather than implementation-startable, `/cook` now treats your `/cook` entry as implementation intent and asks the same-entry primary-agent handoff synthesis step to tighten that startup from recent discussion before it gives up. Only if the synthesized startup is still not concrete enough does `/cook` fail closed and ask for refinement in the main chat.
 
 If you pass inline arguments to `/cook`, it also fails closed and tells you to move that intent into the main chat before rerunning bare `/cook`.
 
@@ -98,7 +98,7 @@ I want to add login redirect handling and tests.
 
 | Repo state | What you'll see |
 |---|---|
-| No workflow yet | `/cook` consumes a fresh explicit primary-agent handoff when one already exists, or synthesizes one from the primary-agent view in the same entry, then asks you to choose **Start** or **Cancel**. Stale, planning-only, or non-startable handoffs still fail closed. |
+| No workflow yet | `/cook` consumes a fresh explicit primary-agent handoff when one already exists, or synthesizes one from the primary-agent view in the same entry, then asks you to choose **Start** or **Cancel**. If a fresh explicit handoff is still under-specified, `/cook` first tries to tighten it through same-entry startup synthesis before failing closed. |
 | Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If a concrete replacement handoff exists already or is synthesized in the same `/cook` entry and points to a different mission, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous or missing replacement handoff stays conservative. |
 | Previous workflow is `done` | `/cook` can start the next implementation round from a fresh explicit primary-agent handoff or from the same-entry primary-agent handoff synthesis step behind **Start** or **Cancel**. Weak or planning-only next-round handoffs still fail closed. |
 

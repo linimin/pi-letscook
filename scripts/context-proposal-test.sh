@@ -564,8 +564,8 @@ assert plan['mission_anchor'] == mission, 'summary-only active bare /cook should
 assert active['mission_anchor'] == mission, 'summary-only active bare /cook should keep active-slice.json unchanged'
 PY
 
-# Active workflow: a fresh explicit handoff that is not implementation-startable should still fail closed
-# without rewriting canonical state.
+# Active workflow: a fresh explicit handoff that is not implementation-startable should trigger
+# same-entry startup synthesis instead of blocking active-workflow continuation outright.
 SESSION_ONE_NON_STARTABLE_ACTIVE="$TMPDIR/session-one-non-startable-active.jsonl"
 NON_STARTABLE_ACTIVE_ROUTING="$TMPDIR/active-non-startable-routing.json"
 NON_STARTABLE_ACTIVE_RESUME="$TMPDIR/unexpected-active-non-startable-resume.txt"
@@ -614,6 +614,49 @@ PY
 )"
 write_session_messages "$SESSION_ONE_NON_STARTABLE_ACTIVE" "$ROOT" "$NON_STARTABLE_ACTIVE_MESSAGES"
 
+SYNTH_NON_STARTABLE_ACTIVE_HANDOFF="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:03.000Z",
+    "source_turn_id": "s0001",
+    "mission": "Replace the current widget mission with a concrete redirect-hardening workflow.",
+    "scope": [
+        "Tighten the active workflow replacement into a bounded redirect-hardening slice.",
+        "Preserve the current workflow until the user confirms replacement."
+    ],
+    "constraints": [
+        "Do not rewrite canonical state until replacement confirmation succeeds."
+    ],
+    "non_goals": [],
+    "acceptance": [
+        "Add a regression test that proves the replacement redirect behavior on a concrete repo path.",
+        "Keep replacement startup bounded to the redirect-handling slice with deterministic verification."
+    ],
+    "risks": [],
+    "notes": [
+        "This synthesized handoff tightens the vague explicit capsule into a concrete replacement option."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Land the redirect-hardening regression slice before any broader workflow replacement.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "src/auth/redirect.ts",
+        "tests/auth/redirect.spec.ts"
+    ],
+    "verification_commands": [
+        "npm test -- redirect.spec.ts"
+    ],
+    "why_this_slice_first": "The redirect-handling path is the smallest concrete slice that can justify replacing the active workflow.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The user explicitly entered /cook, so startup synthesis should tighten the vague explicit handoff instead of failing closed immediately."
+}
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
+PY
+)"
+
 python3 - "$TMPDIR/active-non-startable-before.json" <<'PY'
 import json
 import sys
@@ -633,6 +676,7 @@ PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$NON_STARTABLE_ACTIVE_ROUTING" 
 PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$NON_STARTABLE_ACTIVE_RESUME" \
 PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$NON_STARTABLE_ACTIVE_CHOOSER" \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$NON_STARTABLE_ACTIVE_PROPOSAL" \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$SYNTH_NON_STARTABLE_ACTIVE_HANDOFF" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$SESSION_ONE_NON_STARTABLE_ACTIVE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-context-proposal-active-non-startable.out" 2>"$TMPDIR/pi-completion-context-proposal-active-non-startable.err"
 
@@ -657,15 +701,15 @@ after = {
 }
 
 assert routing['mode'] == 'bare', 'fresh non-startable explicit handoff should snapshot bare routing mode'
-assert routing['action'] == 'blocked', 'fresh non-startable explicit handoff should fail closed for active bare /cook'
-assert routing['reason'] == 'fresh_explicit_handoff_not_startable', 'fresh non-startable explicit handoff should keep the dedicated explicit-handoff fail-closed reason'
-assert 'fresh explicit primary-agent handoff exists' in routing['blockedFailureMessage'], 'fresh non-startable explicit handoff should surface the dedicated fail-closed message'
-assert 'acceptance is not anchored to concrete repo changes or verification' in routing['blockedFailureMessage'], 'fresh non-startable explicit handoff should explain why the capsule is not startable'
-assert not resume_path.exists(), 'fresh non-startable explicit handoff should not queue a resume prompt'
-assert not chooser_path.exists(), 'fresh non-startable explicit handoff should not open the replacement chooser'
-assert not proposal_path.exists(), 'fresh non-startable explicit handoff should not open final proposal confirmation'
-assert 'fresh explicit primary-agent handoff exists' in output, 'fresh non-startable explicit handoff should explain that the explicit capsule blocked active-workflow replacement'
-assert before == after, 'fresh non-startable explicit handoff should leave canonical state unchanged'
+assert routing['action'] == 'refocus', 'fresh non-startable explicit handoff should synthesize a concrete replacement option instead of blocking active bare /cook'
+assert routing['reason'] == 'fresh_explicit_handoff', 'fresh non-startable explicit handoff should keep explicit-handoff replacement routing after startup synthesis tightens it'
+assert resume_path.exists(), 'non-interactive active workflow should continue by queueing the canonical resume prompt after synthesized replacement routing'
+assert chooser_path.exists(), 'fresh non-startable explicit handoff should still open the replacement chooser snapshot after startup synthesis tightens it'
+assert not proposal_path.exists(), 'non-interactive active workflow should not open final replacement confirmation without an explicit chooser refocus selection'
+chooser = json.loads(chooser_path.read_text())
+assert 'Replace the current widget mission with a concrete redirect-hardening workflow.' in chooser['candidateMissions'], 'replacement chooser should include the synthesized concrete mission'
+assert 'fresh explicit primary-agent handoff exists' not in output, 'fresh non-startable explicit handoff should not fail closed once startup synthesis tightens it'
+assert before == after, 'fresh non-startable explicit handoff should still leave canonical state unchanged until replacement confirmation succeeds'
 PY
 
 # Completed workflow: bare /cook should suppress proposals that simply restate the completed mission
@@ -1311,8 +1355,8 @@ assert 'Why this slice first: The redirect callback bug is already bounded enoug
 assert 'Primary-agent /cook handoff rationale: The implementation plan is concrete and ready for repo changes.' in state['advisory_startup_brief']['notes'], 'explicit handoff startup should preserve why_cook_now as notes'
 PY
 
-# Fresh but non-startable explicit handoff: /cook should fail closed instead of falling back
-# to a broad recent-discussion startup brief when the explicit capsule is still too vague.
+# Fresh but non-startable explicit handoff: /cook should tighten startup in the same entry
+# instead of failing closed solely because the explicit capsule is still too vague.
 HANDOFF_ROOT_VAGUE="$TMPDIR/handoff-root-vague"
 mkdir -p "$HANDOFF_ROOT_VAGUE"
 cd "$HANDOFF_ROOT_VAGUE"
@@ -1365,7 +1409,54 @@ PY
 )"
 write_session_messages "$HANDOFF_SESSION_VAGUE" "$HANDOFF_ROOT_VAGUE" "$HANDOFF_MESSAGES_VAGUE"
 
+SYNTH_HANDOFF_VAGUE="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:03.000Z",
+    "source_turn_id": "s-vague",
+    "mission": "Fix login redirect callback behavior.",
+    "scope": [
+        "Update the callback redirect decision logic.",
+        "Add a regression test for returning to the requested page."
+    ],
+    "constraints": [
+        "Do not refactor the broader auth flow."
+    ],
+    "non_goals": [],
+    "acceptance": [
+        "Add a regression test proving the callback returns to the requested page.",
+        "Keep the broader auth flow unchanged while the redirect regression passes."
+    ],
+    "risks": [
+        "Broad recent context could broaden the startup brief if synthesis ignores the bounded first slice."
+    ],
+    "notes": [
+        "This synthesized startup brief tightens the vague explicit handoff into a bounded redirect fix."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Land the callback redirect fix and its regression coverage.",
+    "first_slice_non_goals": [
+        "Do not refactor the broader auth flow."
+    ],
+    "implementation_surfaces": [
+        "src/auth/redirect.ts",
+        "tests/auth/redirect.spec.ts"
+    ],
+    "verification_commands": [
+        "npm test -- redirect.spec.ts"
+    ],
+    "why_this_slice_first": "The callback redirect path is the smallest concrete slice implied by the recent discussion.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1"
+}
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
+PY
+)"
+
 PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$SYNTH_HANDOFF_VAGUE" \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_VAGUE" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$HANDOFF_SESSION_VAGUE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-vague.out" 2>"$TMPDIR/pi-completion-handoff-vague.err"
@@ -1377,16 +1468,16 @@ from pathlib import Path
 snapshot = Path(sys.argv[1])
 output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
 
-assert not snapshot.exists(), 'fresh non-startable handoff should not emit a startup proposal snapshot'
-assert not Path('.agent').exists(), 'fresh non-startable handoff should fail closed without writing canonical state'
-assert 'fresh explicit primary-agent handoff exists' in output, 'fresh non-startable handoff should explain that the explicit capsule blocked startup'
-assert 'acceptance is not anchored to concrete repo changes or verification' in output, 'fresh non-startable handoff should explain the workflow-only acceptance failure'
-assert 'implementation_surfaces is empty' in output, 'fresh non-startable handoff should explain the missing implementation_surfaces requirement'
-assert 'verification_commands is empty' in output, 'fresh non-startable handoff should explain the missing verification_commands requirement'
+assert snapshot.exists(), 'fresh non-startable handoff should emit a startup proposal snapshot after same-entry startup synthesis tightens it'
+assert not Path('.agent').exists(), 'fresh non-startable handoff should still wait for confirmation before writing canonical state'
+proposal = __import__('json').loads(snapshot.read_text())
+assert proposal['mission'] == 'Fix login redirect callback behavior.', 'synthesized startup proposal should preserve the concrete mission anchor from recent discussion'
+assert proposal['source'] == 'handoff_capsule', 'synthesized startup proposal should still reflect primary-agent handoff startup synthesis output'
+assert 'fresh explicit primary-agent handoff exists' not in output, 'fresh non-startable handoff should not fail closed once startup synthesis tightens it'
 PY
 
-# Fresh explicit handoff with complete first-slice fields but vague acceptance: /cook should still fail closed
-# with the dedicated explicit-handoff message instead of bootstrapping canonical state.
+# Fresh explicit handoff with complete first-slice fields but vague acceptance: /cook should still
+# try same-entry startup synthesis before giving up.
 HANDOFF_ROOT_VAGUE_ACCEPTANCE="$TMPDIR/handoff-root-vague-acceptance"
 mkdir -p "$HANDOFF_ROOT_VAGUE_ACCEPTANCE"
 cd "$HANDOFF_ROOT_VAGUE_ACCEPTANCE"
@@ -1445,7 +1536,54 @@ PY
 )"
 write_session_messages "$HANDOFF_SESSION_VAGUE_ACCEPTANCE" "$HANDOFF_ROOT_VAGUE_ACCEPTANCE" "$HANDOFF_MESSAGES_VAGUE_ACCEPTANCE"
 
+SYNTH_HANDOFF_VAGUE_ACCEPTANCE="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:03.500Z",
+    "source_turn_id": "s-vague-acceptance",
+    "mission": "Fix login redirect callback behavior.",
+    "scope": [
+        "Update the callback redirect decision logic.",
+        "Preserve the broader auth flow."
+    ],
+    "constraints": [
+        "Do not refactor the broader auth flow."
+    ],
+    "non_goals": [],
+    "acceptance": [
+        "Add a regression test for returning to the requested page.",
+        "Verify the redirect callback path with npm test -- redirect.spec.ts."
+    ],
+    "risks": [
+        "Broad recent context could broaden the startup brief if synthesis ignores the bounded first slice."
+    ],
+    "notes": [
+        "This synthesized startup brief tightens the vague explicit acceptance into concrete repo-change verification."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Land the redirect callback fix and its regression coverage.",
+    "first_slice_non_goals": [
+        "Do not refactor the broader auth flow."
+    ],
+    "implementation_surfaces": [
+        "src/auth/redirect.ts",
+        "tests/auth/redirect.spec.ts"
+    ],
+    "verification_commands": [
+        "npm test -- redirect.spec.ts"
+    ],
+    "why_this_slice_first": "The redirect callback bug is already bounded enough to start once startup synthesis tightens the acceptance contract.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1"
+}
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
+PY
+)"
+
 PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$SYNTH_HANDOFF_VAGUE_ACCEPTANCE" \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_VAGUE_ACCEPTANCE" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$HANDOFF_SESSION_VAGUE_ACCEPTANCE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-vague-acceptance.out" 2>"$TMPDIR/pi-completion-handoff-vague-acceptance.err"
@@ -1457,10 +1595,12 @@ from pathlib import Path
 snapshot = Path(sys.argv[1])
 output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
 
-assert not snapshot.exists(), 'fresh explicit handoff with vague acceptance should not emit a startup proposal snapshot'
-assert not Path('.agent').exists(), 'fresh explicit handoff with vague acceptance should fail closed without writing canonical state'
-assert 'fresh explicit primary-agent handoff exists' in output, 'fresh explicit handoff with vague acceptance should use the dedicated explicit-handoff fail-closed message'
-assert 'acceptance is not anchored to concrete repo changes or verification' in output, 'fresh explicit handoff with vague acceptance should explain the vague acceptance failure'
+assert snapshot.exists(), 'fresh explicit handoff with vague acceptance should emit a startup proposal snapshot after same-entry startup synthesis tightens it'
+assert not Path('.agent').exists(), 'fresh explicit handoff with vague acceptance should still wait for confirmation before writing canonical state'
+proposal = __import__('json').loads(snapshot.read_text())
+assert proposal['mission'] == 'Fix login redirect callback behavior.', 'synthesized startup proposal should preserve the concrete mission anchor when tightening vague acceptance'
+assert proposal['source'] == 'handoff_capsule', 'synthesized startup proposal should still be attributed to primary-agent handoff synthesis'
+assert 'fresh explicit primary-agent handoff exists' not in output, 'fresh explicit handoff with vague acceptance should not fail closed once startup synthesis tightens it'
 PY
 
 # Done workflow + fresh handoff: the fresh explicit handoff should override done-state suppression and start the new round.
@@ -1673,6 +1813,7 @@ PY
 write_session_messages "$HANDOFF_SESSION_NEGATIVE" "$HANDOFF_ROOT_NEGATIVE" "$HANDOFF_MESSAGES_NEGATIVE"
 
 PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_NEGATIVE" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$HANDOFF_SESSION_NEGATIVE" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-negative.out" 2>"$TMPDIR/pi-completion-handoff-negative.err"

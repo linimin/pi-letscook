@@ -257,42 +257,8 @@ function isCompletionDriverPromptTurn(snapshot: CompletionStateSnapshot | undefi
 	return true;
 }
 
-function isCompletionWorkflowSessionTurn(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
-	if (!(hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot))) return false;
-	return isCompletionDriverPromptTurn(snapshot, ctx) || isCookCommandTurn(ctx);
-}
-
-function isOrdinaryMainChatTurnDuringActiveWorkflow(
-	snapshot: CompletionStateSnapshot | undefined,
-	ctx: { sessionManager?: any },
-): boolean {
-	if (!hasActiveWorkflowEntry(snapshot)) return false;
-	const latest = latestUserOrCustomTurnText(ctx);
-	if (!latest) return false;
-	if (isCookCommandTurn(ctx)) return false;
-	if (isCompletionDriverPromptTurn(snapshot, ctx)) return false;
-	return true;
-}
-
-function isAwaitingUserInputWorkflowReplyTurn(
-	snapshot: CompletionStateSnapshot | undefined,
-	ctx: { sessionManager?: any },
-): boolean {
-	if (!hasActiveWorkflowEntry(snapshot)) return false;
-	if (!isOrdinaryMainChatTurnDuringActiveWorkflow(snapshot, ctx)) return false;
-	return asString(snapshot?.state?.continuation_policy) === "await_user_input";
-}
-
-function isCompletionRoleDispatchAllowedTurn(
-	snapshot: CompletionStateSnapshot | undefined,
-	ctx: { sessionManager?: any },
-): boolean {
-	if (hasCompletionRoutingActivation(snapshot)) return true;
-	if (!hasActiveWorkflowEntry(snapshot)) return false;
-	if (isCompletionWorkflowSessionTurn(snapshot, ctx)) return true;
-	if (isAwaitingUserInputWorkflowReplyTurn(snapshot, ctx)) return true;
-	if (isOrdinaryMainChatTurnDuringActiveWorkflow(snapshot, ctx)) return false;
-	return asString(snapshot?.state?.continuation_policy) === "continue";
+function isCompletionWorkflowSessionTurn(snapshot: CompletionStateSnapshot | undefined, _ctx: { sessionManager?: any }): boolean {
+	return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);
 }
 
 function shouldInjectCompletionWorkflowContext(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
@@ -464,7 +430,7 @@ async function deriveCookContextProposal(
 	projectName: string,
 ): Promise<CookContextProposalResult> {
 	const explicit = await deriveCookStartupProposal(ctx, projectName);
-	if (explicit.proposal || explicit.blockedFailureMessage) return explicit;
+	if (explicit.proposal) return explicit;
 	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
 	const recentEntries = recentMessages
 		.filter((entry) => !entry.isCommand && (entry.role === "user" || entry.role === "assistant" || entry.role === "custom" || entry.role === "summary"))
@@ -484,6 +450,10 @@ async function deriveCookContextProposal(
 			`verification summary: ${asString(snapshot.verificationEvidence?.summary) ?? "(none)"}`,
 		]
 		: [];
+	if (explicit.blockedFailureMessage) {
+		workflowContextLines.push(`fresh explicit handoff required tightening before startup: ${explicit.blockedFailureMessage}`);
+		workflowContextLines.push("Treat the user's /cook as implementation intent. Tighten the first slice and verification details from recent discussion instead of failing closed solely because the latest explicit handoff capsule was under-specified.");
+	}
 	const raw = await generateCookHandoffWithAgent({
 		ctx,
 		projectName,
@@ -510,6 +480,7 @@ async function deriveCookContextProposal(
 	});
 	if (generated.status === "startable") return { proposal: generated.proposal };
 	if (generated.status === "fresh_but_not_startable") return { blockedFailureMessage: generated.message };
+	if (explicit.blockedFailureMessage) return { blockedFailureMessage: explicit.blockedFailureMessage };
 	return {};
 }
 
@@ -1114,7 +1085,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		const snapshot = await loadCompletionSnapshot(cwd);
 		const completionActive = Boolean(snapshot) && asString(snapshot?.state?.continuation_policy) !== "done";
 		const root = snapshot?.files.root ?? findRepoRoot(cwd) ?? cwd;
-		const completionRoleDispatchAllowed = Boolean(role) || isCompletionRoleDispatchAllowedTurn(snapshot, ctx);
+		const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowSessionTurn(snapshot, ctx);
 		const reason = toolCallBlockReason({
 			toolName: event.toolName,
 			input: isRecord(event.input) ? event.input : undefined,
