@@ -24,7 +24,7 @@ import {
 	type RoleMessage,
 } from "./status-surface";
 import { completionRootKey, findCompletionRoot, findRepoRoot } from "./state-store";
-import { parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";
+import { buildRoleReportRepairPrompt, parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";
 import type { AgentDefinition, CompletionRole, JsonRecord, LiveRoleActivity } from "./types";
 
 export type RunCompletionRoleParams = {
@@ -592,84 +592,113 @@ export function getPiInvocation(args: string[]): { command: string; args: string
 export async function runCompletionRole(params: RunCompletionRoleParams): Promise<RunCompletionRoleResult> {
 	const agent = await loadAgentDefinition(params.root, params.role);
 	const systemPromptTemp = await writeTempFile(params.root, "pi-completion-role-", agent.systemPrompt);
-	const taskLines = [...params.systemPromptPreamble];
-	if (params.evaluationContextLines?.length) taskLines.push("", ...params.evaluationContextLines);
-	if (params.task?.trim()) taskLines.push("", "Supplemental task context:", params.task.trim());
-	const prompt = taskLines.join("\n");
-	const args: string[] = ["--mode", "json", "-p", "--no-session", "--append-system-prompt", systemPromptTemp.filePath];
-	if (agent.model) args.push("--model", agent.model);
-	if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
-	args.push(prompt);
+	const baseTaskLines = [...params.systemPromptPreamble];
+	if (params.evaluationContextLines?.length) baseTaskLines.push("", ...params.evaluationContextLines);
+	if (params.task?.trim()) baseTaskLines.push("", "Supplemental task context:", params.task.trim());
 
-	const invocation = getPiInvocation(args);
-	let stderr = "";
-	const messages: Array<{ role: string; content: Array<{ type: string; text?: string }> }> = [];
-	const liveActivity = params.createLiveRoleActivity(params.role);
-	params.onUpdate?.(liveActivity);
-	const heartbeat = setInterval(() => params.onUpdate?.(liveActivity), params.heartbeatMs);
+	const runAttempt = async (repairPrompt?: string, previousOutput?: string): Promise<RunCompletionRoleResult> => {
+		const taskLines = [...baseTaskLines];
+		if (repairPrompt) {
+			taskLines.push(
+				"",
+				"Structured report repair mode:",
+				"Canonical transcription rejected the previous structured report for a repairable consistency error.",
+				"Previous report:",
+				"```text",
+				(previousOutput ?? "").trim(),
+				"```",
+				repairPrompt,
+			);
+		}
+		const prompt = taskLines.join("\n");
+		const args: string[] = ["--mode", "json", "-p", "--no-session", "--append-system-prompt", systemPromptTemp.filePath];
+		if (agent.model) args.push("--model", agent.model);
+		if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
+		args.push(prompt);
+
+		const invocation = getPiInvocation(args);
+		let stderr = "";
+		const messages: Array<{ role: string; content: Array<{ type: string; text?: string }> }> = [];
+		const liveActivity = params.createLiveRoleActivity(params.role);
+		params.onUpdate?.(liveActivity);
+		const heartbeat = setInterval(() => params.onUpdate?.(liveActivity), params.heartbeatMs);
+
+		try {
+			const exitCode = await new Promise<number>((resolve) => {
+				const proc = spawn(invocation.command, invocation.args, {
+					cwd: params.root,
+					env: { ...process.env, PI_COMPLETION_ROLE: params.role },
+					stdio: ["ignore", "pipe", "pipe"],
+					shell: false,
+				});
+				let buffer = "";
+
+				const processLine = (line: string) => {
+					if (!line.trim()) return;
+					try {
+						const event = JSON.parse(line) as JsonRecord;
+						if (params.applyLiveRoleEvent(liveActivity, event, messages)) params.onUpdate?.(liveActivity);
+					} catch {
+						// ignore malformed lines
+					}
+				};
+
+				proc.stdout.on("data", (chunk) => {
+					buffer += chunk.toString();
+					const lines = buffer.split("\n");
+					buffer = lines.pop() ?? "";
+					for (const line of lines) processLine(line);
+				});
+
+				proc.stderr.on("data", (chunk) => {
+					stderr += chunk.toString();
+				});
+
+				proc.on("close", (code) => {
+					if (buffer.trim()) processLine(buffer);
+					resolve(code ?? 0);
+				});
+
+				proc.on("error", () => resolve(1));
+
+				if (params.signal) {
+					const abort = () => proc.kill("SIGTERM");
+					if (params.signal.aborted) abort();
+					else params.signal.addEventListener("abort", abort, { once: true });
+				}
+			});
+
+			const output = liveActivity.lastAssistantText || stderr.trim() || `${params.role} finished with no text output.`;
+			const reportFields = parseReportFields(output);
+			const transcription = exitCode === 0 ? await transcribeRoleOutput(params.role, params.root, output, reportFields) : undefined;
+			return {
+				role: params.role,
+				ok: exitCode === 0,
+				exitCode,
+				output,
+				stderr: stderr.trim(),
+				reportFields,
+				transcription,
+				activity: params.cloneLiveRoleActivity(liveActivity, { status: exitCode === 0 ? "ok" : "error" }),
+			};
+		} finally {
+			clearInterval(heartbeat);
+		}
+	};
 
 	try {
-		const exitCode = await new Promise<number>((resolve) => {
-			const proc = spawn(invocation.command, invocation.args, {
-				cwd: params.root,
-				env: { ...process.env, PI_COMPLETION_ROLE: params.role },
-				stdio: ["ignore", "pipe", "pipe"],
-				shell: false,
-			});
-			let buffer = "";
-
-			const processLine = (line: string) => {
-				if (!line.trim()) return;
-				try {
-					const event = JSON.parse(line) as JsonRecord;
-					if (params.applyLiveRoleEvent(liveActivity, event, messages)) params.onUpdate?.(liveActivity);
-				} catch {
-					// ignore malformed lines
-				}
-			};
-
-			proc.stdout.on("data", (chunk) => {
-				buffer += chunk.toString();
-				const lines = buffer.split("\n");
-				buffer = lines.pop() ?? "";
-				for (const line of lines) processLine(line);
-			});
-
-			proc.stderr.on("data", (chunk) => {
-				stderr += chunk.toString();
-			});
-
-			proc.on("close", (code) => {
-				if (buffer.trim()) processLine(buffer);
-				resolve(code ?? 0);
-			});
-
-			proc.on("error", () => resolve(1));
-
-			if (params.signal) {
-				const abort = () => proc.kill("SIGTERM");
-				if (params.signal.aborted) abort();
-				else params.signal.addEventListener("abort", abort, { once: true });
-			}
-		});
-
-		const output = liveActivity.lastAssistantText || stderr.trim() || `${params.role} finished with no text output.`;
-		const reportFields = parseReportFields(output);
-		const transcription = exitCode === 0 ? await transcribeRoleOutput(params.role, params.root, output, reportFields) : undefined;
-		if (transcription?.appended.length) params.onConsoleMessage?.("info", `Completion transcription appended: ${transcription.appended.join(", ")}`);
-		if (transcription?.errors.length) params.onConsoleMessage?.("warning", `Completion transcription warning: ${transcription.errors.join(" | ")}`);
-		return {
-			role: params.role,
-			ok: exitCode === 0,
-			exitCode,
-			output,
-			stderr: stderr.trim(),
-			reportFields,
-			transcription,
-			activity: params.cloneLiveRoleActivity(liveActivity, { status: exitCode === 0 ? "ok" : "error" }),
-		};
+		let result = await runAttempt();
+		const repairPrompt = result.ok && result.transcription?.errors.length
+			? buildRoleReportRepairPrompt(params.role, result.transcription.errors)
+			: undefined;
+		if (repairPrompt) {
+			params.onConsoleMessage?.("info", `Retrying ${params.role} once to repair structured report consistency.`);
+			result = await runAttempt(repairPrompt, result.output);
+		}
+		if (result.transcription?.appended.length) params.onConsoleMessage?.("info", `Completion transcription appended: ${result.transcription.appended.join(", ")}`);
+		if (result.transcription?.errors.length) params.onConsoleMessage?.("warning", `Completion transcription warning: ${result.transcription.errors.join(" | ")}`);
+		return result;
 	} finally {
-		clearInterval(heartbeat);
 		await fsp.rm(systemPromptTemp.dir, { recursive: true, force: true });
 	}
 }

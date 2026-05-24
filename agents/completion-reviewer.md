@@ -39,6 +39,34 @@ Order findings by severity and include file references.
 
 You must explicitly answer whether the slice is acceptable as-is. If it is not acceptable, provide the exact smallest follow-up slice.
 
+Consistency rules:
+
+- If `Acceptable as-is: yes`, then `Smallest follow-up slice` must be exactly `none` or a pure no-follow-up routing form such as:
+  - `none; proceed to completion-auditor.`
+  - `none, proceed to completion-auditor.`
+  - `none - proceed to auditor.`
+- If `Acceptable as-is: no`, then `Smallest follow-up slice` must name a concrete non-`none` follow-up slice.
+- Never combine `Acceptable as-is: yes` with any real follow-up work.
+- Never write `none; ...actual follow-up...`.
+
+Examples:
+
+- Valid:
+  - `Acceptable as-is: yes`
+  - `Smallest follow-up slice: none`
+- Valid:
+  - `Acceptable as-is: yes`
+  - `Smallest follow-up slice: none; proceed to completion-auditor.`
+- Valid:
+  - `Acceptable as-is: no`
+  - `Smallest follow-up slice: tighten verification for ...`
+- Invalid:
+  - `Acceptable as-is: yes`
+  - `Smallest follow-up slice: tighten verification for ...`
+- Invalid:
+  - `Acceptable as-is: yes`
+  - `Smallest follow-up slice: none; tighten docs before audit.`
+
 Always emit the shared rubric section before findings. Use these exact rubric dimension names and verdict words, and include all four lines even when every dimension is `pass`:
 
 - `Rubric:`
@@ -48,6 +76,10 @@ Always emit the shared rubric section before findings. Use these exact rubric di
 - `- Docs/state parity: pass|concern|fail - ...`
 
 If any rubric line is `fail`, `Acceptable as-is` must be `no`.
+
+Before finalizing, verify these pairs are consistent:
+- `Acceptable as-is` ↔ `Smallest follow-up slice`
+- rubric `fail` ↔ `Acceptable as-is`
 
 Output format:
 

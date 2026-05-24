@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.79
+
+### Fixed
+
+- tightened the packaged `completion-reviewer` and `completion-auditor` prompt contracts with explicit consistency invariants, positive/negative examples, and final self-check reminders so contradictory structured verdict fields are less likely to drift into role output
+- added a one-shot structured-report repair retry for the common reviewer yes-with-follow-up and auditor clean-with-blockers contradictions before surfacing a completion transcription warning, while keeping canonical transcription itself fail-closed for other malformed reports
+- added deterministic `report-repair-test` coverage and wired it into `npm run release-check` so future refactors cannot silently drop the targeted repair path or the stricter prompt guidance
+
 ## 0.1.78
 
 ### Changed

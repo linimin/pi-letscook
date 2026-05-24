@@ -15,6 +15,9 @@ const REVIEWER_REQUIRED_FIELDS = [
   "Smallest follow-up slice",
 ];
 
+const REVIEWER_ACCEPTABLE_YES_WITH_FOLLOW_UP_ERROR = "Reviewer output cannot mark 'Acceptable as-is: yes' while naming a follow-up slice other than none.";
+const AUDITOR_CLEAN_YES_WITH_BLOCKERS_ERROR = "Auditor output cannot mark 'Tracked and unignored worktree is clean: yes' while listing worktree blockers.";
+
 const AUDITOR_REQUIRED_FIELDS = [
   "MISSION ANCHOR",
   "Remaining contract IDs",
@@ -194,7 +197,7 @@ function validateRoleReport(role, output, reportFields = parseReportFields(outpu
       errors.push("Reviewer output cannot mark 'Acceptable as-is: yes' when any rubric line is fail.");
     }
     if (acceptable === true && followUpSlice && !isReviewerNoFollowUpValue(followUpSlice)) {
-      errors.push("Reviewer output cannot mark 'Acceptable as-is: yes' while naming a follow-up slice other than none.");
+      errors.push(REVIEWER_ACCEPTABLE_YES_WITH_FOLLOW_UP_ERROR);
     }
     if (acceptable === false) {
       if (!followUpSlice) {
@@ -236,7 +239,7 @@ function validateRoleReport(role, output, reportFields = parseReportFields(outpu
     const openContractIds = asString(reportFields["Open top-level contract IDs"]);
     const hasRemainingWork = !isNoneLike(openContractIds) || (blockerCount ?? 0) > 0 || (highValueGapCount ?? 0) > 0;
     if (worktreeClean === true && worktreeBlockers && !isPureNoneLike(worktreeBlockers)) {
-      errors.push("Auditor output cannot mark 'Tracked and unignored worktree is clean: yes' while listing worktree blockers.");
+      errors.push(AUDITOR_CLEAN_YES_WITH_BLOCKERS_ERROR);
     }
     if (worktreeClean === false && (!worktreeBlockers || isNoneLike(worktreeBlockers))) {
       errors.push("Auditor output must describe worktree blockers when 'Tracked and unignored worktree is clean: no'.");
@@ -329,6 +332,35 @@ async function readJsonFile(filePath) {
   } catch {
     return undefined;
   }
+}
+
+function buildRoleReportRepairPrompt(role, errors) {
+  const normalizedErrors = Array.isArray(errors)
+    ? errors.filter((error) => typeof error === "string" && error.trim().length > 0)
+    : [];
+  if (role === "completion-reviewer" && normalizedErrors.length === 1 && normalizedErrors[0] === REVIEWER_ACCEPTABLE_YES_WITH_FOLLOW_UP_ERROR) {
+    return [
+      "Your previous completion-reviewer report is structurally inconsistent.",
+      "You marked 'Acceptable as-is: yes' while also naming a non-none smallest follow-up slice.",
+      "Re-emit the full report in the exact required format.",
+      "Keep the underlying judgment truthful while satisfying these invariants:",
+      "- If `Acceptable as-is: yes`, `Smallest follow-up slice` must be exactly `none` or a pure routing form such as `none; proceed to completion-auditor.`",
+      "- If a real follow-up slice is needed, `Acceptable as-is` must be `no` and `Smallest follow-up slice` must name that concrete non-`none` slice.",
+      "Do not add commentary. Output only the corrected report.",
+    ].join("\n");
+  }
+  if (role === "completion-auditor" && normalizedErrors.length === 1 && normalizedErrors[0] === AUDITOR_CLEAN_YES_WITH_BLOCKERS_ERROR) {
+    return [
+      "Your previous completion-auditor report is structurally inconsistent.",
+      "You marked 'Tracked and unignored worktree is clean: yes' while also listing non-none worktree blockers.",
+      "Re-emit the full report in the exact required format.",
+      "Keep the underlying judgment truthful while satisfying these invariants:",
+      "- If `Tracked and unignored worktree is clean: yes`, `Worktree blockers` must be exactly `none`.",
+      "- If any real worktree blocker exists, `Tracked and unignored worktree is clean` must be `no` and `Worktree blockers` must describe the blocker(s) concretely.",
+      "Do not add commentary. Output only the corrected report.",
+    ].join("\n");
+  }
+  return undefined;
 }
 
 async function transcribeCanonicalRoleReport({ role, output, reportFields = parseReportFields(output), snapshotFiles, headSha, sliceId, recordedAt = Date.now() }) {
@@ -456,9 +488,12 @@ async function transcribeCanonicalRoleReport({ role, output, reportFields = pars
 
 module.exports = {
   RUBRIC_DIMENSIONS,
+  REVIEWER_ACCEPTABLE_YES_WITH_FOLLOW_UP_ERROR,
+  AUDITOR_CLEAN_YES_WITH_BLOCKERS_ERROR,
   parseReportFields,
   parseYesNo,
   parseFirstNumber,
   validateRoleReport,
+  buildRoleReportRepairPrompt,
   transcribeCanonicalRoleReport,
 };

@@ -22,11 +22,13 @@ const assertNotIncludes = (file, snippet) => {
 };
 
 assertIncludes('extensions/completion/role-runner.ts', 'import { completionRootKey, findCompletionRoot, findRepoRoot } from "./state-store";');
-assertIncludes('extensions/completion/role-runner.ts', 'import { parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";');
+assertIncludes('extensions/completion/role-runner.ts', 'import { buildRoleReportRepairPrompt, parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";');
 assertIncludes('extensions/completion/role-runner.ts', 'const agent = await loadAgentDefinition(params.root, params.role);');
 assertIncludes('extensions/completion/role-runner.ts', 'const systemPromptTemp = await writeTempFile(params.root, "pi-completion-role-", agent.systemPrompt);');
 assertIncludes('extensions/completion/role-runner.ts', 'const reportFields = parseReportFields(output);');
 assertIncludes('extensions/completion/role-runner.ts', 'const transcription = exitCode === 0 ? await transcribeRoleOutput(params.role, params.root, output, reportFields) : undefined;');
+assertIncludes('extensions/completion/role-runner.ts', 'Structured report repair mode:');
+assertIncludes('extensions/completion/role-runner.ts', 'Retrying ${params.role} once to repair structured report consistency.');
 assertIncludes('extensions/completion/role-runner.ts', 'env: { ...process.env, PI_COMPLETION_ROLE: params.role },');
 assertIncludes('extensions/completion/role-runner.ts', 'async function runContextProposalAnalystSubprocess(');
 assertIncludes('extensions/completion/role-runner.ts', 'export async function analyzeContextProposalWithAgent(');

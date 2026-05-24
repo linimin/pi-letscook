@@ -17,6 +17,10 @@ export function parseReportFields(text: string): Record<string, string> {
 	return roleReporting.parseReportFields(text);
 }
 
+export function buildRoleReportRepairPrompt(role: CompletionRole, errors: string[]): string | undefined {
+	return roleReporting.buildRoleReportRepairPrompt(role, errors);
+}
+
 async function gitHeadSha(cwd: string): Promise<string | undefined> {
 	return await new Promise((resolve) => {
 		const proc = spawn("git", ["rev-parse", "HEAD"], { cwd, stdio: ["ignore", "pipe", "ignore"] });

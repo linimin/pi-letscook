@@ -85,7 +85,7 @@ assertIncludes('extensions/completion/prompt-surfaces.ts', '`- required_stop_jud
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- stop_aggregation_policy: ${deps.asString(snapshot.profile?.stop_aggregation_policy) ?? "(missing)"}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Canonical evaluation handoff for ${role}:');
 assertIncludes('extensions/completion/index.ts', 'buildEvaluationRoleReminderText(snapshot, nextRole)');
-assertIncludes('extensions/completion/role-runner.ts', 'import { parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";');
+assertIncludes('extensions/completion/role-runner.ts', 'import { buildRoleReportRepairPrompt, parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";');
 assertIncludes('extensions/completion/transcription.ts', 'roleReporting.transcribeCanonicalRoleReport');
 assertIncludes('extensions/completion/role-reporting.js', 'Missing Rubric heading for ${role}.');
 assertIncludes('extensions/completion/role-reporting.js', 'Reviewer output cannot mark \'Acceptable as-is: yes\' when any rubric line is fail.');
@@ -98,6 +98,8 @@ assertIncludes('extensions/completion/role-reporting.js', 'Stop-judge output can
 assertIncludes('extensions/completion/role-reporting.js', 'Stop-judge output must answer \'Docs/config/runbooks match shipped behavior\' with yes or no.');
 assertIncludes('extensions/completion/role-reporting.js', 'Stop-judge output must answer \'Tracked and unignored worktree is clean\' with yes or no.');
 assertIncludes('package.json', '"rubric-contract-test": "bash ./scripts/rubric-contract-test.sh"');
+assertIncludes('package.json', '"report-repair-test": "bash ./scripts/report-repair-test.sh"');
+assertIncludes('scripts/release-check.sh', 'npm run report-repair-test');
 assertIncludes('scripts/release-check.sh', 'npm run rubric-contract-test');
 assertIncludes('.agent/verify_completion_stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
 assertIncludes('.agent/verify_completion_stop.sh', 'Current HEAD has a can_stop=no judgment');
