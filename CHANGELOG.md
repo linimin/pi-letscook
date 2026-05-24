@@ -1,12 +1,20 @@
 # Changelog
 
+## 0.1.73
+
+### Fixed
+
+- fixed `/cook` await-user-input resumptions so a user's exact reply in the active workflow can dispatch the mandatory follow-up completion role without forcing an extra `/cook` rerun
+- kept active-workflow completion-role gating strict for ordinary main-chat turns while adding regression coverage that fails if await-user-input replies lose their workflow dispatch rights
+
 ## 0.1.72
 
 ### Fixed
 
 - relaxed reviewer no-follow-up routing parsing so `Acceptable as-is: yes` now also accepts `none, proceed to completion-auditor` and `none - proceed to auditor` in addition to the original exact allowance, reducing avoidable completion transcription warnings without weakening the follow-up-slice guard
 - fixed completion-role continuation gating so an already-active `/cook` workflow with `continuation_policy: continue` can keep dispatching mandatory follow-up roles even when the harness no longer recognizes the current turn text as an explicit `/cook` or workflow-driver prompt, while still blocking ordinary main-chat turns from calling `completion_role`
-- added a dedicated `completion-role-gating-test` regression so release-check now fails if active-workflow continuation falls back to the old prompt-only dispatch gate or stops rejecting ordinary main-chat turns
+- fixed `/cook` await-user-input resumptions so a user's exact reply in the active workflow can dispatch the mandatory follow-up completion role without forcing an extra `/cook` rerun
+- added a dedicated `completion-role-gating-test` regression so release-check now fails if active-workflow continuation falls back to the old prompt-only dispatch gate, await-user-input replies lose workflow dispatch rights, or ordinary main-chat turns stop being rejected
 
 ## 0.1.71
 

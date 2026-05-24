@@ -23,13 +23,17 @@ const assertNotIncludes = (file, snippet) => {
 
 assertIncludes('extensions/completion/index.ts', 'function isOrdinaryMainChatTurnDuringActiveWorkflow(');
 assertIncludes('extensions/completion/index.ts', 'function isCompletionRoleDispatchAllowedTurn(');
+assertIncludes('extensions/completion/index.ts', 'function isAwaitingUserInputWorkflowReplyTurn(');
+assertIncludes('extensions/completion/index.ts', 'if (isAwaitingUserInputWorkflowReplyTurn(snapshot, ctx)) return true;');
 assertIncludes('extensions/completion/index.ts', 'if (isOrdinaryMainChatTurnDuringActiveWorkflow(snapshot, ctx)) return false;');
+assertIncludes('extensions/completion/index.ts', 'return asString(snapshot?.state?.continuation_policy) === "await_user_input";');
 assertIncludes('extensions/completion/index.ts', 'return asString(snapshot?.state?.continuation_policy) === "continue";');
 assertIncludes('extensions/completion/index.ts', 'const completionRoleDispatchAllowed = Boolean(role) || isCompletionRoleDispatchAllowedTurn(snapshot, ctx);');
 assertIncludes('extensions/completion/index.ts', 'if (isCookCommandTurn(ctx)) return false;');
 assertIncludes('extensions/completion/index.ts', 'if (isCompletionDriverPromptTurn(snapshot, ctx)) return false;');
 assertIncludes('extensions/completion/policy-guards.ts', 'return "completion_role may only be used from an active /cook workflow session.";');
 assertIncludes('CHANGELOG.md', 'fixed completion-role continuation gating so an already-active `/cook` workflow with `continuation_policy: continue` can keep dispatching mandatory follow-up roles');
+assertIncludes('CHANGELOG.md', 'fixed `/cook` await-user-input resumptions so a user\'s exact reply in the active workflow can dispatch the mandatory follow-up completion role without forcing an extra `/cook` rerun');
 
 assertNotIncludes(
   'extensions/completion/index.ts',
@@ -38,7 +42,11 @@ assertNotIncludes(
 
 const indexText = read('extensions/completion/index.ts');
 const ordinaryGuardIndex = indexText.indexOf('if (isOrdinaryMainChatTurnDuringActiveWorkflow(snapshot, ctx)) return false;');
+const awaitReplyAllowIndex = indexText.indexOf('if (isAwaitingUserInputWorkflowReplyTurn(snapshot, ctx)) return true;');
 const continueFallbackIndex = indexText.indexOf('return asString(snapshot?.state?.continuation_policy) === "continue";');
+if (awaitReplyAllowIndex === -1 || ordinaryGuardIndex === -1 || awaitReplyAllowIndex > ordinaryGuardIndex) {
+  throw new Error('extensions/completion/index.ts must allow active await_user_input reply turns before the ordinary main-chat rejection guard.');
+}
 if (ordinaryGuardIndex === -1 || continueFallbackIndex === -1 || ordinaryGuardIndex > continueFallbackIndex) {
   throw new Error('extensions/completion/index.ts must reject ordinary main-chat turns before allowing the continuation_policy=continue fallback.');
 }

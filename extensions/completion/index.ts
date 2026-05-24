@@ -274,6 +274,15 @@ function isOrdinaryMainChatTurnDuringActiveWorkflow(
 	return true;
 }
 
+function isAwaitingUserInputWorkflowReplyTurn(
+	snapshot: CompletionStateSnapshot | undefined,
+	ctx: { sessionManager?: any },
+): boolean {
+	if (!hasActiveWorkflowEntry(snapshot)) return false;
+	if (!isOrdinaryMainChatTurnDuringActiveWorkflow(snapshot, ctx)) return false;
+	return asString(snapshot?.state?.continuation_policy) === "await_user_input";
+}
+
 function isCompletionRoleDispatchAllowedTurn(
 	snapshot: CompletionStateSnapshot | undefined,
 	ctx: { sessionManager?: any },
@@ -281,6 +290,7 @@ function isCompletionRoleDispatchAllowedTurn(
 	if (hasCompletionRoutingActivation(snapshot)) return true;
 	if (!hasActiveWorkflowEntry(snapshot)) return false;
 	if (isCompletionWorkflowSessionTurn(snapshot, ctx)) return true;
+	if (isAwaitingUserInputWorkflowReplyTurn(snapshot, ctx)) return true;
 	if (isOrdinaryMainChatTurnDuringActiveWorkflow(snapshot, ctx)) return false;
 	return asString(snapshot?.state?.continuation_policy) === "continue";
 }
