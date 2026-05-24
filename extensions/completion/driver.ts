@@ -93,6 +93,7 @@ type DriverContext = {
 	sessionManager?: any;
 	model?: any;
 	modelRegistry?: any;
+	cookInlinePrompt?: string;
 };
 
 type DriverContinuationTracker = {
@@ -517,6 +518,7 @@ export async function runCookEntry(
 	deps: CompletionDriverDeps,
 ): Promise<void> {
 	let goal: string | undefined;
+	const inlinePrompt = asString(ctx.cookInlinePrompt);
 	const cwd = deps.getCtxCwd(ctx);
 	let snapshot = await loadCompletionSnapshot(cwd);
 	const workflowDone = isWorkflowDone(snapshot);
@@ -668,7 +670,7 @@ export async function runCookEntry(
 		}
 	}
 	kickoffMissionAnchor = kickoffMissionAnchor ?? currentMissionAnchor(snapshot);
-	const kickoffGoal = goal ?? kickoffMissionAnchor;
+	const kickoffGoal = goal ?? kickoffMissionAnchor ?? inlinePrompt;
 	pi.setSessionName(`completion: ${kickoffMissionAnchor.slice(0, 60)}`);
 	const kickoffPrompt = deps.completionKickoff(
 		kickoffGoal,
@@ -685,11 +687,8 @@ export function registerCookCommand(pi: ExtensionAPI, deps: CompletionDriverDeps
 	pi.registerCommand("cook", {
 		description: deps.cookCommandSpec.description,
 		handler: async (args, ctx) => {
-			if (args.trim().length > 0) {
-				deps.emitCommandText(ctx, "/cook no longer accepts inline arguments. Discuss the concrete repo change in the main chat and rerun /cook.", "info");
-				return;
-			}
-			await runCookEntry(pi, ctx, deps);
+			const inlinePrompt = asString(args);
+			await runCookEntry(pi, { ...ctx, cookInlinePrompt: inlinePrompt }, deps);
 		},
 	});
 }

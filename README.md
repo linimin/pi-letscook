@@ -33,12 +33,13 @@ Then run `/reload` in Pi.
    `pi install npm:@linimin/pi-letscook`
 2. Run `/reload` in Pi.
 3. In the main chat, either implement directly with the agent or refine the concrete repo change you want.
-4. When you want workflow mode, run `/cook`.
+4. When you want workflow mode, run `/cook` or `/cook <prompt>`.
 5. Review the startup brief and choose **Start** or **Cancel**.
 6. Later, run `/cook` again to resume from canonical state or confirm a replacement or next-round handoff.
 
 ```text
 /cook
+/cook tighten the login redirect fix and land the missing tests
 ```
 
 ## Common actions
@@ -46,7 +47,7 @@ Then run `/reload` in Pi.
 | If you want to... | Do this |
 |---|---|
 | Implement directly without workflow | Ask in ordinary chat and let the agent modify the repo directly |
-| Start a tracked workflow | Discuss the concrete repo change in ordinary chat, then run `/cook` when you want workflow mode |
+| Start a tracked workflow | Discuss the concrete repo change in ordinary chat, then run `/cook` when you want workflow mode, or run `/cook <prompt>` when you want to provide explicit startup intent inline |
 | Continue the current workflow | Run `/cook` |
 | Refocus or start the next round | Discuss the new concrete repo change in ordinary chat, then run `/cook` when you want workflow mode |
 
@@ -63,20 +64,23 @@ If the primary-agent handoff step still cannot prepare a concrete handoff, `/coo
 
 If a fresh explicit handoff exists but is still workflow-worthy rather than implementation-startable, `/cook` now treats your `/cook` entry as implementation intent and asks the same-entry primary-agent handoff synthesis step to tighten that startup from recent discussion before it gives up. Only if the synthesized startup is still not concrete enough does `/cook` fail closed and ask for refinement in the main chat.
 
-If you pass inline arguments to `/cook`, it also fails closed and tells you to move that intent into the main chat before rerunning bare `/cook`.
+If you pass inline arguments to `/cook`, `/cook` treats them as explicit startup intent for this workflow entry. It still synthesizes a primary-agent startup brief, shows **Start** / **Cancel**, and only writes canonical state after confirmation.
 
 ## Workflow entry
 
 Only explicit `/cook` enters workflow mode. Ordinary prompts stay in the main chat and go straight to the primary agent.
 
+`/cook <prompt>` is still the same explicit workflow command. The inline prompt is startup intent, not canonical state.
+
 Ordinary chat can still directly implement repo changes. `/cook` is for the cases where you want workflow control rather than just implementation help, and the primary agent should prepare the handoff before you run it.
 
-When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent handoff. If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
+When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent handoff. If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context or inline `/cook` prompt, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
 
 Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent handoff in the same entry when needed.
 
 Important behavior:
 - `/cook` is an optional workflow boundary and manual entry point
+- `/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation
 - startup and next-round entry stay confirm-first, using explicit primary-agent handoff data when present and otherwise running the primary-agent handoff synthesis step in the same `/cook` entry
 - active workflows resume from canonical `.agent/**` state unless a concrete replacement handoff is available or synthesized in the same `/cook` entry
 - explicit slash commands other than `/cook` continue normally in the main chat
@@ -92,9 +96,15 @@ I want to add login redirect handling and tests.
 /cook
 ```
 
+Start a new workflow directly from explicit inline startup intent:
+
+```text
+/cook add login redirect handling and the missing redirect tests
+```
+
 ## What happens when you run `/cook`
 
-`/cook` first checks for a fresh explicit primary-agent handoff capsule. New-workflow entry and done-workflow next-round entry use that handoff when it already exists; otherwise `/cook` calls a same-entry primary-agent handoff synthesis step, then immediately continues to Start / Cancel if the generated handoff is concrete enough. Active workflows still resume canonical state by default unless a concrete replacement handoff is available or synthesized in the same `/cook` entry. None of this prevents ordinary-chat implementation when you choose not to enter workflow mode.
+`/cook` first checks for a fresh explicit primary-agent handoff capsule. New-workflow entry and done-workflow next-round entry use that handoff when it already exists; otherwise `/cook` calls a same-entry primary-agent handoff synthesis step from current context or inline prompt, then immediately continues to Start / Cancel if the generated handoff is concrete enough. Active workflows still resume canonical state by default unless a concrete replacement handoff is available or synthesized in the same `/cook` entry. None of this prevents ordinary-chat implementation when you choose not to enter workflow mode.
 
 | Repo state | What you'll see |
 |---|---|

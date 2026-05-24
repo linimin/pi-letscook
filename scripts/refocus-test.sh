@@ -166,11 +166,49 @@ print(state['mission_anchor'])
 PY
 )"
 
-INLINE_REJECTION_ROUTING="$TMPDIR/inline-arg-routing.json"
-INLINE_REJECTION_PROPOSAL="$TMPDIR/inline-arg-proposal.json"
-INLINE_REJECTION_CHOOSER="$TMPDIR/inline-arg-chooser.json"
-INLINE_REJECTION_BASELINE="$TMPDIR/inline-arg-before.json"
-python3 - "$INLINE_REJECTION_BASELINE" <<'PY'
+INLINE_PROMPT_ROUTING="$TMPDIR/inline-prompt-routing.json"
+INLINE_PROMPT_PROPOSAL="$TMPDIR/inline-prompt-proposal.json"
+INLINE_PROMPT_CHOOSER="$TMPDIR/inline-prompt-chooser.json"
+INLINE_PROMPT_BASELINE="$TMPDIR/inline-prompt-before.json"
+INLINE_PROMPT_HANDOFF="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "inline-refocus",
+    "mission": "Replace the active workflow from inline /cook prompt.",
+    "scope": [
+        "Swap the initial bootstrap workflow for the inline-prompt replacement mission."
+    ],
+    "constraints": [
+        "Keep the approval-only Start/Cancel refocus gate."
+    ],
+    "acceptance": [
+        "Rewrite canonical state only after the inline replacement mission is approved."
+    ],
+    "risks": [],
+    "notes": [
+        "Inline /cook prompt should override stale startup context while the workflow is active."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Replace the active workflow using the inline /cook prompt.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "scripts/refocus-test.sh"
+    ],
+    "verification_commands": [
+        "npm run refocus-test"
+    ],
+    "why_this_slice_first": "Inline prompt replacement should work without bouncing users back to the main chat.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The inline replacement mission is concrete enough to refocus the active workflow."
+}
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
+PY
+)"
+python3 - "$INLINE_PROMPT_BASELINE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -186,22 +224,25 @@ tracked = [
 Path(sys.argv[1]).write_text(json.dumps({path.name: path.read_text() for path in tracked}, indent=2) + '\n')
 PY
 
-PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$INLINE_REJECTION_ROUTING" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$INLINE_REJECTION_PROPOSAL" \
-PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$INLINE_REJECTION_CHOOSER" \
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$INLINE_PROMPT_HANDOFF" \
+PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$INLINE_PROMPT_ROUTING" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$INLINE_PROMPT_PROPOSAL" \
+PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$INLINE_PROMPT_CHOOSER" \
+PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi -e "$PKG_ROOT" -p "/cook replacement mission that should stay in the main chat" \
-  >"$TMPDIR/pi-completion-refocus-inline-arg.out" 2>"$TMPDIR/pi-completion-refocus-inline-arg.err"
+pi -e "$PKG_ROOT" -p "/cook replace the active workflow from this inline prompt" \
+  >"$TMPDIR/pi-completion-refocus-inline-prompt.out" 2>"$TMPDIR/pi-completion-refocus-inline-prompt.err"
 
-python3 - "$TMPDIR/pi-completion-refocus-inline-arg.out" "$TMPDIR/pi-completion-refocus-inline-arg.err" "$INLINE_REJECTION_ROUTING" "$INLINE_REJECTION_PROPOSAL" "$INLINE_REJECTION_CHOOSER" "$INITIAL_MISSION" "$INLINE_REJECTION_BASELINE" <<'PY'
+python3 - "$TMPDIR/pi-completion-refocus-inline-prompt.out" "$TMPDIR/pi-completion-refocus-inline-prompt.err" "$INLINE_PROMPT_ROUTING" "$INLINE_PROMPT_PROPOSAL" "$INLINE_PROMPT_CHOOSER" "$INITIAL_MISSION" "$INLINE_PROMPT_BASELINE" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
-routing = Path(sys.argv[3])
-proposal = Path(sys.argv[4])
-chooser = Path(sys.argv[5])
+routing = json.loads(Path(sys.argv[3]).read_text())
+proposal = json.loads(Path(sys.argv[4]).read_text())
+chooser = json.loads(Path(sys.argv[5]).read_text())
 initial_mission = sys.argv[6]
 before = json.loads(Path(sys.argv[7]).read_text())
 tracked = [
@@ -212,14 +253,21 @@ tracked = [
     Path('.agent/active-slice.json'),
     Path('.agent/verification-evidence.json'),
 ]
-current_state = json.loads(before['state.json'])
-assert current_state['mission_anchor'] == initial_mission, 'active /cook inline-args rejection should start from the current mission anchor'
-assert not routing.exists(), 'active /cook inline-args rejection should not run active-workflow routing'
-assert not proposal.exists(), 'active /cook inline-args rejection should not open final startup-brief confirmation'
-assert not chooser.exists(), 'active /cook inline-args rejection should not open the existing-workflow chooser'
-assert '/cook no longer accepts inline arguments.' in output, 'active /cook inline-args rejection should explain the bare-only entry contract'
 after = {path.name: path.read_text() for path in tracked}
-assert before == after, 'active /cook inline-args rejection should leave canonical files unchanged'
+state = json.loads(after['state.json'])
+plan = json.loads(after['plan.json'])
+active = json.loads(after['active-slice.json'])
+current_state = json.loads(before['state.json'])
+assert current_state['mission_anchor'] == initial_mission, 'active /cook inline prompt should start from the current mission anchor'
+assert routing['action'] == 'refocus', 'active /cook inline prompt should route through refocus'
+assert routing['reason'] == 'fresh_explicit_handoff', 'active /cook inline prompt should synthesize an explicit startup brief for replacement'
+assert proposal['mission'] == 'Replace the active workflow from inline /cook prompt.', 'active /cook inline prompt should surface the replacement mission'
+assert 'Replace the active workflow from inline /cook prompt.' in chooser['title'], 'active /cook inline prompt should surface the replacement mission in the chooser'
+assert state['mission_anchor'] == 'Replace the active workflow from inline /cook prompt.', 'active /cook inline prompt should refocus the canonical mission'
+assert plan['mission_anchor'] == state['mission_anchor'], 'refocused plan should match the inline-prompt mission anchor'
+assert active['mission_anchor'] == state['mission_anchor'], 'refocused active slice should match the inline-prompt mission anchor'
+assert before != after, 'active /cook inline prompt should rewrite canonical files after confirmation'
+assert 'Refocused completion mission from explicit primary-agent handoff to: Replace the active workflow from inline /cook prompt.' in output, 'active /cook inline prompt should report the refocused mission'
 PY
 
 SESSION_INITIAL_REFOCUS="$TMPDIR/session-initial-bare-refocus.jsonl"

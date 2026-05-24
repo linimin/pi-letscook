@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.78
+
+### Changed
+
+- restored optional inline `/cook <prompt>` entry so users can provide explicit startup intent without first restating it in ordinary chat, while still requiring same-entry primary-agent startup synthesis plus Start/Cancel confirmation before canonical state is rewritten
+- taught active-workflow replacement and done-workflow next-round startup to accept inline `/cook` prompt intent instead of failing closed on inline arguments, and aligned smoke/refocus/context regressions with that contract
+- updated README/help text so `/cook` now documents optional inline prompt intent as part of the supported workflow entry surface
+
 ## 0.1.77
 
 ### Fixed

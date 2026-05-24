@@ -99,34 +99,31 @@ UNCLEAR_ROUTING_SNAPSHOT="$TMPDIR/active-unclear-routing.json"
 UNCLEAR_CHOOSER_SNAPSHOT="$TMPDIR/unexpected-existing-workflow-chooser.json"
 ORDINARY_AUTO_RESUME_PROMPT="$TMPDIR/ordinary-auto-resume-prompt.txt"
 AUTO_RESUME_PROMPT="$TMPDIR/auto-resume-prompt.txt"
-INLINE_REJECTION_ROUTING_SNAPSHOT="$TMPDIR/inline-arg-routing.json"
-INLINE_REJECTION_PROPOSAL_SNAPSHOT="$TMPDIR/inline-arg-proposal.json"
-INLINE_REJECTION_CHOOSER_SNAPSHOT="$TMPDIR/inline-arg-chooser.json"
-BOOTSTRAP_SESSION="$TMPDIR/session-smoke-bootstrap.jsonl"
-BOOTSTRAP_MESSAGES="$(python3 - <<'PY'
+INLINE_PROMPT_PROPOSAL_SNAPSHOT="$TMPDIR/inline-prompt-proposal.json"
+BOOTSTRAP_HANDOFF="$(python3 - <<'PY'
 import json
 capsule = {
     "kind": "cook_handoff",
     "source": "primary_agent",
     "captured_at": "2026-01-01T00:00:02.000Z",
-    "source_turn_id": "m0002",
-    "mission": "Exercise smoke-test bootstrap.",
+    "source_turn_id": "generated-inline-smoke",
+    "mission": "Exercise smoke-test bootstrap from inline /cook prompt.",
     "scope": [
         "Materialize the canonical completion control-plane files.",
-        "Keep the smoke test on supported /cook startup behavior."
+        "Keep the smoke test on supported inline /cook startup behavior."
     ],
     "constraints": [
         "Keep startup proposal confirmation approval-only."
     ],
     "acceptance": [
         "Write the workflow control-plane files under .agent, including profile.json, state.json, active-slice.json, verification-evidence.json, and the slice backlog file, for the smoke fixture.",
-        "Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap."
+        "Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged inline-prompt bootstrap."
     ],
     "risks": [
-        "Smoke-test bootstrap should stay anchored to the fresh explicit handoff."
+        "Smoke-test bootstrap should stay anchored to the inline /cook startup intent."
     ],
     "notes": [
-        "Keep the smoke fixture aligned with the shipped explicit-handoff-only startup contract."
+        "Keep the smoke fixture aligned with the shipped inline-prompt startup contract."
     ],
     "handoff_kind": "implementation_workflow_handoff",
     "first_slice_goal": "Scaffold canonical completion files and verify the packaged startup contract.",
@@ -140,16 +137,12 @@ capsule = {
     "verification_commands": [
         "npm run smoke-test"
     ],
-    "why_this_slice_first": "The packaged explicit-handoff startup path must work before later workflow verification can run.",
+    "why_this_slice_first": "The packaged inline-prompt startup path must work before later workflow verification can run.",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
-    "why_cook_now": "The startup handoff is concrete enough to bootstrap canonical workflow files."
+    "why_cook_now": "The inline startup intent is concrete enough to bootstrap canonical workflow files."
 }
-messages = [
-    {"role": "user", "content": "Please prepare the packaged smoke-test bootstrap path and tell me when it is ready for /cook."},
-    {"role": "assistant", "content": "This bootstrap path is ready for /cook. Run /cook to confirm the startup brief.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
-]
-print(json.dumps(messages, ensure_ascii=False))
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
 PY
 )"
 
@@ -157,37 +150,27 @@ mkdir -p "$ROOT"
 cd "$ROOT"
 git init -q
 
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$BOOTSTRAP_HANDOFF" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$INLINE_REJECTION_ROUTING_SNAPSHOT" \
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$INLINE_REJECTION_PROPOSAL_SNAPSHOT" \
-PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$INLINE_REJECTION_CHOOSER_SNAPSHOT" \
-pi -e "$PKG_ROOT" -p "/cook smoke-test mission" \
-  >"$TMPDIR/pi-completion-smoke-inline-arg.out" 2>"$TMPDIR/pi-completion-smoke-inline-arg.err"
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$INLINE_PROMPT_PROPOSAL_SNAPSHOT" \
+PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$KICKOFF_PROMPT" \
+pi -e "$PKG_ROOT" -p "/cook bootstrap the packaged smoke-test control plane from this inline prompt" \
+  >"$TMPDIR/pi-completion-smoke-inline-prompt.out" 2>"$TMPDIR/pi-completion-smoke-inline-prompt.err"
 
-python3 - "$TMPDIR/pi-completion-smoke-inline-arg.out" "$TMPDIR/pi-completion-smoke-inline-arg.err" "$INLINE_REJECTION_ROUTING_SNAPSHOT" "$INLINE_REJECTION_PROPOSAL_SNAPSHOT" "$INLINE_REJECTION_CHOOSER_SNAPSHOT" <<'PY'
+python3 - "$TMPDIR/pi-completion-smoke-inline-prompt.out" "$TMPDIR/pi-completion-smoke-inline-prompt.err" "$INLINE_PROMPT_PROPOSAL_SNAPSHOT" <<'PY'
+import json
 import sys
 from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
-routing = Path(sys.argv[3])
-proposal = Path(sys.argv[4])
-chooser = Path(sys.argv[5])
+proposal = json.loads(Path(sys.argv[3]).read_text())
 
-assert not Path('.agent').exists(), 'startup /cook inline-args rejection should leave canonical state untouched'
-assert not routing.exists(), 'startup /cook inline-args rejection should not open active-workflow routing before a workflow exists'
-assert not proposal.exists(), 'startup /cook inline-args rejection should not emit a startup-brief proposal snapshot'
-assert not chooser.exists(), 'startup /cook inline-args rejection should not open the existing-workflow chooser before a workflow exists'
-assert '/cook no longer accepts inline arguments.' in output, 'startup /cook inline-args rejection should explain the bare-only entry contract'
+assert Path('.agent').exists(), 'startup /cook inline prompt should create canonical state'
+assert proposal['mission'] == 'Exercise smoke-test bootstrap from inline /cook prompt.', 'startup /cook inline prompt should surface the generated startup brief mission'
+assert 'Initialized completion control plane in' in output, 'startup /cook inline prompt should initialize the control plane'
 PY
-
-write_session_messages "$BOOTSTRAP_SESSION" "$ROOT" "$BOOTSTRAP_MESSAGES"
-
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$KICKOFF_PROMPT" \
-pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
-  >"$TMPDIR/pi-completion-smoke-bootstrap.out" 2>"$TMPDIR/pi-completion-smoke-bootstrap.err"
 
 for file in .agent/profile.json .agent/state.json .agent/startup-brief.json .agent/plan.json .agent/active-slice.json .agent/verification-evidence.json; do
   [[ -f "$file" ]] || { echo "missing canonical bootstrap file: $file" >&2; exit 1; }
@@ -229,15 +212,15 @@ assert state['startup_brief_path'] == '.agent/startup-brief.json', 'state.json s
 assert isinstance(state['workflow_session_id'], str) and state['workflow_session_id'], 'state.json should record a workflow session id'
 brief = state['advisory_startup_brief']
 assert brief['kind'] == 'startup_brief', 'state.json should preserve the confirmed startup brief as advisory intake'
-assert brief['source'] == 'primary_agent_handoff', 'smoke bootstrap should record the explicit handoff source in advisory intake'
+assert brief['source'] == 'primary_agent_handoff', 'smoke bootstrap should record the synthesized primary-agent handoff source in advisory intake'
 assert brief['mission'] == state['mission_anchor'], 'advisory startup brief mission should match the canonical mission anchor after bootstrap'
-assert brief['scope'] == ['Materialize the canonical completion control-plane files.', 'Keep the smoke test on supported /cook startup behavior.'], 'advisory startup brief should preserve scope items'
+assert brief['scope'] == ['Materialize the canonical completion control-plane files.', 'Keep the smoke test on supported inline /cook startup behavior.'], 'advisory startup brief should preserve scope items'
 assert brief['constraints'] == ['Keep startup proposal confirmation approval-only.'], 'advisory startup brief should preserve constraints'
 assert brief['acceptance'] == [
     'Write the workflow control-plane files under .agent, including profile.json, state.json, active-slice.json, verification-evidence.json, and the slice backlog file, for the smoke fixture.',
-    'Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged bootstrap.'
+    'Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged inline-prompt bootstrap.'
 ], 'advisory startup brief should preserve acceptance'
-assert brief['risks'] == ['Smoke-test bootstrap should stay anchored to the fresh explicit handoff.'], 'advisory startup brief should preserve handoff risks'
+assert brief['risks'] == ['Smoke-test bootstrap should stay anchored to the inline /cook startup intent.'], 'advisory startup brief should preserve handoff risks'
 assert 'First slice goal: Scaffold canonical completion files and verify the packaged startup contract.' in brief['notes'], 'advisory startup brief should preserve the first_slice_goal in notes'
 assert 'Verification commands: npm run smoke-test' in brief['notes'], 'advisory startup brief should preserve verification_commands in notes'
 assert startup_brief['artifact_type'] == 'completion-startup-brief', 'startup-brief.json artifact_type mismatch after bootstrap'

@@ -422,10 +422,25 @@ function stripCookHandoffBlocks(text: string): string {
 	return text.replace(COOK_HANDOFF_BLOCK_REGEX, " ").replace(/\s+/g, " ").trim();
 }
 
+type CookProposalContext = {
+	cwd: string;
+	hasUI: boolean;
+	ui: any;
+	sessionManager: any;
+	model?: any;
+	modelRegistry?: any;
+	cookInlinePrompt?: string;
+};
+
+function cookInlinePromptFromContext(ctx: { cookInlinePrompt?: string }): string | undefined {
+	return asString(ctx.cookInlinePrompt);
+}
+
 async function deriveCookStartupProposal(
-	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
+	ctx: CookProposalContext,
 	projectName: string,
 ): Promise<CookContextProposalResult> {
+	if (cookInlinePromptFromContext(ctx)) return {};
 	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
 	const explicitHandoff = assessLatestCookHandoffProposal(recentMessages, projectName, {
 		asString,
@@ -444,17 +459,21 @@ async function deriveCookStartupProposal(
 }
 
 async function deriveCookContextProposal(
-	ctx: { cwd: string; hasUI: boolean; ui: any; sessionManager: any; model?: any; modelRegistry?: any },
+	ctx: CookProposalContext,
 	projectName: string,
 ): Promise<CookContextProposalResult> {
-	const explicit = await deriveCookStartupProposal(ctx, projectName);
+	const inlinePrompt = cookInlinePromptFromContext(ctx);
+	const explicit: CookContextProposalResult = inlinePrompt ? {} : await deriveCookStartupProposal(ctx, projectName);
 	if (explicit.proposal) return explicit;
 	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
-	const recentEntries = recentMessages
-		.filter((entry) => !entry.isCommand && (entry.role === "user" || entry.role === "assistant" || entry.role === "custom" || entry.role === "summary"))
-		.slice(0, 12)
-		.map((entry) => ({ role: entry.role, text: stripCookHandoffBlocks(entry.text) }))
-		.filter((entry) => entry.text.length > 0);
+	const recentEntries = [
+		...(inlinePrompt ? [{ role: "user" as const, text: inlinePrompt }] : []),
+		...recentMessages
+			.filter((entry) => !entry.isCommand && (entry.role === "user" || entry.role === "assistant" || entry.role === "custom" || entry.role === "summary"))
+			.slice(0, 12)
+			.map((entry) => ({ role: entry.role, text: stripCookHandoffBlocks(entry.text) }))
+			.filter((entry) => entry.text.length > 0),
+	];
 	const snapshot = await loadCompletionSnapshot(getCtxCwd(ctx));
 	const workflowContextLines = snapshot
 		? [
@@ -468,6 +487,10 @@ async function deriveCookContextProposal(
 			`verification summary: ${asString(snapshot.verificationEvidence?.summary) ?? "(none)"}`,
 		]
 		: [];
+	if (inlinePrompt) {
+		workflowContextLines.push(`inline /cook startup intent: ${inlinePrompt}`);
+		workflowContextLines.push("Treat the inline /cook prompt as the highest-priority explicit startup intent for this workflow entry.");
+	}
 	if (explicit.blockedFailureMessage) {
 		workflowContextLines.push(`fresh explicit handoff required tightening before startup: ${explicit.blockedFailureMessage}`);
 		workflowContextLines.push("Treat the user's /cook as implementation intent. Tighten the first slice and verification details from recent discussion instead of failing closed solely because the latest explicit handoff capsule was under-specified.");
@@ -978,7 +1001,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: start or replace workflow only from an explicit primary-agent handoff, or resume the current workflow from canonical state",
+			description: "/cook workflow: start or replace workflow from a primary-agent startup brief (optionally seeded by an inline prompt), or resume the current workflow from canonical state",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,

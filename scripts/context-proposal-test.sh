@@ -963,12 +963,50 @@ assert plan['plan_basis'] == 'user_refocus', 'plan_basis should reset to user_re
 assert active['status'] == 'idle', 'active-slice should reset to idle for the next workflow round'
 PY
 
-# Active workflow: inline `/cook` arguments should fail closed immediately and leave canonical state unchanged.
-ACTIVE_INLINE_REJECTION_ROUTING="$TMPDIR/context-proposal-active-inline-arg-routing.json"
-ACTIVE_INLINE_REJECTION_PROPOSAL="$TMPDIR/context-proposal-active-inline-arg-proposal.json"
-ACTIVE_INLINE_REJECTION_CHOOSER="$TMPDIR/context-proposal-active-inline-arg-chooser.json"
-ACTIVE_INLINE_REJECTION_BASELINE="$TMPDIR/context-proposal-active-inline-before.json"
-python3 - "$ACTIVE_INLINE_REJECTION_BASELINE" <<'PY'
+# Active workflow: inline `/cook` prompt should support replacement after chooser + Start confirmation.
+ACTIVE_INLINE_PROMPT_ROUTING="$TMPDIR/context-proposal-active-inline-prompt-routing.json"
+ACTIVE_INLINE_PROMPT_PROPOSAL="$TMPDIR/context-proposal-active-inline-prompt-proposal.json"
+ACTIVE_INLINE_PROMPT_CHOOSER="$TMPDIR/context-proposal-active-inline-prompt-chooser.json"
+ACTIVE_INLINE_PROMPT_BASELINE="$TMPDIR/context-proposal-active-inline-before.json"
+ACTIVE_INLINE_PROMPT_HANDOFF="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "context-active-inline",
+    "mission": "Replace the active workflow from inline /cook prompt.",
+    "scope": [
+        "Treat the inline /cook prompt as explicit replacement intent."
+    ],
+    "constraints": [
+        "Keep the approval-only Start/Cancel replacement gate."
+    ],
+    "acceptance": [
+        "Rewrite canonical state only after the inline replacement proposal is accepted."
+    ],
+    "risks": [],
+    "notes": [
+        "Inline prompt replacement should stay compatible with active-workflow routing snapshots."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Refocus the active workflow from inline /cook prompt.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "scripts/context-proposal-test.sh"
+    ],
+    "verification_commands": [
+        "npm run context-proposal-test"
+    ],
+    "why_this_slice_first": "Inline prompt replacement should work before broader startup coverage regresses again.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The inline replacement mission is concrete enough to replace the active workflow."
+}
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
+PY
+)"
+python3 - "$ACTIVE_INLINE_PROMPT_BASELINE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -984,21 +1022,24 @@ tracked = [
 Path(sys.argv[1]).write_text(json.dumps({path.name: path.read_text() for path in tracked}, indent=2) + '\n')
 PY
 
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$ACTIVE_INLINE_REJECTION_PROPOSAL" \
-PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$ACTIVE_INLINE_REJECTION_ROUTING" \
-PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$ACTIVE_INLINE_REJECTION_CHOOSER" \
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$ACTIVE_INLINE_PROMPT_HANDOFF" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$ACTIVE_INLINE_PROMPT_PROPOSAL" \
+PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$ACTIVE_INLINE_PROMPT_ROUTING" \
+PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$ACTIVE_INLINE_PROMPT_CHOOSER" \
+PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi -e "$PKG_ROOT" -p "/cook Replacement mission for the active workflow" >"$TMPDIR/pi-completion-context-proposal-active-inline-arg.out" 2>"$TMPDIR/pi-completion-context-proposal-active-inline-arg.err"
+pi -e "$PKG_ROOT" -p "/cook Replace the active workflow from this inline prompt" >"$TMPDIR/pi-completion-context-proposal-active-inline-prompt.out" 2>"$TMPDIR/pi-completion-context-proposal-active-inline-prompt.err"
 
-python3 - "$TMPDIR/pi-completion-context-proposal-active-inline-arg.out" "$TMPDIR/pi-completion-context-proposal-active-inline-arg.err" "$ACTIVE_INLINE_REJECTION_ROUTING" "$ACTIVE_INLINE_REJECTION_PROPOSAL" "$ACTIVE_INLINE_REJECTION_CHOOSER" "$ACTIVE_INLINE_REJECTION_BASELINE" <<'PY'
+python3 - "$TMPDIR/pi-completion-context-proposal-active-inline-prompt.out" "$TMPDIR/pi-completion-context-proposal-active-inline-prompt.err" "$ACTIVE_INLINE_PROMPT_ROUTING" "$ACTIVE_INLINE_PROMPT_PROPOSAL" "$ACTIVE_INLINE_PROMPT_CHOOSER" "$ACTIVE_INLINE_PROMPT_BASELINE" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
-routing = Path(sys.argv[3])
-proposal = Path(sys.argv[4])
-chooser = Path(sys.argv[5])
+routing = json.loads(Path(sys.argv[3]).read_text())
+proposal = json.loads(Path(sys.argv[4]).read_text())
+chooser = json.loads(Path(sys.argv[5]).read_text())
 before = json.loads(Path(sys.argv[6]).read_text())
 tracked = [
     Path('.agent/mission.md'),
@@ -1008,23 +1049,64 @@ tracked = [
     Path('.agent/active-slice.json'),
     Path('.agent/verification-evidence.json'),
 ]
-
-assert not routing.exists(), 'active /cook inline-args rejection should not run active-workflow routing'
-assert not proposal.exists(), 'active /cook inline-args rejection should not emit a replacement startup-brief proposal'
-assert not chooser.exists(), 'active /cook inline-args rejection should not open the existing-workflow chooser'
-assert '/cook no longer accepts inline arguments.' in output, 'active /cook inline-args rejection should explain the bare-only entry contract'
 after = {path.name: path.read_text() for path in tracked}
-assert before == after, 'active /cook inline-args rejection should leave canonical files unchanged'
+state = json.loads(after['state.json'])
+assert routing['mode'] == 'bare', 'active inline prompt should keep the existing routing snapshot schema'
+assert routing['action'] == 'refocus', 'active inline prompt should route through refocus'
+assert routing['reason'] == 'fresh_explicit_handoff', 'active inline prompt should synthesize an explicit startup brief for replacement'
+assert proposal['mission'] == 'Replace the active workflow from inline /cook prompt.', 'active inline prompt should emit the replacement proposal snapshot'
+assert 'Replace the active workflow from inline /cook prompt.' in chooser['title'], 'active inline prompt should surface the replacement mission in the chooser snapshot'
+assert state['mission_anchor'] == 'Replace the active workflow from inline /cook prompt.', 'active inline prompt should rewrite canonical mission state after confirmation'
+assert before != after, 'active inline prompt should update canonical files after replacement'
+assert 'Refocused completion mission from explicit primary-agent handoff to: Replace the active workflow from inline /cook prompt.' in output, 'active inline prompt should report the accepted replacement'
 PY
 
-# Completed workflow: inline `/cook` arguments should also fail closed before any next-round proposal derivation.
+# Completed workflow: inline `/cook` prompt should start the next round after Start confirmation.
 mark_done
 
-DONE_INLINE_REJECTION_ROUTING="$TMPDIR/context-proposal-done-inline-arg-routing.json"
-DONE_INLINE_REJECTION_PROPOSAL="$TMPDIR/context-proposal-done-inline-arg-proposal.json"
-DONE_INLINE_REJECTION_CHOOSER="$TMPDIR/context-proposal-done-inline-arg-chooser.json"
-DONE_INLINE_REJECTION_BASELINE="$TMPDIR/context-proposal-done-inline-before.json"
-python3 - "$DONE_INLINE_REJECTION_BASELINE" <<'PY'
+DONE_INLINE_PROMPT_ROUTING="$TMPDIR/context-proposal-done-inline-prompt-routing.json"
+DONE_INLINE_PROMPT_PROPOSAL="$TMPDIR/context-proposal-done-inline-prompt-proposal.json"
+DONE_INLINE_PROMPT_CHOOSER="$TMPDIR/context-proposal-done-inline-prompt-chooser.json"
+DONE_INLINE_PROMPT_BASELINE="$TMPDIR/context-proposal-done-inline-before.json"
+DONE_INLINE_PROMPT_HANDOFF="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "context-done-inline",
+    "mission": "Start the next workflow round from inline /cook prompt.",
+    "scope": [
+        "Treat the inline /cook prompt as explicit next-round startup intent."
+    ],
+    "constraints": [
+        "Keep the approval-only Start/Cancel next-round gate."
+    ],
+    "acceptance": [
+        "Rewrite canonical state only after the inline next-round proposal is accepted."
+    ],
+    "risks": [],
+    "notes": [
+        "Done-workflow startup should not bounce inline prompt users back to ordinary chat."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Start the next workflow round from the inline /cook prompt.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "scripts/context-proposal-test.sh"
+    ],
+    "verification_commands": [
+        "npm run context-proposal-test"
+    ],
+    "why_this_slice_first": "Next-round inline startup should work before the completed-workflow boundary regresses again.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The inline next-round mission is concrete enough to restart workflow after completion."
+}
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
+PY
+)"
+python3 - "$DONE_INLINE_PROMPT_BASELINE" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -1040,20 +1122,22 @@ tracked = [
 Path(sys.argv[1]).write_text(json.dumps({path.name: path.read_text() for path in tracked}, indent=2) + '\n')
 PY
 
-PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DONE_INLINE_REJECTION_PROPOSAL" \
-PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$DONE_INLINE_REJECTION_ROUTING" \
-PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$DONE_INLINE_REJECTION_CHOOSER" \
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$DONE_INLINE_PROMPT_HANDOFF" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$DONE_INLINE_PROMPT_PROPOSAL" \
+PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$DONE_INLINE_PROMPT_ROUTING" \
+PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$DONE_INLINE_PROMPT_CHOOSER" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-pi -e "$PKG_ROOT" -p "/cook done-workflow replacement mission" >"$TMPDIR/pi-completion-context-proposal-done-inline-arg.out" 2>"$TMPDIR/pi-completion-context-proposal-done-inline-arg.err"
+pi -e "$PKG_ROOT" -p "/cook Start the next workflow round from this inline prompt" >"$TMPDIR/pi-completion-context-proposal-done-inline-prompt.out" 2>"$TMPDIR/pi-completion-context-proposal-done-inline-prompt.err"
 
-python3 - "$TMPDIR/pi-completion-context-proposal-done-inline-arg.out" "$TMPDIR/pi-completion-context-proposal-done-inline-arg.err" "$DONE_INLINE_REJECTION_ROUTING" "$DONE_INLINE_REJECTION_PROPOSAL" "$DONE_INLINE_REJECTION_CHOOSER" "$DONE_INLINE_REJECTION_BASELINE" <<'PY'
+python3 - "$TMPDIR/pi-completion-context-proposal-done-inline-prompt.out" "$TMPDIR/pi-completion-context-proposal-done-inline-prompt.err" "$DONE_INLINE_PROMPT_ROUTING" "$DONE_INLINE_PROMPT_PROPOSAL" "$DONE_INLINE_PROMPT_CHOOSER" "$DONE_INLINE_PROMPT_BASELINE" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 routing = Path(sys.argv[3])
-proposal = Path(sys.argv[4])
+proposal = json.loads(Path(sys.argv[4]).read_text())
 chooser = Path(sys.argv[5])
 before = json.loads(Path(sys.argv[6]).read_text())
 tracked = [
@@ -1065,14 +1149,20 @@ tracked = [
     Path('.agent/verification-evidence.json'),
 ]
 state_before = json.loads(before['state.json'])
-assert state_before['current_phase'] == 'done', 'done /cook inline-args rejection should start from a completed workflow'
-assert state_before['project_done'] is True, 'done /cook inline-args rejection should start from project_done=true'
-assert not routing.exists(), 'done /cook inline-args rejection should not run active-workflow routing while starting the next round'
-assert not proposal.exists(), 'done /cook inline-args rejection should not emit a next-round startup-brief proposal'
-assert not chooser.exists(), 'done /cook inline-args rejection should not open the existing-workflow chooser when starting the next round'
-assert '/cook no longer accepts inline arguments.' in output, 'done /cook inline-args rejection should explain the bare-only entry contract'
 after = {path.name: path.read_text() for path in tracked}
-assert before == after, 'done /cook inline-args rejection should leave canonical files unchanged'
+state = json.loads(after['state.json'])
+plan = json.loads(after['plan.json'])
+active = json.loads(after['active-slice.json'])
+assert state_before['current_phase'] == 'done', 'done inline prompt should start from a completed workflow'
+assert state_before['project_done'] is True, 'done inline prompt should start from project_done=true'
+assert not routing.exists(), 'done inline prompt should not go through active-workflow routing while starting the next round'
+assert not chooser.exists(), 'done inline prompt should not open the existing-workflow chooser when starting the next round'
+assert proposal['mission'] == 'Start the next workflow round from inline /cook prompt.', 'done inline prompt should emit the next-round proposal snapshot'
+assert state['mission_anchor'] == 'Start the next workflow round from inline /cook prompt.', 'done inline prompt should rewrite the canonical mission for the next round'
+assert plan['mission_anchor'] == state['mission_anchor'], 'done inline prompt should rewrite the plan mission anchor'
+assert active['mission_anchor'] == state['mission_anchor'], 'done inline prompt should rewrite the active-slice mission anchor'
+assert before != after, 'done inline prompt should rewrite canonical files after confirmation'
+assert 'Started a new completion workflow round from explicit primary-agent handoff: Start the next workflow round from inline /cook prompt.' in output, 'done inline prompt should report the next-round startup'
 PY
 
 # Completed workflow again: model-assisted discussion analysis alone should still fail closed

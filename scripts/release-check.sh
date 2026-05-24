@@ -17,8 +17,9 @@ checks = {
     "README.md": [
         "You can still implement directly in ordinary chat when you do not need workflow state.",
         "When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent handoff.",
-        "If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.",
+        "If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context or inline `/cook` prompt, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.",
         "Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent handoff in the same entry when needed.",
+        "`/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation",
     ],
     "CHANGELOG.md": [
         "preserved the confirmed `/cook` startup intent in canonical `.agent/startup-brief.json` so workflow entry is durable before regrounding authors canonical slices",
@@ -31,7 +32,7 @@ checks = {
     ],
     "extensions/completion/index.ts": [
         '"/cook failed closed because the primary-agent handoff step could not prepare a concrete startup handoff from the current task context. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook."',
-        'description: "/cook workflow: start or replace workflow only from an explicit primary-agent handoff, or resume the current workflow from canonical state"',
+        'description: "/cook workflow: start or replace workflow from a primary-agent startup brief (optionally seeded by an inline prompt), or resume the current workflow from canonical state"',
         '"Do not call completion_role from ordinary chat; it is reserved for active /cook workflow sessions."',
         '`COMPLETION WORKFLOW DRIVER\\nStart or continue the completion workflow for this repo.',
         'function isLikelyWorkflowContinuationTurn(',
