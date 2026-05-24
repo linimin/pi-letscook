@@ -64,13 +64,14 @@ These lines are for workflow observability, not hidden reasoning. Keep them brie
 3. Confirm the canonical slice ID, goal, acceptance criteria, contract IDs, priority, why_now, implementation_surfaces, verification_commands, locked notes, must-fix findings, basis_commit, and before-slice counters in `.agent/active-slice.json` match canonical `.agent/plan.json`. If they do not match, stop and report the mismatch instead of guessing.
 4. Make truthful `.agent/state.json` and `.agent/active-slice.json` updates before implementation if needed.
 5. If implementation reveals roadmap-level drift — for example a missing prerequisite slice, invalid slice boundary, dependency reorder, or blocker that changes the current slice contract — do not silently redesign the plan. Report the discrepancy explicitly, make only the minimal truthful local state updates needed for the current slice, and hand control back for canonical re-grounding by `completion-regrounder`.
-6. Make the smallest correct tracked-file change.
-7. Add or strengthen tests or deterministic proof.
-8. Run focused verification first, then broader verification if shared surfaces changed.
-9. If the chosen slice changes top-level validation entrypoints or is explicitly about verifier freshness, refresh `.agent/verify_completion_stop.sh` so it remains a truthful repo-level baseline verifier.
-10. Create a new commit.
-11. Make truthful `.agent/state.json`, `.agent/active-slice.json`, and `.agent/plan.json` updates after the commit, including `current_phase = post_commit_review`, `continuation_policy = continue`, `continuation_reason`, and `next_mandatory_role = completion-reviewer`.
-12. Append exactly one `implemented` record to `.agent/slice-history.jsonl`.
+6. If unrelated tracked worktree changes are present and would otherwise block the mandatory dirty-worktree reconciliation or the current slice commit, auto-preserve them yourself with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the current slice on a clean worktree, and restore them before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
+7. Make the smallest correct tracked-file change.
+8. Add or strengthen tests or deterministic proof.
+9. Run focused verification first, then broader verification if shared surfaces changed.
+10. If the chosen slice changes top-level validation entrypoints or is explicitly about verifier freshness, refresh `.agent/verify_completion_stop.sh` so it remains a truthful repo-level baseline verifier.
+11. Create a new commit.
+12. Make truthful `.agent/state.json`, `.agent/active-slice.json`, and `.agent/plan.json` updates after the commit, including `current_phase = post_commit_review`, `continuation_policy = continue`, `continuation_reason`, and `next_mandatory_role = completion-reviewer`.
+13. Append exactly one `implemented` record to `.agent/slice-history.jsonl`.
 
 Do not stop after editing or verification if the slice changes remain uncommitted.
 

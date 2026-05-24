@@ -1,17 +1,25 @@
 # Changelog
 
+## 0.1.76
+
+### Fixed
+
+- taught the completion protocol and core role prompts to auto-preserve routine unrelated tracked worktree dirt with a reversible stash-plus-note flow instead of asking the user to choose between stash/cleanup/background continuation for every dirty-worktree checkpoint
+- refined sticky `/cook` continuation detection so clear workflow-follow-up turns stay inside the active workflow while unrelated ordinary chat stays outside it, and aligned smoke/release regressions with that split
+
 ## 0.1.75
 
 ### Fixed
 
 - stopped treating a fresh but under-specified explicit `cook_handoff` as an automatic startup blocker; `/cook` now uses the user's explicit entry as implementation intent and lets same-entry primary-agent startup synthesis tighten the first slice before it gives up
 - aligned startup, sticky-workflow, and canonical-evidence regressions with the new implementation-first `/cook` behavior so long-running workflows no longer bounce users back into handoff-authoring loops
+- taught the completion protocol and core role prompts to auto-preserve routine unrelated tracked worktree dirt with a reversible stash-plus-note flow instead of asking the user to choose between stash/cleanup/background continuation for every dirty-worktree checkpoint
 
 ## 0.1.74
 
 ### Fixed
 
-- made active `/cook` workflows sticky across subsequent turns so routine continuation, exact await-user-input replies, and mandatory completion-role dispatch no longer depend on prompt-shaped driver turns or repeated manual `/cook` re-entry
+- made active `/cook` workflows sticky across routine continuation turns, exact await-user-input replies, and mandatory completion-role dispatch so long-running workflows keep moving without repeated manual `/cook` re-entry while unrelated ordinary chat stays outside workflow mode
 - updated smoke, canonical-evidence, release-check, and completion-role gating regressions to enforce the new sticky active-workflow self-healing behavior
 - stopped letting fresh but under-specified explicit `cook_handoff` capsules block `/cook` startup by default; `/cook` now treats the user's entry as implementation intent and tries same-entry primary-agent startup synthesis to tighten the first slice before failing closed
 

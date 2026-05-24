@@ -273,15 +273,20 @@ reminder = Path(sys.argv[3])
 handoff = Path(sys.argv[4])
 auto_resume = Path(sys.argv[5])
 
-assert reminder.exists(), 'active workflow should inject the completion reminder on subsequent non-/cook turns'
-reminder_text = reminder.read_text()
-assert 'Completion workflow detected.' in reminder_text, 'active workflow reminder should inject canonical workflow context'
-assert 'If continuation_policy == continue, do not stop after a slice or ask whether to continue; dispatch the next mandatory role directly.' in reminder_text, 'active workflow reminder should direct mandatory continuation'
-assert not handoff.exists(), 'active workflow should not fall back to the ordinary /cook handoff boundary reminder'
-if auto_resume.exists():
-    auto_resume_text = auto_resume.read_text()
-    assert 'COMPLETION WORKFLOW DRIVER' in auto_resume_text, 'auto-resume prompt should use the workflow driver format when it is queued'
-    assert 'Resume the completion workflow from canonical state.' in auto_resume_text, 'auto-resume prompt should resume canonical workflow state when it is queued'
+assert not reminder.exists(), 'ordinary non-/cook turn should not inject completion reminder solely from canonical state'
+assert handoff.exists(), 'ordinary non-/cook turn should inject the /cook handoff boundary reminder'
+handoff_text = handoff.read_text()
+assert 'ordinary main chat unless the user explicitly runs /cook' in handoff_text, 'ordinary handoff reminder should preserve explicit /cook workflow entry'
+assert 'directly implement requested repo changes, including multi-file work' in handoff_text, 'ordinary handoff reminder should allow direct ordinary-chat implementation'
+assert 'Do not proactively tell the user to run /cook' in handoff_text, 'ordinary handoff reminder should keep ordinary chat neutral until explicit /cook entry'
+assert '/cook is optional workflow mode' in handoff_text, 'ordinary handoff reminder should position /cook as optional workflow mode'
+assert 'In ordinary chat, do not load or follow completion-protocol, and do not call completion_role.' in handoff_text, 'ordinary handoff reminder should forbid workflow-role routing before explicit /cook'
+assert 'If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.' in handoff_text, 'ordinary handoff reminder should avoid blocking implementation on /cook'
+assert 'the extension should call a primary-agent handoff synthesis step from the current task context' in handoff_text, 'ordinary handoff reminder should describe same-entry primary-agent handoff synthesis for /cook'
+assert 'Do not expect /cook to infer or guess startup intent from recent discussion alone' in handoff_text, 'ordinary handoff reminder should forbid /cook-side guessing'
+assert 'do not silently rewrite discussion into canonical workflow state' in handoff_text, 'ordinary handoff reminder should preserve non-canonical ordinary-chat behavior'
+assert not auto_resume.exists(), 'ordinary non-/cook turn should not queue auto-resume before /cook activation'
+assert 'Skipped completion workflow auto-resume prompt (test mode)' not in output, 'ordinary non-/cook turn should not attempt auto-resume'
 PY
 
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
@@ -303,11 +308,10 @@ routing = json.loads(Path(sys.argv[2]).read_text())
 chooser_path = Path(sys.argv[3])
 state = json.loads(Path('.agent/state.json').read_text())
 
-if resume_path.exists():
-    resume = resume_path.read_text()
-    assert 'Canonical routing profile:' in resume, 'resume prompt should expose canonical routing profile when it is queued'
-    assert f'- task_type: {expected_task_type}' in resume, 'resume prompt missing canonical task_type when it is queued'
-    assert f'- evaluation_profile: {expected_eval_profile}' in resume, 'resume prompt missing canonical evaluation_profile when it is queued'
+resume = resume_path.read_text()
+assert 'Canonical routing profile:' in resume, 'resume prompt should expose canonical routing profile'
+assert f'- task_type: {expected_task_type}' in resume, 'resume prompt missing canonical task_type'
+assert f'- evaluation_profile: {expected_eval_profile}' in resume, 'resume prompt missing canonical evaluation_profile'
 assert routing['mode'] == 'bare', 'active bare /cook should snapshot bare routing mode'
 assert routing['action'] == 'continue', 'no-discussion active bare /cook should resume from canonical state without a concrete replacement mission'
 assert routing['reason'] == 'missing_explicit_handoff', 'no-discussion active bare /cook should explain that resume happened because no fresh explicit handoff existed'

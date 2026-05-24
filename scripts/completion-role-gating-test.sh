@@ -21,26 +21,24 @@ const assertNotIncludes = (file, snippet) => {
   }
 };
 
+assertIncludes('extensions/completion/index.ts', 'function isLikelyWorkflowContinuationTurn(');
 assertIncludes('extensions/completion/index.ts', 'function isCompletionWorkflowSessionTurn(');
-assertIncludes('extensions/completion/index.ts', 'return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);');
+assertIncludes('extensions/completion/index.ts', 'return isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx) || isLikelyWorkflowContinuationTurn(snapshot, ctx);');
 assertIncludes('extensions/completion/index.ts', 'const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowSessionTurn(snapshot, ctx);');
 assertIncludes('extensions/completion/policy-guards.ts', 'return "completion_role may only be used from an active /cook workflow session.";');
-assertIncludes('CHANGELOG.md', 'made active `/cook` workflows sticky across subsequent turns so completion-role dispatch and workflow context continue to self-heal from canonical active state instead of depending on prompt-shaped driver turns');
 assertIncludes('CHANGELOG.md', 'stopped pushing users to rerun `/cook` for routine active-workflow continuation or exact await-user-input replies when canonical workflow state is already active');
 
-assertNotIncludes('extensions/completion/index.ts', 'function isOrdinaryMainChatTurnDuringActiveWorkflow(');
-assertNotIncludes('extensions/completion/index.ts', 'function isCompletionRoleDispatchAllowedTurn(');
-assertNotIncludes('extensions/completion/index.ts', 'function isAwaitingUserInputWorkflowReplyTurn(');
+assertNotIncludes('extensions/completion/index.ts', 'return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);');
 
 const indexText = read('extensions/completion/index.ts');
-const sessionTurnIndex = indexText.indexOf('function isCompletionWorkflowSessionTurn(');
-const stickyReturnIndex = indexText.indexOf('return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);');
+const continuationIntentIndex = indexText.indexOf('function isLikelyWorkflowContinuationTurn(');
+const stickyReturnIndex = indexText.indexOf('return isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx) || isLikelyWorkflowContinuationTurn(snapshot, ctx);');
 const toolGateIndex = indexText.indexOf('const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowSessionTurn(snapshot, ctx);');
-if (sessionTurnIndex === -1 || stickyReturnIndex === -1 || toolGateIndex === -1) {
-  throw new Error('extensions/completion/index.ts must derive workflow legitimacy from canonical active state and reuse that gate for completion_role dispatch.');
+if (continuationIntentIndex === -1 || stickyReturnIndex === -1 || toolGateIndex === -1) {
+  throw new Error('extensions/completion/index.ts must gate workflow continuation through explicit workflow turns or likely continuation turns before dispatching completion_role.');
 }
-if (!(sessionTurnIndex < stickyReturnIndex && stickyReturnIndex < toolGateIndex)) {
-  throw new Error('extensions/completion/index.ts should define sticky workflow-session detection before reusing it for completion_role dispatch.');
+if (!(continuationIntentIndex < stickyReturnIndex && stickyReturnIndex < toolGateIndex)) {
+  throw new Error('extensions/completion/index.ts should define continuation-turn detection before reusing it for completion_role dispatch.');
 }
 NODE
 

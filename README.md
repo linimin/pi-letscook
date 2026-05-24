@@ -190,6 +190,8 @@ Deterministic active-slice contract regression now lives in `bash scripts/active
 
 Deterministic verification for this packaged contract also lives in `npm run rubric-contract-test`, which now exercises reviewer, auditor, and stop-judge transcription paths while the bootstrap/refocus/context regressions plus control-plane verifier fail closed when required canonical signaling is missing.
 
+Active `/cook` workflows now also auto-reconcile routine unrelated tracked worktree dirt instead of bouncing that decision back to the user. When the dirty tracked files are outside the latest slice or current reconciliation surfaces and can be isolated safely, the workflow should preserve them with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory step on a clean worktree, and restore them before handing control back. Only overlapping changes, ownership ambiguity, or stash/restore conflicts should force a user-facing decision.
+
 ## Canonical files
 
 This package stores canonical workflow state under:

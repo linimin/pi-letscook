@@ -41,14 +41,16 @@ These lines are for workflow observability, not hidden reasoning. Keep them brie
 5. Reopen any previously `done` slice whose acceptance criteria no longer hold.
 6. Keep `.agent/state.json` and `.agent/active-slice.json` truthful, including `current_phase`, `continuation_policy`, `continuation_reason`, `next_mandatory_role`, and any exact implementer handoff snapshot fields.
 7. Reconcile canonical state after review, audit, and final stop verification waves when required.
-8. If the latest committed slice leaves the tracked and unignored worktree dirty, treat that dirty state as a blocker, reopen or continue that latest slice for reconciliation, set `Next role to invoke` to `completion-implementer`, and do not select or hand off any different next slice until it is reconciled.
-9. When reconciling after review, audit, or dirty-worktree follow-up for the latest committed slice, emit an explicit reconciliation record decision:
+8. If the latest committed slice leaves the tracked and unignored worktree dirty, first classify the dirty tracked files against the latest slice's `implementation_surfaces` and the tracked reconciliation surfaces you need to touch now.
+9. If the dirty tracked files are unrelated and can be isolated safely, auto-preserve them yourself with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory reconciliation on a clean worktree, and restore them before handing control back. Do not ask the user for this routine unrelated-dirty-worktree case.
+10. If overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe, treat that dirty state as a blocker, reopen or continue the latest slice for reconciliation, set `Next role to invoke` to `completion-implementer`, and do not select or hand off any different next slice until it is reconciled.
+11. When reconciling after review, audit, or dirty-worktree follow-up for the latest committed slice, emit an explicit reconciliation record decision:
    - `accepted` only when the latest committed slice is truthfully accepted as-is
    - `reopened` only when the latest committed slice must be reopened for follow-up work
    - `none` when this re-ground was not a post-commit reconciliation decision
-10. If you emit `accepted` or `reopened`, also emit the exact reconciled slice id in the report.
-11. If a slice is already selected, ensure `.agent/active-slice.json` contains the exact implementer handoff snapshot and return that exact handoff payload for `completion-implementer` instead of implementing it yourself.
-12. If no slice is selected, return the exact next recommended slice and why.
+12. If you emit `accepted` or `reopened`, also emit the exact reconciled slice id in the report.
+13. If a slice is already selected, ensure `.agent/active-slice.json` contains the exact implementer handoff snapshot and return that exact handoff payload for `completion-implementer` instead of implementing it yourself.
+14. If no slice is selected, return the exact next recommended slice and why.
 
 Output format:
 

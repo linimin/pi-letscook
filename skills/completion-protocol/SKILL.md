@@ -32,6 +32,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - Run exactly one implementation slice at a time.
 - A slice is not complete unless it lands as a new commit.
 - Before selecting or advancing to the next slice after a committed slice, the tracked and unignored worktree must be clean. If it is not clean, treat that dirty state as a blocker to next-slice progression and reopen or continue the latest slice for reconciliation.
+- When that dirty tracked worktree contains changes unrelated to the latest slice or current reconciliation surfaces and those changes can be isolated safely, auto-preserve them with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory workflow step, and restore them before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
 - Docs, config, and runbooks must stay truthful to shipped behavior.
 - `.agent/verify_completion_stop.sh` is a generated repo-level baseline verifier. Onboarding should create a working version from current repo truth rather than an unconditional failing placeholder.
 - The packaged default stop policy is `required_stop_judges: 2` plus `stop_aggregation_policy: "unanimous-current-head-v1"` in `.agent/profile.json`.

@@ -257,8 +257,26 @@ function isCompletionDriverPromptTurn(snapshot: CompletionStateSnapshot | undefi
 	return true;
 }
 
-function isCompletionWorkflowSessionTurn(snapshot: CompletionStateSnapshot | undefined, _ctx: { sessionManager?: any }): boolean {
-	return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);
+function workflowContinuationIntentText(text: string | undefined): string {
+	return (text ?? "").trim().toLowerCase();
+}
+
+function isLikelyWorkflowContinuationTurn(
+	snapshot: CompletionStateSnapshot | undefined,
+	ctx: { sessionManager?: any },
+): boolean {
+	if (!hasActiveWorkflowEntry(snapshot)) return false;
+	const latest = workflowContinuationIntentText(latestUserOrCustomTurnText(ctx));
+	if (!latest) return false;
+	if (isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx)) return true;
+	if (asString(snapshot?.state?.continuation_policy) === "await_user_input") return true;
+	return /(\b(continue|resume|proceed|go ahead|keep going|next|finish|fix|repair|reconcile|commit|stash|audit|review|reground|implement|phase|slice|batch)\b|\.agent\b|\bworktree\b|\bworkflow\b|\bdirty\b|繼續|继续|開始|开始|先做|先把|修好|修復|修复|清理|處理|处理|提交|下一步|接著|继续做|做完|完成)/iu.test(latest);
+}
+
+function isCompletionWorkflowSessionTurn(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
+	if (hasCompletionRoutingActivation(snapshot)) return true;
+	if (!hasActiveWorkflowEntry(snapshot)) return false;
+	return isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx) || isLikelyWorkflowContinuationTurn(snapshot, ctx);
 }
 
 function shouldInjectCompletionWorkflowContext(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {

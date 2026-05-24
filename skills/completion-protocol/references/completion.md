@@ -168,6 +168,7 @@ Rules:
 3. Done requires all satisfied. A slice may only transition to `done` when every acceptance criterion is satisfied and `evidence` contains the proof for each one.
 4. Re-ground validation. During re-ground, the current slice backlog must be revalidated against repo truth. A slice previously marked `done` whose criteria no longer hold must be reopened.
 5. Clean handoff before next slice. After a committed slice is reviewed and audited, the tracked and unignored worktree must be clean before the next slice is selected.
+6. Dirty-worktree auto-reconcile. If tracked worktree dirt is unrelated to the latest slice or current reconciliation surfaces and can be isolated safely, the workflow should auto-preserve it with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory workflow step, and restore it before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
 
 `active-slice.json` carries one current slice cursor.
 
