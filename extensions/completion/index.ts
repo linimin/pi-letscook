@@ -719,6 +719,11 @@ function hasRunningCompletionRole(rootKey: string): boolean {
 	return liveRoleActivityByRoot.get(rootKey)?.status === "running";
 }
 
+function hasRecentlyCompletedCompletionRole(rootKey: string): boolean {
+	const activity = liveRoleActivityByRoot.get(rootKey);
+	return !!activity && activity.status !== "running";
+}
+
 function isRubricEvaluationRole(role: string | undefined): role is RubricEvaluationRole {
 	return RUBRIC_EVALUATION_ROLES.includes(role as RubricEvaluationRole);
 }
@@ -1096,7 +1101,8 @@ export default function completionExtension(pi: ExtensionAPI) {
 			snapshot = undefined;
 		}
 		await refreshCompletionStatus({ ctx, ...statusSurfaceArgs });
-		if (isCompletionWorkflowSessionTurn(snapshot, ctx)) {
+		const rootKey = completionRootKey(snapshot, cwd);
+		if (isCompletionWorkflowSessionTurn(snapshot, ctx) || (hasStickyWorkflowContinuation(snapshot) && hasRecentlyCompletedCompletionRole(rootKey))) {
 			await autoContinueWorkflowIfNeeded(pi, ctx, driverDeps);
 		}
 	});

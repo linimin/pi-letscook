@@ -22,11 +22,13 @@ const assertNotIncludes = (file, snippet) => {
 };
 
 assertIncludes('extensions/completion/index.ts', 'function hasStickyWorkflowContinuation(');
+assertIncludes('extensions/completion/index.ts', 'function hasRecentlyCompletedCompletionRole(');
 assertIncludes('extensions/completion/index.ts', 'function isLikelyWorkflowContinuationTurn(');
 assertIncludes('extensions/completion/index.ts', 'function isCompletionWorkflowSessionTurn(');
 assertIncludes('extensions/completion/index.ts', 'function isCompletionWorkflowDispatchContext(');
 assertIncludes('extensions/completion/index.ts', 'return isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx) || isLikelyWorkflowContinuationTurn(snapshot, ctx);');
 assertIncludes('extensions/completion/index.ts', 'return isCompletionWorkflowSessionTurn(snapshot, ctx) || hasStickyWorkflowContinuation(snapshot);');
+assertIncludes('extensions/completion/index.ts', 'hasStickyWorkflowContinuation(snapshot) && hasRecentlyCompletedCompletionRole(rootKey)');
 assertIncludes('extensions/completion/index.ts', 'const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowDispatchContext(snapshot, ctx);');
 assertIncludes('extensions/completion/policy-guards.ts', 'return "completion_role may only be used from an active /cook workflow session.";');
 assertIncludes('CHANGELOG.md', 'stopped pushing users to rerun `/cook` for routine active-workflow continuation, exact await-user-input replies, or canonical-continue self-heal when canonical workflow state is already active');
@@ -35,15 +37,17 @@ assertNotIncludes('extensions/completion/index.ts', 'return hasCompletionRouting
 
 const indexText = read('extensions/completion/index.ts');
 const stickyContinuationIndex = indexText.indexOf('function hasStickyWorkflowContinuation(');
+const completedRoleIndex = indexText.indexOf('function hasRecentlyCompletedCompletionRole(');
 const continuationIntentIndex = indexText.indexOf('function isLikelyWorkflowContinuationTurn(');
 const sessionTurnIndex = indexText.indexOf('function isCompletionWorkflowSessionTurn(');
 const dispatchContextIndex = indexText.indexOf('function isCompletionWorkflowDispatchContext(');
 const stickyReturnIndex = indexText.indexOf('return isCompletionWorkflowSessionTurn(snapshot, ctx) || hasStickyWorkflowContinuation(snapshot);');
+const agentEndSelfHealIndex = indexText.indexOf('hasStickyWorkflowContinuation(snapshot) && hasRecentlyCompletedCompletionRole(rootKey)');
 const toolGateIndex = indexText.indexOf('const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowDispatchContext(snapshot, ctx);');
-if (stickyContinuationIndex === -1 || continuationIntentIndex === -1 || sessionTurnIndex === -1 || dispatchContextIndex === -1 || stickyReturnIndex === -1 || toolGateIndex === -1) {
+if (stickyContinuationIndex === -1 || completedRoleIndex === -1 || continuationIntentIndex === -1 || sessionTurnIndex === -1 || dispatchContextIndex === -1 || stickyReturnIndex === -1 || agentEndSelfHealIndex === -1 || toolGateIndex === -1) {
   throw new Error('extensions/completion/index.ts must self-heal active continuation sessions before dispatching completion_role.');
 }
-if (!(stickyContinuationIndex < continuationIntentIndex && continuationIntentIndex < sessionTurnIndex && sessionTurnIndex < dispatchContextIndex && dispatchContextIndex < stickyReturnIndex && stickyReturnIndex < toolGateIndex)) {
+if (!(stickyContinuationIndex < continuationIntentIndex && continuationIntentIndex < sessionTurnIndex && sessionTurnIndex < dispatchContextIndex && dispatchContextIndex < stickyReturnIndex && stickyReturnIndex < agentEndSelfHealIndex && agentEndSelfHealIndex < toolGateIndex && stickyContinuationIndex < completedRoleIndex && completedRoleIndex < toolGateIndex)) {
   throw new Error('extensions/completion/index.ts should define sticky continuation detection before reusing it for completion_role dispatch.');
 }
 NODE
