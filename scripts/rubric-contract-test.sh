@@ -101,10 +101,10 @@ assertIncludes('package.json', '"rubric-contract-test": "bash ./scripts/rubric-c
 assertIncludes('package.json', '"report-repair-test": "bash ./scripts/report-repair-test.sh"');
 assertIncludes('scripts/release-check.sh', 'npm run report-repair-test');
 assertIncludes('scripts/release-check.sh', 'npm run rubric-contract-test');
-assertIncludes('.agent/verify_completion_stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
-assertIncludes('.agent/verify_completion_stop.sh', 'Current HEAD has a can_stop=no judgment');
-assertIncludes('.agent/verify_completion_stop.sh', 'valid current-HEAD judgments');
-assertIncludes('.agent/verify_completion_stop.sh', 'npm run release-check >/dev/null');
+assertIncludes('scripts/verify-completion-stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
+assertIncludes('scripts/verify-completion-stop.sh', 'Current HEAD has a can_stop=no judgment');
+assertIncludes('scripts/verify-completion-stop.sh', 'valid current-HEAD judgments');
+assertIncludes('scripts/verify-completion-stop.sh', 'bash -lc "$REPO_VERIFY_COMMAND"');
 NODE
 
 node <<'NODE'

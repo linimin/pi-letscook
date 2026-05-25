@@ -4,7 +4,7 @@ npm-debug.log*
 .DS_Store
 .env
 
-# completion protocol
+# completion protocol canonical state and thin verifier forwarders
 .agent/*
 !.agent/README.md
 !.agent/config/

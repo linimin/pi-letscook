@@ -186,15 +186,15 @@ The active-slice exact implementer handoff is now the canonical implementation c
 - `basis_commit` — the clean HEAD the slice was selected against
 - `remaining_contract_ids_before` plus `release_blocker_count_before` / `high_value_gap_count_before` — the locked before-slice counters the implementer must preserve in reports and later handoffs
 
-The selected plan slice must mirror that exact contract across goal, contract IDs, acceptance criteria, blocked-on state, `priority` / `why_now`, `implementation_surfaces`, `verification_commands`, locked notes, must-fix findings, `basis_commit`, and the before-slice counters. `.agent/verify_completion_control_plane.sh` plus the reminder/compaction-resume surfaces now fail closed on that drift instead of only checking slice-id presence, so implementers can recover from canonical state rather than prose-only summaries.
+The selected plan slice must mirror that exact contract across goal, contract IDs, acceptance criteria, blocked-on state, `priority` / `why_now`, `implementation_surfaces`, `verification_commands`, locked notes, must-fix findings, `basis_commit`, and the before-slice counters. The package-owned `scripts/verify-completion-control-plane.js` entrypoint plus the thin `.agent/verify_completion_control_plane.sh` forwarder and the reminder/compaction-resume surfaces now fail closed on that drift instead of only checking slice-id presence, so implementers can recover from canonical state rather than prose-only summaries.
 
 Reviewer, auditor, and stop-judge dispatch/reminder surfaces now also thread the current active-slice implementation contract (`implementation_surfaces`, `verification_commands`, locked notes, must-fix findings, `basis_commit`, and before-slice counters) alongside the canonical `evaluation_profile` so those read-only roles can reason from canonical state after compaction.
 
-Deterministic verification now also persists a durable canonical artifact in `.agent/current/verification-evidence.json`. Fresh scaffolds create an idle placeholder, implementers update it for the selected slice or current HEAD, reminder/recovery/evaluation surfaces thread its path and summary, and `.agent/verify_completion_control_plane.sh`, `bash scripts/canonical-evidence-artifact-test.sh`, `npm run release-check`, and `bash .agent/verify_completion_stop.sh` fail closed when that artifact is missing, stale, or out of parity with the selected slice or current HEAD.
+Deterministic verification now also persists a durable canonical artifact in `.agent/current/verification-evidence.json`. Fresh scaffolds create an idle placeholder, implementers update it for the selected slice or current HEAD, reminder/recovery/evaluation surfaces thread its path and summary, and the package-owned verifier entrypoints (`scripts/verify-completion-control-plane.js` and `scripts/verify-completion-stop.sh`), `bash scripts/canonical-evidence-artifact-test.sh`, `npm run release-check`, plus the thin `.agent/verify_completion_*.sh` forwarders all fail closed when that artifact is missing, stale, or out of parity with the selected slice or current HEAD.
 
 Canonical reviewer/auditor/stop-judge transcription now fails closed on malformed rubric-bearing reports: the shared rubric heading plus all four rubric dimensions must be present, required role fields must remain intact, and reviewer/stop-judge yes/no verdicts cannot contradict rubric `fail` lines.
 
-Evaluator calibration now also fails closed on semantically lenient but well-formed reports. `npm run evaluator-calibration-test` drives the packaged transcription path through reviewer yes-with-follow-up, auditor open-contracts-with-`Next mandatory slice: none`, and stop-judge yes-with-open-contracts fixtures while still accepting truthful passing reports. It also rejects the reproducible `none; ...` bypass family for reviewer follow-up, auditor worktree blockers, and stop-judge open-contract reporting, while still accepting the reviewer routing forms `Smallest follow-up slice: none; proceed to completion-auditor.`, `Smallest follow-up slice: none, proceed to completion-auditor.`, and `Smallest follow-up slice: none - proceed to auditor.` with terminal punctuation or whitespace only. The role runner now also does one targeted repair retry for the common reviewer yes-with-follow-up and auditor clean-with-blockers contradictions before surfacing a transcription warning, while the canonical transcription gate itself remains fail-closed. Both `npm run release-check` and `bash .agent/verify_completion_stop.sh` include this calibration gate.
+Evaluator calibration now also fails closed on semantically lenient but well-formed reports. `npm run evaluator-calibration-test` drives the packaged transcription path through reviewer yes-with-follow-up, auditor open-contracts-with-`Next mandatory slice: none`, and stop-judge yes-with-open-contracts fixtures while still accepting truthful passing reports. It also rejects the reproducible `none; ...` bypass family for reviewer follow-up, auditor worktree blockers, and stop-judge open-contract reporting, while still accepting the reviewer routing forms `Smallest follow-up slice: none; proceed to completion-auditor.`, `Smallest follow-up slice: none, proceed to completion-auditor.`, and `Smallest follow-up slice: none - proceed to auditor.` with terminal punctuation or whitespace only. The role runner now also does one targeted repair retry for the common reviewer yes-with-follow-up and auditor clean-with-blockers contradictions before surfacing a transcription warning, while the canonical transcription gate itself remains fail-closed. Both `npm run release-check` and the package-owned `scripts/verify-completion-stop.sh` entrypoint — including the thin `.agent/verify_completion_stop.sh` forwarder — include this calibration gate.
 
 Deterministic active-slice contract regression now lives in `bash scripts/active-slice-contract-test.sh`, and `npm run release-check` pulls it into the packaged release gate before `npm pack --dry-run`.
 
@@ -213,8 +213,8 @@ This package stores canonical workflow state under:
     workflow.json
     profile.json
   profile.json            # temporary compatibility shim for the current workflow round
-  verify_completion_stop.sh
-  verify_completion_control_plane.sh
+  verify_completion_stop.sh          # thin forwarding stub to the package-owned stop verifier
+  verify_completion_control_plane.sh # thin forwarding stub to the package-owned control-plane verifier
   current/
     state.json
     startup-brief.json
@@ -239,8 +239,10 @@ Tracked repo-contract files:
 - `.agent/config/workflow.json`
 - `.agent/config/profile.json`
 - `.agent/profile.json` *(temporary compatibility shim for the current workflow round)*
-- `.agent/verify_completion_stop.sh`
-- `.agent/verify_completion_control_plane.sh`
+- `.agent/verify_completion_stop.sh` *(thin forwarding stub to the package-owned stop verifier)*
+- `.agent/verify_completion_control_plane.sh` *(thin forwarding stub to the package-owned control-plane verifier)*
+
+The canonical storage contract is tracked `.agent/config/**` plus ignored `.agent/current/**`. The tracked `.agent/verify_completion_*.sh` files stay intentionally small and forward repo-local verification requests into the package-owned verifier entrypoints under `scripts/`.
 
 Ignored execution-state files:
 
@@ -272,6 +274,8 @@ In short:
 Run validation from the package root:
 
 ```bash
+npm run verify-completion-control-plane
+npm run verify-completion-stop
 npm run smoke-test
 npm run refocus-test
 npm run context-proposal-test
@@ -282,7 +286,7 @@ npm run rubric-contract-test
 npm run release-check
 ```
 
-`npm run release-check` is the broad packaged-release verifier. It begins with `bash .agent/verify_completion_control_plane.sh`, so missing or stale `.agent/current/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped `/cook` public parity surfaces in `README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
+`npm run release-check` is the broad packaged-release verifier. It begins with `npm run verify-completion-control-plane`, so missing or stale `.agent/current/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped `/cook` public parity surfaces in `README.md`, `.agent/README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
 
 The direct package-root verifier commands above intentionally self-isolate the repo-local extension when they shell back into `pi`, so you should not need to wrap them with `pi --no-extensions` even if `@linimin/pi-letscook` is also installed globally on the same machine.
 

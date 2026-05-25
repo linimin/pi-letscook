@@ -155,11 +155,12 @@ assertIncludes('extensions/completion/index.ts', 'Canonical verification evidenc
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- verification_evidence_path: ${evidence.path}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- verification_evidence_summary: ${evidence.summary}`');
 assertIncludes('extensions/completion/index.ts', 'Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.');
-assertIncludes('scripts/release-check.sh', 'bash .agent/verify_completion_control_plane.sh');
+assertIncludes('scripts/release-check.sh', 'npm run verify-completion-control-plane');
 assertIncludes('scripts/release-check.sh', 'bash ./scripts/canonical-evidence-artifact-test.sh');
-assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/current/verification-evidence.json');
-assertIncludes('.agent/verify_completion_control_plane.sh', 'subject_type must be selected_slice when active slice exact handoff requires verification evidence');
-assertIncludes('.agent/verify_completion_stop.sh', '.agent/current/verification-evidence.json parity');
+assertIncludes('.agent/verify_completion_control_plane.sh', 'verify-completion-control-plane.js');
+assertIncludes('scripts/verify-completion-control-plane.js', '.agent/current/verification-evidence.json');
+assertIncludes('scripts/verify-completion-control-plane.js', 'subject_type must be selected_slice when active slice exact handoff requires verification evidence');
+assertIncludes('scripts/verify-completion-stop.sh', 'verify-completion-control-plane.js');
 NODE
 
 bash .agent/verify_completion_control_plane.sh >/dev/null

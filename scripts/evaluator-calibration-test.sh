@@ -22,10 +22,10 @@ const assertIncludes = (file, snippet) => {
 
 assertIncludes('package.json', '"evaluator-calibration-test": "bash ./scripts/evaluator-calibration-test.sh"');
 assertIncludes('scripts/release-check.sh', 'npm run evaluator-calibration-test');
-assertIncludes('.agent/verify_completion_stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
-assertIncludes('.agent/verify_completion_stop.sh', 'Current HEAD has a can_stop=no judgment');
-assertIncludes('.agent/verify_completion_stop.sh', 'valid current-HEAD judgments');
-assertIncludes('.agent/verify_completion_stop.sh', 'npm run release-check >/dev/null');
+assertIncludes('scripts/verify-completion-stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
+assertIncludes('scripts/verify-completion-stop.sh', 'Current HEAD has a can_stop=no judgment');
+assertIncludes('scripts/verify-completion-stop.sh', 'valid current-HEAD judgments');
+assertIncludes('scripts/verify-completion-stop.sh', 'bash -lc "$REPO_VERIFY_COMMAND"');
 assertIncludes('README.md', 'Evaluator calibration now also fails closed on semantically lenient but well-formed reports.');
 assertIncludes('README.md', '`npm run evaluator-calibration-test` drives the packaged transcription path through reviewer yes-with-follow-up, auditor open-contracts-with-`Next mandatory slice: none`, and stop-judge yes-with-open-contracts fixtures while still accepting truthful passing reports.');
 assertIncludes('README.md', 'It also rejects the reproducible `none; ...` bypass family for reviewer follow-up, auditor worktree blockers, and stop-judge open-contract reporting, while still accepting the reviewer routing forms `Smallest follow-up slice: none; proceed to completion-auditor.`, `Smallest follow-up slice: none, proceed to completion-auditor.`, and `Smallest follow-up slice: none - proceed to auditor.` with terminal punctuation or whitespace only.');
@@ -33,6 +33,7 @@ assertIncludes('README.md', 'includes deterministic active-slice contract covera
 assertIncludes('CHANGELOG.md', 'added evaluator calibration fixtures for semantically lenient but well-formed reviewer/auditor/stop-judge reports');
 assertIncludes('CHANGELOG.md', 'relaxed reviewer no-follow-up routing parsing so `Acceptable as-is: yes` now also accepts `none, proceed to completion-auditor` and `none - proceed to auditor` in addition to the original exact allowance');
 assertIncludes('CHANGELOG.md', 'wired `npm run evaluator-calibration-test` into `npm run release-check` and `.agent/verify_completion_stop.sh`');
+assertIncludes('README.md', 'package-owned `scripts/verify-completion-stop.sh` entrypoint');
 assertIncludes('CHANGELOG.md', 'fixed the smoke auto-resume prompt regression');
 assertIncludes('extensions/completion/role-reporting.js', 'Reviewer output cannot mark \'Acceptable as-is: yes\' while naming a follow-up slice other than none.');
 assertIncludes('extensions/completion/role-reporting.js', 'Auditor output cannot mark \'Tracked and unignored worktree is clean: yes\' while listing worktree blockers.');

@@ -41,6 +41,10 @@ function asNumber(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function shellQuote(value: string): string {
+	return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
 export function resolveFiles(root: string) {
 	const agentDir = path.join(root, AGENT_DIRNAME);
 	const configDir = path.join(agentDir, CONFIG_DIRNAME);
@@ -431,7 +435,7 @@ export function defaultVerificationEvidence(): JsonRecord {
 }
 
 export function buildAgentReadme(projectName: string): string {
-	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Tracked repo-level workflow contract\n\n- \`.agent/README.md\`\n- \`.agent/config/workflow.json\`\n- \`.agent/config/profile.json\`\n- \`.agent/profile.json\` *(temporary compatibility shim for the current workflow round)*\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored runtime state\n\n- \`.agent/current/state.json\`\n- \`.agent/current/startup-brief.json\`\n- \`.agent/current/plan.json\`\n- \`.agent/current/active-slice.json\`\n- \`.agent/current/slice-history.jsonl\`\n- \`.agent/current/stop-check-history.jsonl\`\n- \`.agent/current/verification-evidence.json\`\n- \`.agent/current/*.log\`\n- \`.agent/current/tmp/\`\n\n\`.agent/config/workflow.json\` defines the storage contract: tracked repo policy stays under \`.agent/config/**\`, runtime state lives under \`.agent/current/**\`, archive is disabled, and replacement/cancel/done paths must delete \`.agent/current/\`.\n\n\`.agent/config/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`. Canonical \`.agent/current/state.json current_stop_wave_id\` carries the current stop-wave epoch so the same HEAD may restart stop evaluation without requiring a synthetic tracked commit.\n\n\`.agent/current/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/current/plan.json\` or \`.agent/current/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/current/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical tracked \`.agent/config/**\`, ignored \`.agent/current/**\`, and current repo truth.\n\nProject: ${projectName}\n`;
+	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Tracked repo-level workflow contract\n\n- \`.agent/README.md\`\n- \`.agent/config/workflow.json\`\n- \`.agent/config/profile.json\`\n- \`.agent/profile.json\` *(temporary compatibility shim for the current workflow round)*\n- \`.agent/verify_completion_stop.sh\` *(thin forwarding stub to the package-owned stop verifier)*\n- \`.agent/verify_completion_control_plane.sh\` *(thin forwarding stub to the package-owned control-plane verifier)*\n\n## Ignored runtime state\n\n- \`.agent/current/state.json\`\n- \`.agent/current/startup-brief.json\`\n- \`.agent/current/plan.json\`\n- \`.agent/current/active-slice.json\`\n- \`.agent/current/slice-history.jsonl\`\n- \`.agent/current/stop-check-history.jsonl\`\n- \`.agent/current/verification-evidence.json\`\n- \`.agent/current/*.log\`\n- \`.agent/current/tmp/\`\n\n\`.agent/config/workflow.json\` defines the canonical storage contract: tracked repo policy stays under \`.agent/config/**\`, runtime state lives under \`.agent/current/**\`, archive is disabled, and replacement/cancel/done paths must delete \`.agent/current/\`.\n\nPackage-owned verification logic ships in \`scripts/verify-completion-control-plane.js\` and \`scripts/verify-completion-stop.sh\`. The tracked \`.agent/verify_completion_*.sh\` files stay intentionally small and just forward repo-local verification requests into those package-owned entrypoints.\n\n\`.agent/config/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`. Canonical \`.agent/current/state.json current_stop_wave_id\` carries the current stop-wave epoch so the same HEAD may restart stop evaluation without requiring a synthetic tracked commit.\n\n\`.agent/current/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/current/plan.json\` or \`.agent/current/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/current/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical tracked \`.agent/config/**\`, ignored \`.agent/current/**\`, package-owned verifier entrypoints, and current repo truth.\n\nProject: ${projectName}\n`;
 }
 
 export function buildMission(projectName: string, missionAnchor: string): string {
@@ -439,344 +443,40 @@ export function buildMission(projectName: string, missionAnchor: string): string
 }
 
 export function buildVerifyStopScript(verifierCommand?: string): string {
-	const repoCheck = verifierCommand
-		? `echo "[completion] running repo-level verification: ${verifierCommand}"\n${verifierCommand}`
-		: `echo "[completion] no repo-specific verifier auto-detected; control-plane verification only"`;
+	const packageScriptPath = path.resolve(__dirname, "..", "..", "scripts", "verify-completion-stop.sh");
+	const repoRelativeScript = '"$SCRIPT_DIR/../scripts/verify-completion-stop.sh"';
+	const packageScript = shellQuote(packageScriptPath);
+	const repoCommandExport = `export COMPLETION_REPO_VERIFY_COMMAND=${shellQuote(verifierCommand ?? "")}`;
 	return `#!/usr/bin/env bash
 set -euo pipefail
 
-# .agent/current/verification-evidence.json parity is enforced by .agent/verify_completion_control_plane.sh before stop-wave policy checks.
-bash .agent/verify_completion_control_plane.sh
-
-CURRENT_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
-export COMPLETION_STOP_HEAD="$CURRENT_HEAD"
-
-node <<'NODE'
-const fs = require('node:fs');
-const { spawnSync } = require('node:child_process');
-
-function fail(message) {
-  console.error(message);
-  process.exit(1);
-}
-
-function readJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (error) {
-    fail('Failed to read ' + file + ': ' + error.message);
-  }
-}
-
-function asString(value) {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function asNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function gitHeadSha() {
-  const result = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  if (result.status !== 0) {
-    fail('git rev-parse HEAD failed: ' + (asString(result.stderr) ?? 'unknown git error'));
-  }
-  return asString(result.stdout);
-}
-
-const profile = readJson('.agent/config/profile.json');
-const state = readJson('.agent/current/state.json');
-const requiredStopJudges = asNumber(profile.required_stop_judges);
-if (!Number.isInteger(requiredStopJudges) || requiredStopJudges < 1) {
-  fail('.agent/config/profile.json required_stop_judges must be a positive integer before stop verification can run.');
-}
-const stopAggregationPolicy = asString(profile.stop_aggregation_policy);
-if (stopAggregationPolicy !== '${DEFAULT_STOP_AGGREGATION_POLICY}') {
-  fail('.agent/config/profile.json stop_aggregation_policy must be ${DEFAULT_STOP_AGGREGATION_POLICY} before stop verification can run.');
-}
-
-const currentPhase = asString(state.current_phase) ?? 'unknown';
-const stopWaveActive = currentPhase === 'stop_wave' || currentPhase === 'done';
-const currentStopWaveId = asNumber(state.current_stop_wave_id) ?? 0;
-if (!Number.isInteger(currentStopWaveId) || currentStopWaveId < 0) {
-  fail('.agent/current/state.json current_stop_wave_id must be a non-negative integer before stop verification can run.');
-}
-const activeStopWaveId = stopWaveActive ? currentStopWaveId || 1 : currentStopWaveId;
-const rawHistory = fs.existsSync('.agent/current/stop-check-history.jsonl') ? fs.readFileSync('.agent/current/stop-check-history.jsonl', 'utf8') : '';
-const seededHeadSha = asString(process.env.COMPLETION_STOP_HEAD);
-if (!seededHeadSha && !stopWaveActive && rawHistory.trim().length === 0) {
-  console.log('[completion] current phase ' + currentPhase + ' is not stop_wave/done; current-HEAD stop judgments are not required yet');
-  process.exit(0);
-}
-const headSha = seededHeadSha ?? gitHeadSha();
-const currentHeadJudgments = [];
-for (const [index, rawLine] of rawHistory.split(/\\r?\\n/).entries()) {
-  const line = rawLine.trim();
-  if (!line) continue;
-  let parsed;
-  try {
-    parsed = JSON.parse(line);
-  } catch (error) {
-    fail('.agent/current/stop-check-history.jsonl contains invalid JSON at line ' + (index + 1) + ': ' + error.message);
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    fail('.agent/current/stop-check-history.jsonl line ' + (index + 1) + ' must be a JSON object judgment record.');
-  }
-  if (parsed.type !== 'judgment') continue;
-  if (asString(parsed.head_sha) !== headSha) continue;
-  const recordStopWaveId = asNumber(parsed.stop_wave_id) ?? 0;
-  if (!Number.isInteger(recordStopWaveId) || recordStopWaveId < 0) {
-    fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry a non-negative integer stop_wave_id.');
-  }
-  if (recordStopWaveId !== activeStopWaveId) continue;
-  if (typeof parsed.can_stop !== 'boolean') {
-    fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry boolean can_stop.');
-  }
-  const blockerCount = asNumber(parsed.blocker_count);
-  const highValueGapCount = asNumber(parsed.high_value_gap_count);
-  if (blockerCount === undefined || highValueGapCount === undefined) {
-    fail('Current-HEAD judgment at line ' + (index + 1) + ' must carry numeric blocker_count and high_value_gap_count.');
-  }
-  if (parsed.can_stop === false) {
-    fail('Current HEAD has a can_stop=no judgment at line ' + (index + 1) + '.');
-  }
-  if (blockerCount > 0 || highValueGapCount > 0) {
-    fail('Current-HEAD judgment at line ' + (index + 1) + ' cannot pass stop verification while blocker_count or high_value_gap_count is non-zero.');
-  }
-  currentHeadJudgments.push(parsed);
-}
-
-if (!stopWaveActive && currentHeadJudgments.length === 0) {
-  console.log('[completion] current phase ' + currentPhase + ' is not stop_wave/done; current-HEAD stop judgments are not required yet');
-  process.exit(0);
-}
-
-if (currentHeadJudgments.length < requiredStopJudges) {
-  fail('Need ' + requiredStopJudges + ' valid current-HEAD judgments for HEAD ' + headSha + ' in stop_wave_id ' + activeStopWaveId + '; found ' + currentHeadJudgments.length + '.');
-}
-
-console.log('[completion] stop-wave policy ${DEFAULT_STOP_AGGREGATION_POLICY} satisfied for HEAD ' + headSha + ' in stop_wave_id ' + activeStopWaveId + ' with ' + currentHeadJudgments.length + ' valid current-HEAD judgments');
-NODE
-
-${repoCheck}
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+${repoCommandExport}
+if [[ -f "$SCRIPT_DIR/../scripts/verify-completion-stop.sh" ]]; then
+  exec bash ${repoRelativeScript} "$@"
+fi
+exec bash ${packageScript} "$@"
 `;
 }
 
 export function buildVerifyControlPlaneScript(): string {
-	const trackedScriptPath = path.resolve(__dirname, "..", "..", ".agent", "verify_completion_control_plane.sh");
-	if (fs.existsSync(trackedScriptPath)) {
-		return fs.readFileSync(trackedScriptPath, "utf8");
-	}
+	const packageScriptPath = path.resolve(__dirname, "..", "..", "scripts", "verify-completion-control-plane.js");
+	const packageScript = shellQuote(packageScriptPath);
 	return `#!/usr/bin/env bash
-':' //; exec node "$0" "$@"
-const fs = require('node:fs');
-const { spawnSync } = require('node:child_process');
+set -euo pipefail
 
-const REQUIRED_TRACKED_CONTRACT_FILES = [
-  '.agent/README.md',
-  '.agent/mission.md',
-  '.agent/profile.json',
-  '.agent/verify_completion_stop.sh',
-  '.agent/verify_completion_control_plane.sh',
-];
-
-function fail(message) {
-  console.error(message);
-  process.exit(1);
-}
-
-function readJson(file) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (error) {
-    fail('Failed to read ' + file + ': ' + error.message);
-  }
-}
-
-function asString(value) {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function asNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-}
-
-function asStringArray(value) {
-  return Array.isArray(value)
-    ? value.filter((item) => typeof item === 'string' && item.trim().length > 0)
-    : [];
-}
-
-function sameStringArrays(left, right) {
-  return left.length === right.length && left.every((item, index) => item === right[index]);
-}
-
-function runGit(args, options = {}) {
-  const result = spawnSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  if (!options.allowFailure && result.status !== 0) {
-    const stderr = asString(result.stderr) ?? 'git command failed';
-    fail(\`git \${args.join(' ')} failed: \${stderr}\`);
-  }
-  return result;
-}
-
-function gitHeadSha() {
-  const result = runGit(['rev-parse', 'HEAD'], { allowFailure: true });
-  return result.status === 0 ? asString(result.stdout) : undefined;
-}
-
-function ensureTrackedContractFiles() {
-  for (const file of REQUIRED_TRACKED_CONTRACT_FILES) {
-    const result = runGit(['ls-files', '--error-unmatch', file], { allowFailure: true });
-    if (result.status !== 0) {
-      fail(\`Required tracked completion contract file is missing from git index: \${file}\`);
-    }
-  }
-}
-
-function ensureCommitExists(commitish, label) {
-  const result = runGit(['rev-parse', '--verify', \`\${commitish}^{commit}\`], { allowFailure: true });
-  if (result.status !== 0) {
-    fail(\`\${label} must resolve to an existing commit: \${commitish}\`);
-  }
-}
-
-function trackedDiffFiles(fromCommit, toCommit) {
-  const result = runGit(['diff', '--name-only', '--diff-filter=ACMR', \`\${fromCommit}..\${toCommit}\`]);
-  return result.stdout
-    .split(/\\r?\\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-const profile = readJson('.agent/profile.json');
-const state = readJson('.agent/state.json');
-const plan = readJson('.agent/plan.json');
-const active = readJson('.agent/active-slice.json');
-const evidence = readJson('.agent/verification-evidence.json');
-
-ensureTrackedContractFiles();
-
-for (const [file, record] of [
-  ['.agent/profile.json', profile],
-  ['.agent/state.json', state],
-  ['.agent/plan.json', plan],
-  ['.agent/active-slice.json', active],
-]) {
-  if (!asString(record.task_type)) fail(file + ' is missing task_type');
-  if (!asString(record.evaluation_profile)) fail(file + ' is missing evaluation_profile');
-}
-
-const taskType = asString(profile.task_type);
-const evaluationProfile = asString(profile.evaluation_profile);
-if (asString(state.task_type) !== taskType) fail('.agent/state.json task_type must match .agent/profile.json task_type');
-if (asString(plan.task_type) !== taskType) fail('.agent/plan.json task_type must match .agent/profile.json task_type');
-if (asString(active.task_type) !== taskType) fail('.agent/active-slice.json task_type must match .agent/profile.json task_type');
-if (asString(state.evaluation_profile) !== evaluationProfile) fail('.agent/state.json evaluation_profile must match .agent/profile.json evaluation_profile');
-if (asString(plan.evaluation_profile) !== evaluationProfile) fail('.agent/plan.json evaluation_profile must match .agent/profile.json evaluation_profile');
-if (asString(active.evaluation_profile) !== evaluationProfile) fail('.agent/active-slice.json evaluation_profile must match .agent/profile.json evaluation_profile');
-
-if (asString(evidence.artifact_type) !== 'completion-verification-evidence') {
-  fail('.agent/verification-evidence.json artifact_type must be completion-verification-evidence');
-}
-
-const exactStatuses = new Set(['selected', 'in_progress', 'committed', 'done']);
-const activeStatus = asString(active.status);
-const exactHandoff = exactStatuses.has(activeStatus || '');
-const planSlices = Array.isArray(plan.candidate_slices) ? plan.candidate_slices : [];
-const activeSliceId = asString(active.slice_id);
-const planSlice = activeSliceId ? planSlices.find((slice) => asString(slice && slice.slice_id) === activeSliceId) : undefined;
-
-if (exactHandoff && !planSlice) {
-  fail('slice_id must match a slice in .agent/plan.json when status carries an exact handoff');
-}
-
-if (exactHandoff) {
-  const requiredStringFields = ['goal', 'why_now', 'basis_commit'];
-  for (const field of requiredStringFields) {
-    if (!asString(active[field])) fail('.agent/active-slice.json is missing ' + field + ' when status carries an exact handoff');
-  }
-  const requiredArrayFields = ['contract_ids', 'acceptance_criteria', 'blocked_on', 'locked_notes', 'must_fix_findings', 'implementation_surfaces', 'verification_commands', 'remaining_contract_ids_before'];
-  for (const field of requiredArrayFields) {
-    if (!Array.isArray(active[field])) fail('.agent/active-slice.json is missing ' + field + ' when status carries an exact handoff');
-  }
-  const requiredNumberFields = ['priority', 'release_blocker_count_before', 'high_value_gap_count_before'];
-  for (const field of requiredNumberFields) {
-    if (asNumber(active[field]) === undefined) fail('.agent/active-slice.json is missing ' + field + ' when status carries an exact handoff');
-  }
-
-  const mismatchFields = [];
-  if (asString(planSlice.slice_id) !== activeSliceId) mismatchFields.push('slice_id');
-  if (asString(planSlice.goal) !== asString(active.goal)) mismatchFields.push('goal');
-  if (!sameStringArrays(asStringArray(planSlice.contract_ids), asStringArray(active.contract_ids))) mismatchFields.push('contract_ids');
-  if (!sameStringArrays(asStringArray(planSlice.acceptance_criteria), asStringArray(active.acceptance_criteria))) mismatchFields.push('acceptance_criteria');
-  if (!sameStringArrays(asStringArray(planSlice.blocked_on), asStringArray(active.blocked_on))) mismatchFields.push('blocked_on');
-  if (asNumber(planSlice.priority) !== asNumber(active.priority)) mismatchFields.push('priority');
-  if (asString(planSlice.why_now) !== asString(active.why_now)) mismatchFields.push('why_now');
-  const planMirrorFields = ['locked_notes', 'must_fix_findings', 'implementation_surfaces', 'verification_commands', 'basis_commit', 'remaining_contract_ids_before', 'release_blocker_count_before', 'high_value_gap_count_before'];
-  for (const field of planMirrorFields) {
-    const planValue = planSlice[field];
-    const activeValue = active[field];
-    if (Array.isArray(planValue) || Array.isArray(activeValue)) {
-      if (!sameStringArrays(asStringArray(planValue), asStringArray(activeValue))) mismatchFields.push(field);
-      continue;
-    }
-    if (typeof planValue === 'number' || typeof activeValue === 'number') {
-      if (asNumber(planValue) !== asNumber(activeValue)) mismatchFields.push(field);
-      continue;
-    }
-    if (asString(planValue) !== asString(activeValue)) mismatchFields.push(field);
-  }
-  if (mismatchFields.length > 0) {
-    fail('.agent/active-slice.json must match the selected .agent/plan.json slice across: ' + mismatchFields.join(', '));
-  }
-
-  if (asString(evidence.subject_type) !== 'selected_slice') {
-    fail('subject_type must be selected_slice when active slice exact handoff requires verification evidence');
-  }
-  if (asString(evidence.slice_id) !== activeSliceId) fail('.agent/verification-evidence.json slice_id must match .agent/active-slice.json slice_id');
-  if (asString(evidence.goal) !== asString(active.goal)) fail('.agent/verification-evidence.json goal must match .agent/active-slice.json goal');
-  if (!sameStringArrays(asStringArray(evidence.contract_ids), asStringArray(active.contract_ids))) fail('.agent/verification-evidence.json contract_ids must match .agent/active-slice.json contract_ids');
-  if (asString(evidence.basis_commit) !== asString(active.basis_commit)) fail('.agent/verification-evidence.json basis_commit must match .agent/active-slice.json basis_commit');
-  if (!sameStringArrays(asStringArray(evidence.verification_commands), asStringArray(active.verification_commands))) {
-    fail('.agent/verification-evidence.json verification_commands must match .agent/active-slice.json verification_commands');
-  }
-  if (!asString(evidence.recorded_at)) fail('.agent/verification-evidence.json recorded_at must be present for selected-slice evidence');
-  if (asString(evidence.outcome) === 'not_recorded') fail('.agent/verification-evidence.json outcome must not be not_recorded for selected-slice evidence');
-  const headSha = gitHeadSha();
-  if (headSha && asString(evidence.head_sha) !== headSha) {
-    fail('.agent/verification-evidence.json head_sha must match current HEAD');
-  }
-
-  const basisCommit = asString(active.basis_commit);
-  if (basisCommit && headSha) {
-    ensureCommitExists(basisCommit, '.agent/active-slice.json basis_commit');
-    const ancestorCheck = runGit(['merge-base', '--is-ancestor', basisCommit, headSha], { allowFailure: true });
-    if (ancestorCheck.status !== 0) {
-      fail(\`.agent/active-slice.json basis_commit must be an ancestor of current HEAD: \${basisCommit} -> \${headSha}\`);
-    }
-    const changedFiles = trackedDiffFiles(basisCommit, headSha);
-    const implementationSurfaces = new Set(asStringArray(active.implementation_surfaces));
-    const missingSurfaces = changedFiles.filter((file) => !implementationSurfaces.has(file));
-    if (missingSurfaces.length > 0) {
-      fail('.agent/active-slice.json implementation_surfaces must cover every tracked file changed from basis_commit to current HEAD; missing: ' + missingSurfaces.join(', '));
-    }
-  }
-} else {
-  const subjectType = asString(evidence.subject_type);
-  if (subjectType === 'none') {
-    if (asString(evidence.outcome) && asString(evidence.outcome) !== 'not_recorded') {
-      fail('.agent/verification-evidence.json outcome must stay not_recorded when subject_type=none');
-    }
-  }
-}
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/../scripts/verify-completion-control-plane.js" ]]; then
+  exec node "$SCRIPT_DIR/../scripts/verify-completion-control-plane.js" "$@"
+fi
+exec node ${packageScript} "$@"
 `;
 }
 
 async function ensureGitignore(root: string): Promise<boolean> {
 	const gitignorePath = path.join(root, ".gitignore");
 	const blockLines = [
-		"# completion protocol",
+		"# completion protocol canonical state and thin verifier forwarders",
 		".agent/*",
 		"!.agent/README.md",
 		"!.agent/config/",

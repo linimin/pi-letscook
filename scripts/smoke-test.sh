@@ -5,6 +5,12 @@ PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pi() {
   env -u PI_COMPLETION_ROLE command pi --no-extensions "$@"
 }
+verify_control_plane() {
+  node "$PKG_ROOT/scripts/verify-completion-control-plane.js" "$@"
+}
+verify_stop() {
+  bash "$PKG_ROOT/scripts/verify-completion-stop.sh" "$@"
+}
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -177,8 +183,16 @@ for file in .agent/config/workflow.json .agent/config/profile.json .agent/curren
 done
 
 git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null
-bash .agent/verify_completion_control_plane.sh >/dev/null
-bash .agent/verify_completion_stop.sh >/dev/null
+python3 - <<'PY'
+from pathlib import Path
+control = Path('.agent/verify_completion_control_plane.sh').read_text()
+stop = Path('.agent/verify_completion_stop.sh').read_text()
+assert 'verify-completion-control-plane.js' in control, control
+assert 'verify-completion-stop.sh' in stop, stop
+assert 'COMPLETION_REPO_VERIFY_COMMAND' in stop, stop
+PY
+verify_control_plane >/dev/null
+verify_stop >/dev/null
 
 python3 - "$KICKOFF_PROMPT" <<'PY'
 import json
@@ -330,6 +344,93 @@ assert f'- evaluation_profile: {expected_eval_profile}' in auto_resume, 'auto-re
 assert f'- workflow_session_id: {state["workflow_session_id"]}' in auto_resume, 'auto-resume prompt should expose canonical workflow_session_id'
 PY
 
+RESET_HANDOFF="$(python3 - <<'PY'
+import json
+capsule = {
+    'kind': 'cook_handoff',
+    'source': 'primary_agent',
+    'captured_at': '2026-01-01T00:00:03.000Z',
+    'source_turn_id': 'generated-cleanup-smoke',
+    'mission': 'Strengthen smoke-test coverage for fresh /cook startup after cleanup.',
+    'scope': [
+        'Materialize the canonical completion control-plane files after cleanup.',
+        'Keep the smoke test on fresh-startup behavior that ignores stale root runtime artifacts.'
+    ],
+    'constraints': [
+        'Keep startup proposal confirmation approval-only.'
+    ],
+    'acceptance': [
+        'Write the workflow control-plane files under .agent, including profile.json, state.json, active-slice.json, verification-evidence.json, and the slice backlog file, for the cleanup restart smoke fixture.',
+        'Keep scripts/smoke-test.sh and cleanup-restart coverage truthful for packaged fresh-startup bootstrap after runtime deletion.'
+    ],
+    'risks': [
+        'Fresh startup after cleanup must not recover deleted runtime state from stale root artifacts.'
+    ],
+    'notes': [
+        'Keep the cleanup restart smoke fixture aligned with the shipped fresh-startup contract.',
+        'Stale root .agent/state.json, plan.json, active-slice.json, and verification-evidence.json should remain ignored after cleanup.'
+    ],
+    'handoff_kind': 'implementation_workflow_handoff',
+    'first_slice_goal': 'Scaffold canonical completion files after cleanup and verify the packaged fresh-startup contract.',
+    'first_slice_non_goals': [
+        'Do not broaden the smoke fixture beyond the packaged startup surfaces.'
+    ],
+    'implementation_surfaces': [
+        '.agent/README.md',
+        'scripts/smoke-test.sh'
+    ],
+    'verification_commands': [
+        'npm run smoke-test'
+    ],
+    'why_this_slice_first': 'Fresh startup after cleanup must work before later workflow verification can trust deleted runtime state to stay deleted.',
+    'task_type': 'completion-workflow',
+    'evaluation_profile': 'completion-rubric-v1',
+    'why_cook_now': 'The cleanup restart intent is concrete enough to bootstrap canonical workflow files.'
+}
+print('```cook_handoff\n' + json.dumps(capsule, ensure_ascii=False, indent=2) + '\n```')
+PY
+)"
+rm -rf .agent/current
+python3 - <<'PY'
+import json
+from pathlib import Path
+Path('.agent/state.json').write_text(json.dumps({
+    'mission_anchor': 'STALE ROOT RUNTIME SHOULD NOT RECOVER',
+    'workflow_session_id': 'stale-root-session',
+    'current_phase': 'implement'
+}, indent=2) + '\n')
+Path('.agent/plan.json').write_text(json.dumps({
+    'candidate_slices': [{'slice_id': 'stale-root-slice'}]
+}, indent=2) + '\n')
+Path('.agent/active-slice.json').write_text(json.dumps({
+    'slice_id': 'stale-root-slice',
+    'goal': 'stale root goal'
+}, indent=2) + '\n')
+Path('.agent/verification-evidence.json').write_text(json.dumps({
+    'artifact_type': 'completion-verification-evidence',
+    'subject_type': 'selected_slice',
+    'slice_id': 'stale-root-slice',
+    'head_sha': 'stale-root-head'
+}, indent=2) + '\n')
+PY
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$RESET_HANDOFF" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi -e "$PKG_ROOT" -p "/cook start fresh after cleanup without reviving stale runtime state" \
+  >"$TMPDIR/pi-completion-smoke-cleanup-restart.out" 2>"$TMPDIR/pi-completion-smoke-cleanup-restart.err"
+python3 - <<'PY'
+import json
+from pathlib import Path
+state = json.loads(Path('.agent/current/state.json').read_text())
+startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
+assert state['mission_anchor'] == 'Strengthen smoke-test coverage for fresh /cook startup after cleanup.', state
+assert state['workflow_session_id'] != 'stale-root-session', state
+assert startup_brief['mission'] == 'Strengthen smoke-test coverage for fresh /cook startup after cleanup.', startup_brief
+assert json.loads(Path('.agent/state.json').read_text())['mission_anchor'] == 'STALE ROOT RUNTIME SHOULD NOT RECOVER', 'stale root file should remain distinct from canonical runtime state'
+PY
+verify_control_plane >/dev/null
+
 python3 - <<'PY'
 import json
 from pathlib import Path
@@ -339,7 +440,7 @@ state.pop('task_type', None)
 path.write_text(json.dumps(state, indent=2) + '\n')
 PY
 
-if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
+if verify_control_plane >/dev/null 2>&1; then
   echo "expected control-plane verification to fail when state.json omits task_type" >&2
   exit 1
 fi
@@ -363,7 +464,7 @@ active.pop('evaluation_profile', None)
 path.write_text(json.dumps(active, indent=2) + '\n')
 PY
 
-if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
+if verify_control_plane >/dev/null 2>&1; then
   echo "expected control-plane verification to fail when active-slice.json omits evaluation_profile" >&2
   exit 1
 fi
@@ -462,7 +563,7 @@ evidence = {
 Path('.agent/current/verification-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
 PY
 
-if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
+if verify_control_plane >/dev/null 2>&1; then
   echo "expected control-plane verification to fail when selected active-slice omits priority/why_now" >&2
   exit 1
 fi
@@ -487,7 +588,7 @@ active.pop('verification_commands', None)
 path.write_text(json.dumps(active, indent=2) + '\n')
 PY
 
-if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
+if verify_control_plane >/dev/null 2>&1; then
   echo "expected control-plane verification to fail when selected active-slice omits implementation_surfaces/verification_commands" >&2
   exit 1
 fi
@@ -502,8 +603,8 @@ active['verification_commands'] = ['bash .agent/verify_completion_control_plane.
 path.write_text(json.dumps(active, indent=2) + '\n')
 PY
 
-bash .agent/verify_completion_control_plane.sh >/dev/null
-bash .agent/verify_completion_stop.sh >/dev/null
+verify_control_plane >/dev/null
+verify_stop >/dev/null
 
 python3 - "$PKG_ROOT" <<'PY'
 import sys

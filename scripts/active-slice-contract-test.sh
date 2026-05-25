@@ -159,21 +159,24 @@ assertIncludes('README.md', '`remaining_contract_ids_before` plus `release_block
 assertIncludes('README.md', 'Deterministic active-slice contract regression now lives in `bash scripts/active-slice-contract-test.sh`');
 assertIncludes('README.md', 'includes deterministic active-slice contract coverage plus observability coverage');
 assertIncludes('scripts/release-check.sh', 'bash ./scripts/active-slice-contract-test.sh');
-assertIncludes('.agent/verify_completion_stop.sh', 'npm run release-check >/dev/null');
+assertIncludes('scripts/verify-completion-stop.sh', 'bash -lc "$REPO_VERIFY_COMMAND"');
 assertIncludes('extensions/completion/state-store.ts', 'export function buildVerifyControlPlaneScript(');
-assertIncludes('extensions/completion/state-store.ts', 'return fs.readFileSync(trackedScriptPath, "utf8");');
+assertIncludes('extensions/completion/state-store.ts', 'path.resolve(__dirname, "..", "..", "scripts", "verify-completion-control-plane.js")');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Selected/in-progress/committed/done .agent/current/active-slice.json is the canonical implementation contract.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Active slice contract drift: ${args.activeContractDrift}');
 assertIncludes('extensions/completion/index.ts', 'Canonical active-slice contract drift is currently: ${activeContractDrift}');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`active_slice_contract_drift_fields: ${args.activeSliceContractDrift}`');
 assertIncludes('extensions/completion/index.ts', 'treat .agent/current/active-slice.json as the canonical implementation contract');
-assertIncludes('.agent/verify_completion_control_plane.sh', 'const REQUIRED_TRACKED_CONTRACT_FILES = [');
-assertIncludes('.agent/verify_completion_control_plane.sh', 'Required tracked completion contract file is missing from git index:');
-assertIncludes('.agent/verify_completion_control_plane.sh', "const planMirrorFields = ['locked_notes', 'must_fix_findings', 'implementation_surfaces', 'verification_commands', 'basis_commit', 'remaining_contract_ids_before', 'release_blocker_count_before', 'high_value_gap_count_before'];");
-assertIncludes('.agent/verify_completion_control_plane.sh', 'slice_id must match a slice in .agent/current/plan.json when status carries an exact handoff');
-assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/current/active-slice.json must match the selected .agent/current/plan.json slice across: ');
-assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/current/active-slice.json implementation_surfaces must cover every tracked file changed from basis_commit to current HEAD; missing: ');
-assertIncludes('scripts/release-check.sh', 'git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null');
+assertIncludes('.agent/verify_completion_control_plane.sh', 'verify-completion-control-plane.js');
+assertIncludes('.agent/verify_completion_stop.sh', 'verify-completion-stop.sh');
+assertIncludes('.agent/verify_completion_stop.sh', 'COMPLETION_REPO_VERIFY_COMMAND');
+assertIncludes('scripts/verify-completion-control-plane.js', 'const REQUIRED_TRACKED_CONTRACT_FILES = [');
+assertIncludes('scripts/verify-completion-control-plane.js', 'Required tracked completion contract file is missing from git index:');
+assertIncludes('scripts/verify-completion-control-plane.js', "const planMirrorFields = ['locked_notes', 'must_fix_findings', 'implementation_surfaces', 'verification_commands', 'basis_commit', 'remaining_contract_ids_before', 'release_blocker_count_before', 'high_value_gap_count_before'];");
+assertIncludes('scripts/verify-completion-control-plane.js', 'slice_id must match a slice in .agent/current/plan.json when status carries an exact handoff');
+assertIncludes('scripts/verify-completion-control-plane.js', '.agent/current/active-slice.json must match the selected .agent/current/plan.json slice across: ');
+assertIncludes('scripts/verify-completion-control-plane.js', '.agent/current/active-slice.json implementation_surfaces must cover every tracked file changed from basis_commit to current HEAD; missing: ');
+assertIncludes('scripts/release-check.sh', 'git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh scripts/verify-completion-control-plane.js scripts/verify-completion-stop.sh >/dev/null');
 NODE
 
 ROOT="$TMPDIR/repo"

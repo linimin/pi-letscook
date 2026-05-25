@@ -7,7 +7,7 @@ cd "$ROOT"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 REPO="$TMPDIR/repo"
-mkdir -p "$REPO/.agent/config" "$REPO/.agent/current"
+mkdir -p "$REPO/.agent/config" "$REPO/.agent/current" "$REPO/scripts"
 cd "$REPO"
 
 git init -q
@@ -25,7 +25,9 @@ cp "$ROOT/.agent/config/profile.json" .agent/config/profile.json
 cp "$ROOT/.agent/profile.json" .agent/profile.json
 cp "$ROOT/.agent/verify_completion_control_plane.sh" .agent/verify_completion_control_plane.sh
 cp "$ROOT/.agent/verify_completion_stop.sh" .agent/verify_completion_stop.sh
-chmod +x .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh
+cp "$ROOT/scripts/verify-completion-control-plane.js" scripts/verify-completion-control-plane.js
+cp "$ROOT/scripts/verify-completion-stop.sh" scripts/verify-completion-stop.sh
+chmod +x .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh scripts/verify-completion-stop.sh
 python3 - <<'PY'
 from pathlib import Path
 path = Path('.agent/verify_completion_stop.sh')

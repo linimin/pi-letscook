@@ -5,9 +5,56 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
-echo "[release-check] running control-plane validation, tracked .agent contract coverage, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
-bash .agent/verify_completion_control_plane.sh
-git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null
+echo "[release-check] running control-plane validation, tracked .agent contract coverage, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
+npm run verify-completion-control-plane
+git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh scripts/verify-completion-control-plane.js scripts/verify-completion-stop.sh >/dev/null
+
+python3 - <<'PY'
+from pathlib import Path
+
+checks = {
+    'README.md': [
+        'The canonical storage contract is tracked `.agent/config/**` plus ignored `.agent/current/**`.',
+        'thin `.agent/verify_completion_*.sh` forwarders',
+        'npm run verify-completion-control-plane',
+        'npm run verify-completion-stop',
+    ],
+    '.agent/README.md': [
+        'thin forwarding stub to the package-owned stop verifier',
+        'thin forwarding stub to the package-owned control-plane verifier',
+        'Package-owned verification logic ships in `scripts/verify-completion-control-plane.js` and `scripts/verify-completion-stop.sh`.',
+    ],
+    '.gitignore': [
+        '# completion protocol canonical state and thin verifier forwarders',
+        '!.agent/verify_completion_stop.sh',
+        '!.agent/verify_completion_control_plane.sh',
+        '.agent/current/',
+    ],
+    '.agent/verify_completion_control_plane.sh': [
+        'verify-completion-control-plane.js',
+    ],
+    '.agent/verify_completion_stop.sh': [
+        'COMPLETION_REPO_VERIFY_COMMAND',
+        'verify-completion-stop.sh',
+    ],
+    'scripts/verify-completion-control-plane.js': [
+        'const REQUIRED_TRACKED_CONTRACT_FILES = [',
+        'subject_type must be selected_slice when active slice exact handoff requires verification evidence',
+    ],
+    'scripts/verify-completion-stop.sh': [
+        'stop_aggregation_policy must be unanimous-current-head-v1',
+        'Current HEAD has a can_stop=no judgment',
+        'valid current-HEAD judgments',
+        'COMPLETION_REPO_VERIFY_COMMAND',
+    ],
+}
+
+for path, needles in checks.items():
+    text = Path(path).read_text()
+    for needle in needles:
+        if needle not in text:
+            raise SystemExit(f'[release-check] missing expected verifier-parity text in {path}: {needle}')
+PY
 
 echo "[release-check] verifying public /cook parity and primary-agent-handoff docs/help"
 python3 - <<'PY'
@@ -103,6 +150,11 @@ required = {
     '.agent/config/workflow.json',
     '.agent/config/profile.json',
     '.agent/profile.json',
+    'scripts/verify-completion-control-plane.js',
+    'scripts/verify-completion-stop.sh',
+}
+
+forbidden = {
     '.agent/verify_completion_stop.sh',
     '.agent/verify_completion_control_plane.sh',
 }
@@ -113,7 +165,10 @@ if not isinstance(payload, list) or not payload:
 files = {item.get('path') for item in payload[0].get('files', []) if isinstance(item, dict)}
 missing = sorted(required - files)
 if missing:
-    raise SystemExit(f"[release-check] npm pack --dry-run is missing tracked .agent contract files: {', '.join(missing)}")
+    raise SystemExit(f"[release-check] npm pack --dry-run is missing required verifier/config package files: {', '.join(missing)}")
+extra_forbidden = sorted(forbidden & files)
+if extra_forbidden:
+    raise SystemExit(f"[release-check] npm pack --dry-run must not publish repo-local verifier forwarders: {', '.join(extra_forbidden)}")
 PY
 
 echo "release check passed"
