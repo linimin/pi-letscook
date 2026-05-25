@@ -450,8 +450,9 @@ export function buildVerifyStopScript(verifierCommand?: string): string {
 	return `#!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd -P)"
 ${repoCommandExport}
+export COMPLETION_REPO_VERIFY_CWD="$(cd "$SCRIPT_DIR/.." && pwd -P)"
 if [[ -f "$SCRIPT_DIR/../scripts/verify-completion-stop.sh" ]]; then
   exec bash ${repoRelativeScript} "$@"
 fi

@@ -104,6 +104,8 @@ assertIncludes('scripts/release-check.sh', 'npm run rubric-contract-test');
 assertIncludes('scripts/verify-completion-stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
 assertIncludes('scripts/verify-completion-stop.sh', 'Current HEAD has a can_stop=no judgment');
 assertIncludes('scripts/verify-completion-stop.sh', 'valid current-HEAD judgments');
+assertIncludes('scripts/verify-completion-stop.sh', 'COMPLETION_REPO_VERIFY_CWD');
+assertIncludes('scripts/verify-completion-stop.sh', 'cd "$REPO_VERIFY_CWD"');
 assertIncludes('scripts/verify-completion-stop.sh', 'bash -lc "$REPO_VERIFY_COMMAND"');
 NODE
 

@@ -115,9 +115,20 @@ console.log('[completion] stop-wave policy unanimous-current-head-v1 satisfied f
 NODE
 
 REPO_VERIFY_COMMAND="${COMPLETION_REPO_VERIFY_COMMAND:-}"
+REPO_VERIFY_CWD="${COMPLETION_REPO_VERIFY_CWD:-}"
 if [[ -n "$REPO_VERIFY_COMMAND" ]]; then
-  echo "[completion] running repo-level verification: $REPO_VERIFY_COMMAND"
-  bash -lc "$REPO_VERIFY_COMMAND"
+  if [[ -z "$REPO_VERIFY_CWD" ]]; then
+    REPO_VERIFY_CWD="$(pwd -P)"
+  fi
+  if [[ ! -d "$REPO_VERIFY_CWD" ]]; then
+    echo "[completion] repo-level verification cwd does not exist: $REPO_VERIFY_CWD" >&2
+    exit 1
+  fi
+  echo "[completion] running repo-level verification from $REPO_VERIFY_CWD: $REPO_VERIFY_COMMAND"
+  (
+    cd "$REPO_VERIFY_CWD"
+    bash -lc "$REPO_VERIFY_COMMAND"
+  )
 else
   echo "[completion] no repo-specific verifier auto-detected; control-plane verification only"
 fi

@@ -14,7 +14,16 @@ git init -q
 git config user.name "stop-wave-epoch-test"
 git config user.email "stop-wave-epoch-test@example.invalid"
 printf '# stop wave epoch fixture\n' > README.md
-git add README.md
+cat > package.json <<'JSON'
+{
+  "name": "stop-wave-epoch-fixture",
+  "private": true,
+  "scripts": {
+    "verifier-fixture-check": "node -e \"process.stdout.write('fixture verifier ok')\""
+  }
+}
+JSON
+git add README.md package.json
 git commit -q -m "fixture baseline"
 HEAD_SHA="$(git rev-parse HEAD)"
 
@@ -32,7 +41,7 @@ python3 - <<'PY'
 from pathlib import Path
 path = Path('.agent/verify_completion_stop.sh')
 text = path.read_text()
-path.write_text(text.replace('npm run release-check >/dev/null', 'true'))
+path.write_text(text.replace('npm run release-check >/dev/null', 'npm run verifier-fixture-check >/dev/null'))
 PY
 
 git add .agent/README.md .agent/mission.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh
@@ -195,7 +204,29 @@ with Path('.agent/current/stop-check-history.jsonl').open('a', encoding='utf8') 
         fh.write(json.dumps(record) + '\n')
 PY
 
-bash .agent/verify_completion_stop.sh >/dev/null
+RECONCILE="$TMPDIR/reconcile"
+mkdir -p "$RECONCILE"
+ln -s "$REPO/.agent" "$RECONCILE/.agent"
+ln -s "$REPO/.git" "$RECONCILE/.git"
+
+REPO="$REPO" RECONCILE="$RECONCILE" python3 - <<'PY'
+import os, subprocess
+result = subprocess.run(
+    ['bash', os.path.join(os.environ['REPO'], 'scripts', 'verify-completion-stop.sh')],
+    cwd=os.environ['RECONCILE'],
+    text=True,
+    capture_output=True,
+    env={**os.environ, 'COMPLETION_REPO_VERIFY_COMMAND': 'npm run verifier-fixture-check >/dev/null'},
+)
+text = result.stdout + result.stderr
+assert result.returncode != 0, 'expected package-owned stop verifier to fail when repo verification inherits a cwd without package.json'
+assert 'package.json' in text, text
+PY
+
+(
+  cd "$RECONCILE"
+  bash .agent/verify_completion_stop.sh >/dev/null
+)
 
 ROOT_PATH="$ROOT" node - <<'NODE'
 const fs = require('node:fs');

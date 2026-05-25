@@ -25,6 +25,8 @@ assertIncludes('scripts/release-check.sh', 'npm run evaluator-calibration-test')
 assertIncludes('scripts/verify-completion-stop.sh', 'stop_aggregation_policy must be unanimous-current-head-v1');
 assertIncludes('scripts/verify-completion-stop.sh', 'Current HEAD has a can_stop=no judgment');
 assertIncludes('scripts/verify-completion-stop.sh', 'valid current-HEAD judgments');
+assertIncludes('scripts/verify-completion-stop.sh', 'COMPLETION_REPO_VERIFY_CWD');
+assertIncludes('scripts/verify-completion-stop.sh', 'cd "$REPO_VERIFY_CWD"');
 assertIncludes('scripts/verify-completion-stop.sh', 'bash -lc "$REPO_VERIFY_COMMAND"');
 assertIncludes('README.md', 'Evaluator calibration now also fails closed on semantically lenient but well-formed reports.');
 assertIncludes('README.md', '`npm run evaluator-calibration-test` drives the packaged transcription path through reviewer yes-with-follow-up, auditor open-contracts-with-`Next mandatory slice: none`, and stop-judge yes-with-open-contracts fixtures while still accepting truthful passing reports.');

@@ -159,6 +159,8 @@ assertIncludes('README.md', '`remaining_contract_ids_before` plus `release_block
 assertIncludes('README.md', 'Deterministic active-slice contract regression now lives in `bash scripts/active-slice-contract-test.sh`');
 assertIncludes('README.md', 'includes deterministic active-slice contract coverage plus observability coverage');
 assertIncludes('scripts/release-check.sh', 'bash ./scripts/active-slice-contract-test.sh');
+assertIncludes('scripts/verify-completion-stop.sh', 'COMPLETION_REPO_VERIFY_CWD');
+assertIncludes('scripts/verify-completion-stop.sh', 'cd "$REPO_VERIFY_CWD"');
 assertIncludes('scripts/verify-completion-stop.sh', 'bash -lc "$REPO_VERIFY_COMMAND"');
 assertIncludes('extensions/completion/state-store.ts', 'export function buildVerifyControlPlaneScript(');
 assertIncludes('extensions/completion/state-store.ts', 'path.resolve(__dirname, "..", "..", "scripts", "verify-completion-control-plane.js")');
@@ -170,6 +172,7 @@ assertIncludes('extensions/completion/index.ts', 'treat .agent/current/active-sl
 assertIncludes('.agent/verify_completion_control_plane.sh', 'verify-completion-control-plane.js');
 assertIncludes('.agent/verify_completion_stop.sh', 'verify-completion-stop.sh');
 assertIncludes('.agent/verify_completion_stop.sh', 'COMPLETION_REPO_VERIFY_COMMAND');
+assertIncludes('.agent/verify_completion_stop.sh', 'COMPLETION_REPO_VERIFY_CWD');
 assertIncludes('scripts/verify-completion-control-plane.js', 'const REQUIRED_TRACKED_CONTRACT_FILES = [');
 assertIncludes('scripts/verify-completion-control-plane.js', 'Required tracked completion contract file is missing from git index:');
 assertIncludes('scripts/verify-completion-control-plane.js', "const planMirrorFields = ['locked_notes', 'must_fix_findings', 'implementation_surfaces', 'verification_commands', 'basis_commit', 'remaining_contract_ids_before', 'release_blocker_count_before', 'high_value_gap_count_before'];");
