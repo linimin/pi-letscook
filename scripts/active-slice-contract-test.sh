@@ -160,6 +160,8 @@ assertIncludes('README.md', 'Deterministic active-slice contract regression now 
 assertIncludes('README.md', 'includes deterministic active-slice contract coverage plus observability coverage');
 assertIncludes('scripts/release-check.sh', 'bash ./scripts/active-slice-contract-test.sh');
 assertIncludes('scripts/verify-completion-stop.sh', 'COMPLETION_REPO_VERIFY_CWD');
+assertIncludes('scripts/verify-completion-stop.sh', 'PI_COMPLETION_RUNNING_RELEASE_CHECK');
+assertIncludes('scripts/verify-completion-stop.sh', 'skipping forwarded repo verifier to avoid recursion');
 assertIncludes('scripts/verify-completion-stop.sh', 'cd "$REPO_VERIFY_CWD"');
 assertIncludes('scripts/verify-completion-stop.sh', 'bash -lc "$REPO_VERIFY_COMMAND"');
 assertIncludes('extensions/completion/state-store.ts', 'export function buildVerifyControlPlaneScript(');

@@ -117,6 +117,10 @@ NODE
 REPO_VERIFY_COMMAND="${COMPLETION_REPO_VERIFY_COMMAND:-}"
 REPO_VERIFY_CWD="${COMPLETION_REPO_VERIFY_CWD:-}"
 if [[ -n "$REPO_VERIFY_COMMAND" ]]; then
+  if [[ "${PI_COMPLETION_RUNNING_RELEASE_CHECK:-}" == "1" ]]; then
+    echo "[completion] repo-level verification already active; skipping forwarded repo verifier to avoid recursion"
+    exit 0
+  fi
   if [[ -z "$REPO_VERIFY_CWD" ]]; then
     REPO_VERIFY_CWD="$(pwd -P)"
   fi

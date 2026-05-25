@@ -19,6 +19,7 @@ cat > package.json <<'JSON'
   "name": "stop-wave-epoch-fixture",
   "private": true,
   "scripts": {
+    "release-check": "bash ./scripts/release-check.sh",
     "verifier-fixture-check": "node -e \"process.stdout.write('fixture verifier ok')\""
   }
 }
@@ -36,13 +37,26 @@ cp "$ROOT/.agent/verify_completion_control_plane.sh" .agent/verify_completion_co
 cp "$ROOT/.agent/verify_completion_stop.sh" .agent/verify_completion_stop.sh
 cp "$ROOT/scripts/verify-completion-control-plane.js" scripts/verify-completion-control-plane.js
 cp "$ROOT/scripts/verify-completion-stop.sh" scripts/verify-completion-stop.sh
-chmod +x .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh scripts/verify-completion-stop.sh
-python3 - <<'PY'
-from pathlib import Path
-path = Path('.agent/verify_completion_stop.sh')
-text = path.read_text()
-path.write_text(text.replace('npm run release-check >/dev/null', 'npm run verifier-fixture-check >/dev/null'))
-PY
+cat > scripts/release-check.sh <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+cd "$ROOT"
+export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
+COUNTER_FILE="${PI_STOP_WAVE_RELEASE_CHECK_COUNT_FILE:?}"
+STATUS_FILE="${PI_STOP_WAVE_RELEASE_CHECK_STATUS_FILE:?}"
+count="$(cat "$COUNTER_FILE" 2>/dev/null || printf '0')"
+count="$((count + 1))"
+printf '%s\n' "$count" > "$COUNTER_FILE"
+if [[ "$count" -gt 1 ]]; then
+  echo "recursive release-check invocation detected" >&2
+  exit 97
+fi
+bash .agent/verify_completion_stop.sh >/dev/null
+printf 'release-check-ok\n' > "$STATUS_FILE"
+SH
+chmod +x .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh scripts/verify-completion-stop.sh scripts/release-check.sh
 
 git add .agent/README.md .agent/mission.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh
 git commit -q -m "scaffold tracked completion contract files"
@@ -211,22 +225,64 @@ ln -s "$REPO/.git" "$RECONCILE/.git"
 
 REPO="$REPO" RECONCILE="$RECONCILE" python3 - <<'PY'
 import os, subprocess
+env = {**os.environ, 'COMPLETION_REPO_VERIFY_COMMAND': 'npm run verifier-fixture-check >/dev/null'}
+env.pop('PI_COMPLETION_RUNNING_RELEASE_CHECK', None)
+env.pop('COMPLETION_REPO_VERIFY_CWD', None)
 result = subprocess.run(
     ['bash', os.path.join(os.environ['REPO'], 'scripts', 'verify-completion-stop.sh')],
     cwd=os.environ['RECONCILE'],
     text=True,
     capture_output=True,
-    env={**os.environ, 'COMPLETION_REPO_VERIFY_COMMAND': 'npm run verifier-fixture-check >/dev/null'},
+    env=env,
 )
 text = result.stdout + result.stderr
 assert result.returncode != 0, 'expected package-owned stop verifier to fail when repo verification inherits a cwd without package.json'
 assert 'package.json' in text, text
 PY
 
-(
-  cd "$RECONCILE"
-  bash .agent/verify_completion_stop.sh >/dev/null
+RELEASE_CHECK_COUNT_FILE="$TMPDIR/release-check-count.txt"
+RELEASE_CHECK_STATUS_FILE="$TMPDIR/release-check-status.txt"
+REPO="$REPO" RECONCILE="$RECONCILE" RELEASE_CHECK_COUNT_FILE="$RELEASE_CHECK_COUNT_FILE" RELEASE_CHECK_STATUS_FILE="$RELEASE_CHECK_STATUS_FILE" python3 - <<'PY'
+import os
+import subprocess
+import time
+
+reconcile = os.environ['RECONCILE']
+repo = os.environ['REPO']
+counter_file = os.environ['RELEASE_CHECK_COUNT_FILE']
+status_file = os.environ['RELEASE_CHECK_STATUS_FILE']
+env = {
+    **os.environ,
+    'PI_STOP_WAVE_RELEASE_CHECK_COUNT_FILE': counter_file,
+    'PI_STOP_WAVE_RELEASE_CHECK_STATUS_FILE': status_file,
+}
+env.pop('PI_COMPLETION_RUNNING_RELEASE_CHECK', None)
+env.pop('COMPLETION_REPO_VERIFY_COMMAND', None)
+env.pop('COMPLETION_REPO_VERIFY_CWD', None)
+result = subprocess.run(
+    ['bash', '.agent/verify_completion_stop.sh'],
+    cwd=reconcile,
+    text=True,
+    capture_output=True,
+    timeout=20,
+    env=env,
 )
+text = result.stdout + result.stderr
+assert result.returncode == 0, text
+assert os.path.exists(counter_file), 'expected release-check counter file to be created'
+assert open(counter_file, 'r', encoding='utf8').read().strip() == '1', text
+assert os.path.exists(status_file), 'expected release-check status file to be created'
+assert open(status_file, 'r', encoding='utf8').read().strip() == 'release-check-ok', text
+assert '[completion] running repo-level verification from ' in text, text
+
+time.sleep(0.2)
+process_table = subprocess.check_output(['ps', '-axo', 'pid=,command='], text=True)
+leaks = [
+    line for line in process_table.splitlines()
+    if repo in line and ('verify-completion-stop.sh' in line or 'release-check.sh' in line)
+]
+assert not leaks, 'expected no leaked stop-verifier or release-check processes after wrapper completion: ' + ' | '.join(leaks)
+PY
 
 ROOT_PATH="$ROOT" node - <<'NODE'
 const fs = require('node:fs');

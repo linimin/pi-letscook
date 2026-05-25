@@ -26,6 +26,8 @@ assertIncludes('scripts/verify-completion-stop.sh', 'stop_aggregation_policy mus
 assertIncludes('scripts/verify-completion-stop.sh', 'Current HEAD has a can_stop=no judgment');
 assertIncludes('scripts/verify-completion-stop.sh', 'valid current-HEAD judgments');
 assertIncludes('scripts/verify-completion-stop.sh', 'COMPLETION_REPO_VERIFY_CWD');
+assertIncludes('scripts/verify-completion-stop.sh', 'PI_COMPLETION_RUNNING_RELEASE_CHECK');
+assertIncludes('scripts/verify-completion-stop.sh', 'skipping forwarded repo verifier to avoid recursion');
 assertIncludes('scripts/verify-completion-stop.sh', 'cd "$REPO_VERIFY_CWD"');
 assertIncludes('scripts/verify-completion-stop.sh', 'bash -lc "$REPO_VERIFY_COMMAND"');
 assertIncludes('README.md', 'Evaluator calibration now also fails closed on semantically lenient but well-formed reports.');
