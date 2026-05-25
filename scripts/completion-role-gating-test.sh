@@ -21,24 +21,30 @@ const assertNotIncludes = (file, snippet) => {
   }
 };
 
+assertIncludes('extensions/completion/index.ts', 'function hasStickyWorkflowContinuation(');
 assertIncludes('extensions/completion/index.ts', 'function isLikelyWorkflowContinuationTurn(');
 assertIncludes('extensions/completion/index.ts', 'function isCompletionWorkflowSessionTurn(');
+assertIncludes('extensions/completion/index.ts', 'function isCompletionWorkflowDispatchContext(');
 assertIncludes('extensions/completion/index.ts', 'return isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx) || isLikelyWorkflowContinuationTurn(snapshot, ctx);');
-assertIncludes('extensions/completion/index.ts', 'const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowSessionTurn(snapshot, ctx);');
+assertIncludes('extensions/completion/index.ts', 'return isCompletionWorkflowSessionTurn(snapshot, ctx) || hasStickyWorkflowContinuation(snapshot);');
+assertIncludes('extensions/completion/index.ts', 'const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowDispatchContext(snapshot, ctx);');
 assertIncludes('extensions/completion/policy-guards.ts', 'return "completion_role may only be used from an active /cook workflow session.";');
-assertIncludes('CHANGELOG.md', 'stopped pushing users to rerun `/cook` for routine active-workflow continuation or exact await-user-input replies when canonical workflow state is already active');
+assertIncludes('CHANGELOG.md', 'stopped pushing users to rerun `/cook` for routine active-workflow continuation, exact await-user-input replies, or canonical-continue self-heal when canonical workflow state is already active');
 
 assertNotIncludes('extensions/completion/index.ts', 'return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);');
 
 const indexText = read('extensions/completion/index.ts');
+const stickyContinuationIndex = indexText.indexOf('function hasStickyWorkflowContinuation(');
 const continuationIntentIndex = indexText.indexOf('function isLikelyWorkflowContinuationTurn(');
-const stickyReturnIndex = indexText.indexOf('return isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx) || isLikelyWorkflowContinuationTurn(snapshot, ctx);');
-const toolGateIndex = indexText.indexOf('const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowSessionTurn(snapshot, ctx);');
-if (continuationIntentIndex === -1 || stickyReturnIndex === -1 || toolGateIndex === -1) {
-  throw new Error('extensions/completion/index.ts must gate workflow continuation through explicit workflow turns or likely continuation turns before dispatching completion_role.');
+const sessionTurnIndex = indexText.indexOf('function isCompletionWorkflowSessionTurn(');
+const dispatchContextIndex = indexText.indexOf('function isCompletionWorkflowDispatchContext(');
+const stickyReturnIndex = indexText.indexOf('return isCompletionWorkflowSessionTurn(snapshot, ctx) || hasStickyWorkflowContinuation(snapshot);');
+const toolGateIndex = indexText.indexOf('const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowDispatchContext(snapshot, ctx);');
+if (stickyContinuationIndex === -1 || continuationIntentIndex === -1 || sessionTurnIndex === -1 || dispatchContextIndex === -1 || stickyReturnIndex === -1 || toolGateIndex === -1) {
+  throw new Error('extensions/completion/index.ts must self-heal active continuation sessions before dispatching completion_role.');
 }
-if (!(continuationIntentIndex < stickyReturnIndex && stickyReturnIndex < toolGateIndex)) {
-  throw new Error('extensions/completion/index.ts should define continuation-turn detection before reusing it for completion_role dispatch.');
+if (!(stickyContinuationIndex < continuationIntentIndex && continuationIntentIndex < sessionTurnIndex && sessionTurnIndex < dispatchContextIndex && dispatchContextIndex < stickyReturnIndex && stickyReturnIndex < toolGateIndex)) {
+  throw new Error('extensions/completion/index.ts should define sticky continuation detection before reusing it for completion_role dispatch.');
 }
 NODE
 

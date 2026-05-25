@@ -51,7 +51,8 @@
 ### Fixed
 
 - made active `/cook` workflows sticky across subsequent turns so completion-role dispatch and workflow context continue to self-heal from canonical active state instead of depending on prompt-shaped driver turns
-- stopped pushing users to rerun `/cook` for routine active-workflow continuation or exact await-user-input replies when canonical workflow state is already active
+- extended sticky active-workflow self-heal to canonical `continuation_policy=continue` slices with a next mandatory role so implementer/reviewer/auditor dispatch no longer depends on the latest user turn resembling `/cook`
+- stopped pushing users to rerun `/cook` for routine active-workflow continuation, exact await-user-input replies, or canonical-continue self-heal when canonical workflow state is already active
 - added regression coverage so release-check fails if sticky active-workflow dispatch falls back to prompt-only gating again
 
 ## 0.1.72
