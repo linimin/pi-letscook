@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+bash "$PKG_ROOT/scripts/ensure-local-completion-forwarders.sh"
 pi() {
   env -u PI_COMPLETION_ROLE command pi --no-extensions "$@"
 }
@@ -129,24 +130,24 @@ const assertSectionIncludes = (file, heading, snippet) => {
 assertIncludes('README.md', '.agent/current/verification-evidence.json');
 assertIncludes('README.md', 'Fresh scaffolds create an idle placeholder');
 assertIncludes('README.md', 'bash scripts/canonical-evidence-artifact-test.sh');
-assertIncludes('.agent/README.md', '.agent/current/verification-evidence.json');
-assertIncludes('.agent/README.md', 'durable canonical record of deterministic verification');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/config/workflow.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/config/profile.json`');
+assertIncludes('.cook/README.md', '.agent/current/verification-evidence.json');
+assertIncludes('.cook/README.md', 'durable canonical record of deterministic verification');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.cook/workflow.json`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.cook/profile.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/current/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/config/workflow.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/config/profile.json`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.cook/workflow.json`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.cook/profile.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');
-assertIncludes('skills/completion-protocol/SKILL.md', 'tracked `.agent/config/profile.json`');
+assertIncludes('skills/completion-protocol/SKILL.md', 'tracked `.cook/profile.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work.');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Tracked Repo-Contract Files', '- `.agent/config/workflow.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Tracked Repo-Contract Files', '- `.agent/config/profile.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Tracked Repo-Contract Files', '- `.cook/workflow.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Tracked Repo-Contract Files', '- `.cook/profile.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Ignored Canonical Execution State', '- `.agent/current/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.agent/config/workflow.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.agent/config/profile.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.cook/workflow.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.cook/profile.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');
-assertIncludes('skills/completion-protocol/references/completion.md', 'tracked `.agent/config/profile.json` plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`');
+assertIncludes('skills/completion-protocol/references/completion.md', 'tracked `.cook/profile.json` plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})');
@@ -163,19 +164,20 @@ assertIncludes('scripts/verify-completion-control-plane.js', 'subject_type must 
 assertIncludes('scripts/verify-completion-stop.sh', 'verify-completion-control-plane.js');
 NODE
 
-bash .agent/verify_completion_control_plane.sh >/dev/null
+if [[ -f .agent/current/verification-evidence.json ]]; then
+  bash .agent/verify_completion_control_plane.sh >/dev/null
 
-CURRENT_EVIDENCE_BACKUP="$TMPDIR/current-verification-evidence.json"
-cp .agent/current/verification-evidence.json "$CURRENT_EVIDENCE_BACKUP"
+  CURRENT_EVIDENCE_BACKUP="$TMPDIR/current-verification-evidence.json"
+  cp .agent/current/verification-evidence.json "$CURRENT_EVIDENCE_BACKUP"
 
-CURRENT_EVIDENCE_SUBJECT_TYPE="$(python3 - <<'PY'
+  CURRENT_EVIDENCE_SUBJECT_TYPE="$(python3 - <<'PY'
 import json
 from pathlib import Path
 print(json.loads(Path('.agent/current/verification-evidence.json').read_text()).get('subject_type', ''))
 PY
 )"
 
-python3 - <<'PY'
+  python3 - <<'PY'
 import json
 from pathlib import Path
 path = Path('.agent/current/verification-evidence.json')
@@ -184,20 +186,21 @@ evidence['head_sha'] = 'stale-head'
 path.write_text(json.dumps(evidence, indent=2) + '\n')
 PY
 
-if [[ "$CURRENT_EVIDENCE_SUBJECT_TYPE" == "selected_slice" ]]; then
-  if bash ./scripts/release-check.sh >/dev/null 2>&1; then
-    echo "expected release-check to fail when current repo verification-evidence.json is stale" >&2
-    exit 1
+  if [[ "$CURRENT_EVIDENCE_SUBJECT_TYPE" == "selected_slice" ]]; then
+    if bash ./scripts/release-check.sh >/dev/null 2>&1; then
+      echo "expected release-check to fail when current repo verification-evidence.json is stale" >&2
+      exit 1
+    fi
+
+    if bash .agent/verify_completion_stop.sh >/dev/null 2>&1; then
+      echo "expected verify_completion_stop.sh to fail when current repo verification-evidence.json is stale" >&2
+      exit 1
+    fi
   fi
 
-  if bash .agent/verify_completion_stop.sh >/dev/null 2>&1; then
-    echo "expected verify_completion_stop.sh to fail when current repo verification-evidence.json is stale" >&2
-    exit 1
-  fi
+  cp "$CURRENT_EVIDENCE_BACKUP" .agent/current/verification-evidence.json
+  bash .agent/verify_completion_control_plane.sh >/dev/null
 fi
-
-cp "$CURRENT_EVIDENCE_BACKUP" .agent/current/verification-evidence.json
-bash .agent/verify_completion_control_plane.sh >/dev/null
 
 ROOT="$TMPDIR/repo"
 SYSTEM_REMINDER="$TMPDIR/system-reminder.txt"
@@ -262,7 +265,7 @@ PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-canonical-evidence-bootstrap.out" 2>"$TMPDIR/pi-canonical-evidence-bootstrap.err"
 
-for file in .agent/profile.json .agent/current/state.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
+for file in .cook/profile.json .agent/current/state.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
   [[ -f "$file" ]] || { echo "missing canonical bootstrap file: $file" >&2; exit 1; }
 done
 

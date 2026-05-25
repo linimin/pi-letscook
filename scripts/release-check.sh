@@ -3,39 +3,34 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+bash ./scripts/ensure-local-completion-forwarders.sh
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
-echo "[release-check] running control-plane validation, tracked .agent contract coverage, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
+echo "[release-check] running control-plane validation, tracked .cook contract coverage, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
 npm run verify-completion-control-plane
-git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh scripts/verify-completion-control-plane.js scripts/verify-completion-stop.sh >/dev/null
+git ls-files --error-unmatch .cook/README.md .cook/workflow.json .cook/profile.json scripts/verify-completion-control-plane.js scripts/verify-completion-stop.sh >/dev/null
 
 python3 - <<'PY'
 from pathlib import Path
 
 checks = {
     'README.md': [
-        'The canonical storage contract is tracked `.agent/config/**` plus ignored `.agent/current/**`.',
+        'The canonical storage contract is tracked `.cook/**` plus ignored `.agent/**`.',
         'thin `.agent/verify_completion_*.sh` forwarders',
         'npm run verify-completion-control-plane',
         'npm run verify-completion-stop',
     ],
-    '.agent/README.md': [
-        'thin forwarding stub to the package-owned stop verifier',
-        'thin forwarding stub to the package-owned control-plane verifier',
+    '.cook/README.md': [
+        'Tracked repo-level workflow contract',
         'Package-owned verification logic ships in `scripts/verify-completion-control-plane.js` and `scripts/verify-completion-stop.sh`.',
+        'Runtime-generated `.agent/verify_completion_*.sh` forwarders are local convenience entrypoints only and are intentionally not tracked.',
     ],
     '.gitignore': [
-        '# completion protocol canonical state and thin verifier forwarders',
-        '!.agent/verify_completion_stop.sh',
-        '!.agent/verify_completion_control_plane.sh',
-        '.agent/current/',
-    ],
-    '.agent/verify_completion_control_plane.sh': [
-        'verify-completion-control-plane.js',
-    ],
-    '.agent/verify_completion_stop.sh': [
-        'COMPLETION_REPO_VERIFY_COMMAND',
-        'verify-completion-stop.sh',
+        '# completion workflow config and runtime state',
+        '.agent/',
+        '!.cook/README.md',
+        '!.cook/workflow.json',
+        '!.cook/profile.json',
     ],
     'scripts/verify-completion-control-plane.js': [
         'const REQUIRED_TRACKED_CONTRACT_FILES = [',
@@ -139,17 +134,16 @@ npm run evaluator-calibration-test
 npm run report-repair-test
 npm run rubric-contract-test
 
-echo "[release-check] verifying packaged .agent contract files in npm pack output"
+echo "[release-check] verifying packaged .cook contract files in npm pack output"
 PACK_JSON="$(npm pack --dry-run --json)"
 python3 - "$PACK_JSON" <<'PY'
 import json
 import sys
 
 required = {
-    '.agent/README.md',
-    '.agent/config/workflow.json',
-    '.agent/config/profile.json',
-    '.agent/profile.json',
+    '.cook/README.md',
+    '.cook/workflow.json',
+    '.cook/profile.json',
     'scripts/verify-completion-control-plane.js',
     'scripts/verify-completion-stop.sh',
 }

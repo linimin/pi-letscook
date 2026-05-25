@@ -18,7 +18,7 @@ function resolveToolPath(cwd: string, rawPath: string): string {
 export function isAllowedControlPlanePath(root: string, rawPath: string): boolean {
 	const resolved = resolveToolPath(root, rawPath);
 	if (path.basename(resolved) === ".gitignore") return true;
-	return isPathInside(path.join(root, ".agent"), resolved);
+	return isPathInside(path.join(root, ".agent"), resolved) || isPathInside(path.join(root, ".cook"), resolved);
 }
 
 function startsWithAny(value: string, prefixes: string[]): boolean {
@@ -84,7 +84,7 @@ export function toolCallBlockReason(args: {
 		}
 
 		if ((role === "completion-bootstrapper" || role === "completion-regrounder") && !isAllowedControlPlanePath(root, rawPath)) {
-			return `${role} may only edit .agent/** or .gitignore.`;
+			return `${role} may only edit .agent/**, .cook/**, or .gitignore.`;
 		}
 
 		if (!role && completionActive && !isAllowedControlPlanePath(root, rawPath)) {

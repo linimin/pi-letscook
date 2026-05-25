@@ -4,14 +4,9 @@ npm-debug.log*
 .DS_Store
 .env
 
-# completion protocol canonical state and thin verifier forwarders
-.agent/*
-!.agent/README.md
-!.agent/config/
-.agent/config/*
-!.agent/config/workflow.json
-!.agent/config/profile.json
-!.agent/profile.json
-!.agent/verify_completion_stop.sh
-!.agent/verify_completion_control_plane.sh
-.agent/current/
+# completion workflow config and runtime state
+.agent/
+.cook/*
+!.cook/README.md
+!.cook/workflow.json
+!.cook/profile.json

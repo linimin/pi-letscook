@@ -4,10 +4,10 @@
 
 ## Tracked Repo-Contract Files
 
-- `.agent/README.md`
-- `.agent/config/workflow.json`
-- `.agent/config/profile.json`
-- `.agent/profile.json` *(temporary compatibility shim for the current workflow round)*
+- `.cook/README.md`
+- `.cook/workflow.json`
+- `.cook/profile.json`
+- `.cook/profile.json` 
 - `.agent/verify_completion_stop.sh`
 - `.agent/verify_completion_control_plane.sh`
 
@@ -25,10 +25,10 @@
 
 Read these when making completion decisions:
 
-- `.agent/README.md`
-- `.agent/config/workflow.json`
-- `.agent/config/profile.json`
-- `.agent/profile.json`
+- `.cook/README.md`
+- `.cook/workflow.json`
+- `.cook/profile.json`
+- `.cook/profile.json`
 - `.agent/current/state.json`
 - `.agent/current/plan.json`
 - `.agent/current/active-slice.json`
@@ -280,7 +280,7 @@ Policy meaning:
 
 `completion-reviewer`, `completion-auditor`, and `completion-stop-judge` must emit rubric-backed evaluations using the same shared dimension names and verdict semantics.
 
-The shared rubric foundation now sits alongside canonical `task_type` and `evaluation_profile` signaling in tracked `.agent/config/profile.json` plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json` (`.agent/profile.json` remains only as a temporary compatibility shim for the current workflow round). That signaling is routing metadata only; later slices may still add stricter profile-aware rubric-output enforcement.
+The shared rubric foundation now sits alongside canonical `task_type` and `evaluation_profile` signaling in tracked `.cook/profile.json` plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`. That signaling is routing metadata only; later slices may still add stricter profile-aware rubric-output enforcement.
 
 Required rubric section:
 

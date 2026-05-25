@@ -143,12 +143,12 @@ PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-refocus-bootstrap.out" 2>"$TMPDIR/pi-completion-refocus-bootstrap.err" &
 PI_PID=$!
 for _ in $(seq 1 60); do
-  if [[ -f .agent/config/workflow.json && -f .agent/config/profile.json && -f .agent/current/state.json && -f .agent/current/plan.json && -f .agent/current/active-slice.json ]]; then
+  if [[ -f .cook/workflow.json && -f .cook/profile.json && -f .agent/current/state.json && -f .agent/current/plan.json && -f .agent/current/active-slice.json ]]; then
     break
   fi
   sleep 1
 done
-if [[ ! -f .agent/config/workflow.json || ! -f .agent/config/profile.json || ! -f .agent/current/state.json || ! -f .agent/current/plan.json || ! -f .agent/current/active-slice.json ]]; then
+if [[ ! -f .cook/workflow.json || ! -f .cook/profile.json || ! -f .agent/current/state.json || ! -f .agent/current/plan.json || ! -f .agent/current/active-slice.json ]]; then
   echo "completion bootstrap did not materialize canonical files in time" >&2
   cat "$TMPDIR/pi-completion-refocus-bootstrap.err" >&2 || true
   kill "$PI_PID" >/dev/null 2>&1 || true
@@ -214,8 +214,8 @@ import sys
 from pathlib import Path
 
 tracked = [
-    Path('.agent/config/workflow.json'),
-    Path('.agent/config/profile.json'),
+    Path('.cook/workflow.json'),
+    Path('.cook/profile.json'),
     Path('.agent/current/state.json'),
     Path('.agent/current/plan.json'),
     Path('.agent/current/active-slice.json'),
@@ -246,8 +246,8 @@ chooser = json.loads(Path(sys.argv[5]).read_text())
 initial_mission = sys.argv[6]
 before = json.loads(Path(sys.argv[7]).read_text())
 tracked = [
-    Path('.agent/config/workflow.json'),
-    Path('.agent/config/profile.json'),
+    Path('.cook/workflow.json'),
+    Path('.cook/profile.json'),
     Path('.agent/current/state.json'),
     Path('.agent/current/plan.json'),
     Path('.agent/current/active-slice.json'),
@@ -332,14 +332,14 @@ new_anchor = 'Remove completion status line, keep widget.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 routing = json.loads(Path(sys.argv[1]).read_text())
-workflow = json.loads(Path('.agent/config/workflow.json').read_text())
-profile = json.loads(Path('.agent/config/profile.json').read_text())
+workflow = json.loads(Path('.cook/workflow.json').read_text())
+profile = json.loads(Path('.cook/profile.json').read_text())
 state = json.loads(Path('.agent/current/state.json').read_text())
 plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert workflow['protocol_id'] == 'completion', 'workflow.json protocol_id mismatch after refocus'
-assert workflow['config_dir'] == '.agent/config', 'workflow.json config_dir mismatch after refocus'
+assert workflow['config_dir'] == '.cook', 'workflow.json config_dir mismatch after refocus'
 assert workflow['runtime_dir'] == '.agent/current', 'workflow.json runtime_dir mismatch after refocus'
 assert workflow['cleanup_on'] == ['replacement', 'cancel', 'done'], 'workflow.json cleanup_on mismatch after refocus'
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after refocus'
@@ -535,7 +535,7 @@ expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 proposal = json.loads(Path(sys.argv[1]).read_text())
 routing = json.loads(Path(sys.argv[2]).read_text())
-profile = json.loads(Path('.agent/config/profile.json').read_text())
+profile = json.loads(Path('.cook/profile.json').read_text())
 state = json.loads(Path('.agent/current/state.json').read_text())
 plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())

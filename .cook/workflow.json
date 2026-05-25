@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "protocol_id": "completion",
-  "layout_version": 2,
-  "config_dir": ".agent/config",
+  "layout_version": 3,
+  "config_dir": ".cook",
   "runtime_dir": ".agent/current",
   "runtime_artifacts": [
     "state.json",

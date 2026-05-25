@@ -22,7 +22,7 @@ const assertNotIncludes = (file, snippet) => {
 };
 
 assertIncludes('extensions/completion/state-store.ts', 'export async function scaffoldCompletionFiles(');
-assertIncludes('extensions/completion/state-store.ts', 'export function buildAgentReadme(');
+assertIncludes('extensions/completion/state-store.ts', 'export function buildCookReadme(');
 assertIncludes('extensions/completion/state-store.ts', 'export function buildVerifyStopScript(');
 assertIncludes('extensions/completion/state-store.ts', 'export function buildVerifyControlPlaneScript(');
 assertIncludes('extensions/completion/state-store.ts', 'export function currentTaskType(');

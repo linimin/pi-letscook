@@ -93,16 +93,16 @@ pi -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-status-none.out" 2>"$TMPDIR
 assert_status_json "$NO_SNAPSHOT_JSON" none
 
 FIXTURE_ROOT="$TMPDIR/fixture"
-mkdir -p "$FIXTURE_ROOT/.agent/config" "$FIXTURE_ROOT/.agent/current"
+mkdir -p "$FIXTURE_ROOT/.cook" "$FIXTURE_ROOT/.agent/current"
 cd "$FIXTURE_ROOT"
 git init -q
 
-cat > .agent/config/workflow.json <<'JSON'
+cat > .cook/workflow.json <<'JSON'
 {
   "schema_version": 1,
   "protocol_id": "completion",
   "layout_version": 2,
-  "config_dir": ".agent/config",
+  "config_dir": ".cook",
   "runtime_dir": ".agent/current",
   "runtime_artifacts": [
     "state.json",
@@ -119,7 +119,7 @@ cat > .agent/config/workflow.json <<'JSON'
 }
 JSON
 
-cat > .agent/config/profile.json <<'JSON'
+cat > .cook/profile.json <<'JSON'
 {
   "schema_version": 1,
   "protocol_id": "completion",

@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+bash "$PKG_ROOT/scripts/ensure-local-completion-forwarders.sh"
 pi() {
   env -u PI_COMPLETION_ROLE command pi --no-extensions "$@"
 }
@@ -137,7 +138,7 @@ capsule = {
         "Do not broaden the smoke fixture beyond the packaged startup surfaces."
     ],
     "implementation_surfaces": [
-        ".agent/README.md",
+        ".cook/README.md",
         "scripts/smoke-test.sh"
     ],
     "verification_commands": [
@@ -178,11 +179,11 @@ assert proposal['mission'] == 'Exercise smoke-test bootstrap from inline /cook p
 assert 'Initialized completion control plane in' in output, 'startup /cook inline prompt should initialize the control plane'
 PY
 
-for file in .agent/config/workflow.json .agent/config/profile.json .agent/current/state.json .agent/current/startup-brief.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
+for file in .cook/workflow.json .cook/profile.json .agent/current/state.json .agent/current/startup-brief.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
   [[ -f "$file" ]] || { echo "missing canonical bootstrap file: $file" >&2; exit 1; }
 done
 
-git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null
+git ls-files --error-unmatch .cook/README.md .cook/workflow.json .cook/profile.json >/dev/null
 python3 - <<'PY'
 from pathlib import Path
 control = Path('.agent/verify_completion_control_plane.sh').read_text()
@@ -202,9 +203,9 @@ from pathlib import Path
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 
-workflow = json.loads(Path('.agent/config/workflow.json').read_text())
-profile = json.loads(Path('.agent/config/profile.json').read_text())
-profile_shim = json.loads(Path('.agent/profile.json').read_text())
+workflow = json.loads(Path('.cook/workflow.json').read_text())
+profile = json.loads(Path('.cook/profile.json').read_text())
+
 state = json.loads(Path('.agent/current/state.json').read_text())
 plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())
@@ -214,7 +215,6 @@ kickoff = Path(sys.argv[1]).read_text()
 
 assert workflow['runtime_dir'] == '.agent/current', 'workflow.json should direct runtime state to .agent/current after bootstrap'
 assert workflow['archive_policy'] == 'disabled', 'workflow.json should keep archive disabled after bootstrap'
-assert profile_shim == profile, 'root profile shim should mirror .agent/config/profile.json after bootstrap'
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after bootstrap'
 assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after bootstrap'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after bootstrap'
@@ -376,7 +376,7 @@ capsule = {
         'Do not broaden the smoke fixture beyond the packaged startup surfaces.'
     ],
     'implementation_surfaces': [
-        '.agent/README.md',
+        '.cook/README.md',
         'scripts/smoke-test.sh'
     ],
     'verification_commands': [
@@ -448,7 +448,7 @@ fi
 python3 - <<'PY'
 import json
 from pathlib import Path
-profile = json.loads(Path('.agent/config/profile.json').read_text())
+profile = json.loads(Path('.cook/profile.json').read_text())
 state_path = Path('.agent/current/state.json')
 state = json.loads(state_path.read_text())
 state['task_type'] = profile['task_type']
@@ -472,7 +472,7 @@ fi
 python3 - <<'PY'
 import json
 from pathlib import Path
-profile = json.loads(Path('.agent/config/profile.json').read_text())
+profile = json.loads(Path('.cook/profile.json').read_text())
 active_path = Path('.agent/current/active-slice.json')
 active = json.loads(active_path.read_text())
 active['evaluation_profile'] = profile['evaluation_profile']

@@ -326,10 +326,21 @@ function shouldCleanupClosedWorkflowRuntime(snapshot: CompletionStateSnapshot | 
 	return workflowEntryStatus === "cancelled" || workflowEntryStatus === "canceled" || workflowEntryStatus === "done";
 }
 
+function closedWorkflowCleanupMarkerPath(cwd: string): string {
+	const root = findCompletionRoot(cwd) ?? findRepoRoot(cwd) ?? cwd;
+	return path.join(root, ".agent", "closed-workflow-cleanup.json");
+}
+
 async function cleanupClosedWorkflowRuntimeIfNeeded(cwd: string): Promise<boolean> {
 	const snapshot = await loadCompletionSnapshot(cwd);
 	if (!shouldCleanupClosedWorkflowRuntime(snapshot)) return false;
 	await removeCompletionRuntimeState(snapshot.files);
+	await fsp.mkdir(path.join(snapshot.files.root, ".agent"), { recursive: true });
+	await fsp.writeFile(
+		closedWorkflowCleanupMarkerPath(snapshot.files.root),
+		`${JSON.stringify({ cleaned_at: new Date().toISOString(), mission_anchor: asString(snapshot.state?.mission_anchor) ?? null }, null, 2)}\n`,
+		"utf8",
+	);
 	return true;
 }
 
@@ -998,7 +1009,7 @@ function completionKickoff(
 				? `Updated canonical mission anchor:\n${missionAnchor}\n\nWorkflow intent:\n- The user explicitly refocused the workflow before this kickoff.\n- Re-read canonical .agent/** state and continue from the refocused mission.\n\n`
 				: "";
 	const sessionBlock = workflowSessionId ? `Workflow session:\n- workflow_session_id: ${workflowSessionId}\n\n` : "";
-	return `COMPLETION WORKFLOW DRIVER\nStart or continue the completion workflow for this repo.\n\nBefore acting, read:\n- ${SKILL_PATH}\n- ${REFERENCE_PATH}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}User goal:\n${goal}\n\n${intentBlock}Driver instructions:\n- Canonical truth is in tracked .agent/config/** plus ignored .agent/current/**. Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting when they exist.\n- If tracked completion contract files are missing or onboarding is required, invoke completion_role with role completion-bootstrapper.\n- Otherwise follow the mandatory dispatch rules from completion-protocol.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Use completion_role for all completion-* role work. Do not directly implement tracked product changes yourself.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
+	return `COMPLETION WORKFLOW DRIVER\nStart or continue the completion workflow for this repo.\n\nBefore acting, read:\n- ${SKILL_PATH}\n- ${REFERENCE_PATH}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}User goal:\n${goal}\n\n${intentBlock}Driver instructions:\n- Canonical truth is in tracked .cook/** plus ignored .agent/**. Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting when they exist.\n- If tracked completion contract files are missing or onboarding is required, invoke completion_role with role completion-bootstrapper.\n- Otherwise follow the mandatory dispatch rules from completion-protocol.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Use completion_role for all completion-* role work. Do not directly implement tracked product changes yourself.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
 }
 
 function completionResumePrompt(taskType: string, evaluationProfile: string, workflowSessionId?: string): string {
@@ -1081,8 +1092,9 @@ export default function completionExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
-		await cleanupClosedWorkflowRuntimeIfNeeded(getCtxCwd(ctx));
-		const loaded = await loadCompletionDataForReminder(getCtxCwd(ctx));
+		const agentCwd = getCtxCwd(ctx);
+		await cleanupClosedWorkflowRuntimeIfNeeded(agentCwd);
+		const loaded = await loadCompletionDataForReminder(agentCwd);
 		const systemPrompt = getSystemPromptSafe(ctx);
 		if (!systemPrompt) return;
 		if (loaded && shouldInjectCompletionWorkflowContext(loaded.snapshot, ctx)) {
@@ -1108,6 +1120,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 			};
 		}
 		if (!shouldInjectCookHandoffBoundary(event, ctx, loaded?.snapshot)) return;
+		if (await pathExists(closedWorkflowCleanupMarkerPath(agentCwd))) return;
 		const handoffReminder = buildCookHandoffBoundaryReminder();
 		maybeWriteTestSnapshot(completionTestCookHandoffReminderPath(), handoffReminder);
 		return {

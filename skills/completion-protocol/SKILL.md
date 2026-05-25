@@ -35,7 +35,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - When that dirty tracked worktree contains changes unrelated to the latest slice or current reconciliation surfaces and those changes can be isolated safely, auto-preserve them with a reversible mechanism such as a named git stash plus a `.agent/current/tmp/dirty-worktree-autostash.json` note, continue the mandatory workflow step, and restore them before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
 - Docs, config, and runbooks must stay truthful to shipped behavior.
 - `.agent/verify_completion_stop.sh` is a generated repo-level baseline verifier. Onboarding should create a working version from current repo truth rather than an unconditional failing placeholder.
-- The packaged default stop policy is `required_stop_judges: 2` plus `stop_aggregation_policy: "unanimous-current-head-v1"` in tracked `.agent/config/profile.json` (`.agent/profile.json` remains only as a temporary compatibility shim for the current workflow round).
+- The packaged default stop policy is `required_stop_judges: 2` plus `stop_aggregation_policy: "unanimous-current-head-v1"` in tracked `.cook/profile.json`.
 - Under `unanimous-current-head-v1`, only current-HEAD `judgment` records from the current stop-wave epoch count. Canonical `state.json current_stop_wave_id` tracks that epoch, may be incremented to restart stop evaluation on the same `HEAD`, and repo-level stop verification must wait until the required current-HEAD judgments for the current epoch are recorded.
 - Keep slice-specific proof in repo tests or deterministic checks. Refresh `.agent/verify_completion_stop.sh` only when the repo's top-level verification surfaces change or the verifier becomes stale.
 - The workflow topology is flat and primary-driven: the main pi session remains the workflow root and invokes at most one completion role at a time.
@@ -94,10 +94,10 @@ The workflow driver must not substitute itself for any mandatory dispatch target
 
 Tracked repo-contract files:
 
-- `.agent/README.md`
-- `.agent/config/workflow.json`
-- `.agent/config/profile.json`
-- `.agent/profile.json` *(temporary compatibility shim for the current workflow round)*
+- `.cook/README.md`
+- `.cook/workflow.json`
+- `.cook/profile.json`
+- `.cook/profile.json` 
 - `.agent/verify_completion_stop.sh`
 - `.agent/verify_completion_control_plane.sh`
 
@@ -116,10 +116,10 @@ Ignored canonical execution-state files:
 
 Read these when making completion decisions:
 
-- `.agent/README.md`
-- `.agent/config/workflow.json`
-- `.agent/config/profile.json`
-- `.agent/profile.json`
+- `.cook/README.md`
+- `.cook/workflow.json`
+- `.cook/profile.json`
+- `.cook/profile.json`
 - `.agent/current/state.json`
 - `.agent/current/startup-brief.json`
 - `.agent/current/plan.json`

@@ -4,6 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 node "$SCRIPT_DIR/verify-completion-control-plane.js"
 
+if [[ ! -f .agent/current/state.json ]]; then
+  echo "[completion] no active runtime state; stop verification is not required"
+  exit 0
+fi
+
 CURRENT_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"
 export COMPLETION_STOP_HEAD="$CURRENT_HEAD"
 
@@ -40,15 +45,15 @@ function gitHeadSha() {
   return asString(result.stdout);
 }
 
-const profile = readJson('.agent/config/profile.json');
+const profile = readJson('.cook/profile.json');
 const state = readJson('.agent/current/state.json');
 const requiredStopJudges = asNumber(profile.required_stop_judges);
 if (!Number.isInteger(requiredStopJudges) || requiredStopJudges < 1) {
-  fail('.agent/config/profile.json required_stop_judges must be a positive integer before stop verification can run.');
+  fail('.cook/profile.json required_stop_judges must be a positive integer before stop verification can run.');
 }
 const stopAggregationPolicy = asString(profile.stop_aggregation_policy);
 if (stopAggregationPolicy !== 'unanimous-current-head-v1') {
-  fail('.agent/config/profile.json stop_aggregation_policy must be unanimous-current-head-v1 before stop verification can run.');
+  fail('.cook/profile.json stop_aggregation_policy must be unanimous-current-head-v1 before stop verification can run.');
 }
 
 const currentPhase = asString(state.current_phase) ?? 'unknown';

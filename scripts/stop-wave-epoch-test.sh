@@ -7,7 +7,7 @@ cd "$ROOT"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 REPO="$TMPDIR/repo"
-mkdir -p "$REPO/.agent/config" "$REPO/.agent/current" "$REPO/scripts"
+mkdir -p "$REPO/.cook" "$REPO/.agent/current" "$REPO/scripts"
 cd "$REPO"
 
 git init -q
@@ -28,13 +28,25 @@ git add README.md package.json
 git commit -q -m "fixture baseline"
 HEAD_SHA="$(git rev-parse HEAD)"
 
-cp "$ROOT/.agent/README.md" .agent/README.md
-cp "$ROOT/.agent/mission.md" .agent/mission.md
-cp "$ROOT/.agent/config/workflow.json" .agent/config/workflow.json
-cp "$ROOT/.agent/config/profile.json" .agent/config/profile.json
-cp "$ROOT/.agent/profile.json" .agent/profile.json
-cp "$ROOT/.agent/verify_completion_control_plane.sh" .agent/verify_completion_control_plane.sh
-cp "$ROOT/.agent/verify_completion_stop.sh" .agent/verify_completion_stop.sh
+cp "$ROOT/.cook/README.md" .cook/README.md
+cp "$ROOT/.cook/workflow.json" .cook/workflow.json
+cp "$ROOT/.cook/profile.json" .cook/profile.json
+cat > .agent/verify_completion_control_plane.sh <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec node "$SCRIPT_DIR/../scripts/verify-completion-control-plane.js" "$@"
+SH
+cat > .agent/verify_completion_stop.sh <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+export COMPLETION_REPO_VERIFY_COMMAND='npm run release-check >/dev/null'
+export COMPLETION_REPO_VERIFY_CWD="$(cd "$SCRIPT_DIR/.." && pwd -P)"
+exec bash "$SCRIPT_DIR/../scripts/verify-completion-stop.sh" "$@"
+SH
 cp "$ROOT/scripts/verify-completion-control-plane.js" scripts/verify-completion-control-plane.js
 cp "$ROOT/scripts/verify-completion-stop.sh" scripts/verify-completion-stop.sh
 cat > scripts/release-check.sh <<'SH'
@@ -58,7 +70,7 @@ printf 'release-check-ok\n' > "$STATUS_FILE"
 SH
 chmod +x .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh scripts/verify-completion-stop.sh scripts/release-check.sh
 
-git add .agent/README.md .agent/mission.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh
+git add .cook/README.md .cook/workflow.json .cook/profile.json
 git commit -q -m "scaffold tracked completion contract files"
 HEAD_SHA="$(git rev-parse HEAD)"
 
@@ -68,7 +80,7 @@ import os
 from pathlib import Path
 head = os.environ['HEAD_SHA']
 mission = 'Stop-wave epoch regression fixture.'
-profile = json.loads(Path('.agent/config/profile.json').read_text())
+profile = json.loads(Path('.cook/profile.json').read_text())
 state = {
     'schema_version': 1,
     'mission_anchor': mission,
@@ -221,6 +233,7 @@ PY
 RECONCILE="$TMPDIR/reconcile"
 mkdir -p "$RECONCILE"
 ln -s "$REPO/.agent" "$RECONCILE/.agent"
+ln -s "$REPO/.cook" "$RECONCILE/.cook"
 ln -s "$REPO/.git" "$RECONCILE/.git"
 
 REPO="$REPO" RECONCILE="$RECONCILE" python3 - <<'PY'

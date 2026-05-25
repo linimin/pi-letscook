@@ -176,7 +176,7 @@ The packaged control plane now also carries canonical routing signals:
 - `task_type: completion-workflow`
 - `evaluation_profile: completion-rubric-v1`
 
-Those identifiers are persisted in tracked `.agent/config/profile.json` plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`, then surfaced in kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.
+Those identifiers are persisted in tracked `.cook/profile.json` plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`, then surfaced in kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.
 
 The active-slice exact implementer handoff is now the canonical implementation contract for selected, in-progress, committed, and done slices. In addition to the locked slice goal, acceptance criteria, contract IDs, blocked-on list, `priority`, and `why_now`, the v2 contract requires:
 
@@ -207,14 +207,12 @@ Active `/cook` workflows now also auto-reconcile routine unrelated tracked workt
 This package stores canonical workflow state under:
 
 ```text
-.agent/
+.cook/
   README.md
-  config/
-    workflow.json
-    profile.json
-  profile.json            # temporary compatibility shim for the current workflow round
-  verify_completion_stop.sh          # thin forwarding stub to the package-owned stop verifier
-  verify_completion_control_plane.sh # thin forwarding stub to the package-owned control-plane verifier
+  workflow.json
+  profile.json
+
+.agent/
   current/
     state.json
     startup-brief.json
@@ -224,6 +222,8 @@ This package stores canonical workflow state under:
     stop-check-history.jsonl
     verification-evidence.json
     tmp/
+  verify_completion_stop.sh          # local thin forwarder to the package-owned stop verifier
+  verify_completion_control_plane.sh # local thin forwarder to the package-owned control-plane verifier
 ```
 
 Canonical truth is the combination of:
@@ -235,14 +235,11 @@ Canonical truth is the combination of:
 
 Tracked repo-contract files:
 
-- `.agent/README.md`
-- `.agent/config/workflow.json`
-- `.agent/config/profile.json`
-- `.agent/profile.json` *(temporary compatibility shim for the current workflow round)*
-- `.agent/verify_completion_stop.sh` *(thin forwarding stub to the package-owned stop verifier)*
-- `.agent/verify_completion_control_plane.sh` *(thin forwarding stub to the package-owned control-plane verifier)*
+- `.cook/README.md`
+- `.cook/workflow.json`
+- `.cook/profile.json`
 
-The canonical storage contract is tracked `.agent/config/**` plus ignored `.agent/current/**`. The tracked `.agent/verify_completion_*.sh` files stay intentionally small and forward repo-local verification requests into the package-owned verifier entrypoints under `scripts/`.
+The canonical storage contract is tracked `.cook/**` plus ignored `.agent/**`. Runtime-generated `.agent/verify_completion_*.sh` forwarders are local convenience entrypoints only and are not tracked.
 
 Ignored execution-state files:
 
@@ -259,8 +256,8 @@ Ignored execution-state files:
 
 In short:
 
-- tracked `.agent/config/**` files define the repo-level workflow contract
-- ignored `.agent/current/**` files are the local control-plane state for the current run
+- tracked `.cook/**` files define the repo-level workflow contract
+- ignored `.agent/**` files are the local control-plane state for the current run
 
 ## Package layout
 
@@ -286,7 +283,7 @@ npm run rubric-contract-test
 npm run release-check
 ```
 
-`npm run release-check` is the broad packaged-release verifier. It begins with `npm run verify-completion-control-plane`, so missing or stale `.agent/current/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped `/cook` public parity surfaces in `README.md`, `.agent/README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
+`npm run release-check` is the broad packaged-release verifier. It begins with `npm run verify-completion-control-plane`, so missing or stale `.agent/current/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped `/cook` public parity surfaces in `README.md`, `.cook/README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
 
 The direct package-root verifier commands above intentionally self-isolate the repo-local extension when they shell back into `pi`, so you should not need to wrap them with `pi --no-extensions` even if `@linimin/pi-letscook` is also installed globally on the same machine.
 

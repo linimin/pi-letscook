@@ -10,17 +10,15 @@ const DEFAULT_EVALUATION_PROFILE = "completion-rubric-v1";
 const DEFAULT_REQUIRED_STOP_JUDGES = 2;
 const DEFAULT_STOP_AGGREGATION_POLICY = "unanimous-current-head-v1";
 const AGENT_DIRNAME = ".agent";
+const COOK_DIRNAME = ".cook";
 const CONFIG_DIRNAME = "config";
 const CURRENT_DIRNAME = "current";
 const PROFILE_FILENAME = "profile.json";
 const WORKFLOW_FILENAME = "workflow.json";
 const TRACKED_CONTRACT_FILES = [
-	".agent/README.md",
-	".agent/config/workflow.json",
-	".agent/config/profile.json",
-	".agent/profile.json",
-	".agent/verify_completion_stop.sh",
-	".agent/verify_completion_control_plane.sh",
+	".cook/README.md",
+	".cook/workflow.json",
+	".cook/profile.json",
 ] as const;
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -47,18 +45,18 @@ function shellQuote(value: string): string {
 
 export function resolveFiles(root: string) {
 	const agentDir = path.join(root, AGENT_DIRNAME);
-	const configDir = path.join(agentDir, CONFIG_DIRNAME);
+	const cookDir = path.join(root, COOK_DIRNAME);
 	const currentDir = path.join(agentDir, CURRENT_DIRNAME);
 	const tmpDir = path.join(currentDir, "tmp");
 	return {
 		root,
 		agentDir,
-		configDir,
+		cookDir,
 		currentDir,
 		tmpDir,
-		workflowPath: path.join(configDir, WORKFLOW_FILENAME),
-		profilePath: path.join(configDir, PROFILE_FILENAME),
-		legacyProfileShimPath: path.join(agentDir, PROFILE_FILENAME),
+		workflowPath: path.join(cookDir, WORKFLOW_FILENAME),
+		profilePath: path.join(cookDir, PROFILE_FILENAME),
+		cookReadmePath: path.join(cookDir, "README.md"),
 		statePath: path.join(currentDir, "state.json"),
 		planPath: path.join(currentDir, "plan.json"),
 		activePath: path.join(currentDir, "active-slice.json"),
@@ -87,12 +85,10 @@ function completionSearchRoots(startCwd: string): string[] {
 
 export function findCompletionRoot(startCwd: string): string | undefined {
 	for (const candidateRoot of completionSearchRoots(startCwd)) {
-		const workflowPath = walkUpForDir(candidateRoot, [AGENT_DIRNAME, CONFIG_DIRNAME, WORKFLOW_FILENAME]);
-		if (workflowPath) return path.dirname(path.dirname(path.dirname(workflowPath)));
-		const profilePath = walkUpForDir(candidateRoot, [AGENT_DIRNAME, CONFIG_DIRNAME, PROFILE_FILENAME]);
-		if (profilePath) return path.dirname(path.dirname(path.dirname(profilePath)));
-		const legacyProfileShimPath = walkUpForDir(candidateRoot, [AGENT_DIRNAME, PROFILE_FILENAME]);
-		if (legacyProfileShimPath) return path.dirname(path.dirname(legacyProfileShimPath));
+		const workflowPath = walkUpForDir(candidateRoot, [COOK_DIRNAME, WORKFLOW_FILENAME]);
+		if (workflowPath) return path.dirname(path.dirname(workflowPath));
+		const profilePath = walkUpForDir(candidateRoot, [COOK_DIRNAME, PROFILE_FILENAME]);
+		if (profilePath) return path.dirname(path.dirname(profilePath));
 	}
 	return undefined;
 }
@@ -263,8 +259,8 @@ export function buildWorkflowRecord(): JsonRecord {
 	return {
 		schema_version: 1,
 		protocol_id: PROTOCOL_ID,
-		layout_version: 2,
-		config_dir: `.agent/${CONFIG_DIRNAME}`,
+		layout_version: 3,
+		config_dir: COOK_DIRNAME,
 		runtime_dir: `.agent/${CURRENT_DIRNAME}`,
 		runtime_artifacts: [
 			"state.json",
@@ -434,8 +430,8 @@ export function defaultVerificationEvidence(): JsonRecord {
 	};
 }
 
-export function buildAgentReadme(projectName: string): string {
-	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Tracked repo-level workflow contract\n\n- \`.agent/README.md\`\n- \`.agent/config/workflow.json\`\n- \`.agent/config/profile.json\`\n- \`.agent/profile.json\` *(temporary compatibility shim for the current workflow round)*\n- \`.agent/verify_completion_stop.sh\` *(thin forwarding stub to the package-owned stop verifier)*\n- \`.agent/verify_completion_control_plane.sh\` *(thin forwarding stub to the package-owned control-plane verifier)*\n\n## Ignored runtime state\n\n- \`.agent/current/state.json\`\n- \`.agent/current/startup-brief.json\`\n- \`.agent/current/plan.json\`\n- \`.agent/current/active-slice.json\`\n- \`.agent/current/slice-history.jsonl\`\n- \`.agent/current/stop-check-history.jsonl\`\n- \`.agent/current/verification-evidence.json\`\n- \`.agent/current/*.log\`\n- \`.agent/current/tmp/\`\n\n\`.agent/config/workflow.json\` defines the canonical storage contract: tracked repo policy stays under \`.agent/config/**\`, runtime state lives under \`.agent/current/**\`, archive is disabled, and replacement/cancel/done paths must delete \`.agent/current/\`.\n\nPackage-owned verification logic ships in \`scripts/verify-completion-control-plane.js\` and \`scripts/verify-completion-stop.sh\`. The tracked \`.agent/verify_completion_*.sh\` files stay intentionally small and just forward repo-local verification requests into those package-owned entrypoints.\n\n\`.agent/config/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`. Canonical \`.agent/current/state.json current_stop_wave_id\` carries the current stop-wave epoch so the same HEAD may restart stop evaluation without requiring a synthetic tracked commit.\n\n\`.agent/current/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/current/plan.json\` or \`.agent/current/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/current/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical tracked \`.agent/config/**\`, ignored \`.agent/current/**\`, package-owned verifier entrypoints, and current repo truth.\n\nProject: ${projectName}\n`;
+export function buildCookReadme(projectName: string): string {
+	return `# Completion Workflow Config\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Tracked repo-level workflow contract\n\n- \`.cook/README.md\`\n- \`.cook/workflow.json\`\n- \`.cook/profile.json\`\n\n## Ignored runtime state\n\n- \`.agent/current/state.json\`\n- \`.agent/current/startup-brief.json\`\n- \`.agent/current/plan.json\`\n- \`.agent/current/active-slice.json\`\n- \`.agent/current/slice-history.jsonl\`\n- \`.agent/current/stop-check-history.jsonl\`\n- \`.agent/current/verification-evidence.json\` *(durable canonical record of deterministic verification for the selected slice or current HEAD)*\n- \`.agent/current/*.log\`\n- \`.agent/current/tmp/\`\n- runtime-generated \`.agent/verify_completion_stop.sh\`\n- runtime-generated \`.agent/verify_completion_control_plane.sh\`\n\n\`.cook/workflow.json\` defines the canonical storage contract: tracked repo policy lives under \`.cook/**\`, runtime state lives under ignored \`.agent/**\`, archive is disabled, and replacement/cancel/done paths must delete \`.agent/current/\`.\n\nPackage-owned verification logic ships in \`scripts/verify-completion-control-plane.js\` and \`scripts/verify-completion-stop.sh\`.\nRuntime-generated \`.agent/verify_completion_*.sh\` forwarders are local convenience entrypoints only and are intentionally not tracked.\n\n\`.cook/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`. Canonical \`.agent/current/state.json current_stop_wave_id\` carries the current stop-wave epoch so the same HEAD may restart stop evaluation without requiring a synthetic tracked commit.\n\n\`.agent/current/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/current/plan.json\` or \`.agent/current/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/current/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is tracked \`.cook/**\`, ignored \`.agent/**\`, package-owned verifier entrypoints, and current repo truth.\n\nProject: ${projectName}\n`;
 }
 
 export function buildMission(projectName: string, missionAnchor: string): string {
@@ -477,8 +473,16 @@ exec node ${packageScript} "$@"
 async function ensureGitignore(root: string): Promise<boolean> {
 	const gitignorePath = path.join(root, ".gitignore");
 	const blockLines = [
-		"# completion protocol canonical state and thin verifier forwarders",
-		".agent/*",
+		"# completion workflow config and runtime state",
+		".agent/",
+		".cook/*",
+		"!.cook/README.md",
+		"!.cook/workflow.json",
+		"!.cook/profile.json",
+	];
+	const block = blockLines.join("\n");
+	const existing = (await pathExists(gitignorePath)) ? await fsp.readFile(gitignorePath, "utf8") : "";
+	const legacyBlockLines = [
 		"!.agent/README.md",
 		"!.agent/config/",
 		".agent/config/*",
@@ -488,10 +492,9 @@ async function ensureGitignore(root: string): Promise<boolean> {
 		"!.agent/verify_completion_stop.sh",
 		"!.agent/verify_completion_control_plane.sh",
 		".agent/current/",
+		"!.agent/mission.md",
+		".agent/tmp/",
 	];
-	const block = blockLines.join("\n");
-	const existing = (await pathExists(gitignorePath)) ? await fsp.readFile(gitignorePath, "utf8") : "";
-	const legacyBlockLines = ["!.agent/mission.md", ".agent/tmp/"];
 	const filteredLines = existing
 		.split(/\r?\n/)
 		.filter((line) => !blockLines.includes(line.trim()) && !legacyBlockLines.includes(line.trim()));
@@ -533,7 +536,7 @@ export async function scaffoldCompletionFiles(
 	const created: string[] = [];
 	const updated: string[] = [];
 	await fsp.mkdir(files.agentDir, { recursive: true });
-	await fsp.mkdir(files.configDir, { recursive: true });
+	await fsp.mkdir(files.cookDir, { recursive: true });
 	await removeCompletionRuntimeState(files);
 	await fsp.mkdir(files.currentDir, { recursive: true });
 	await fsp.mkdir(files.tmpDir, { recursive: true });
@@ -551,10 +554,11 @@ export async function scaffoldCompletionFiles(
 		evaluationProfile: options?.analysis?.evaluationProfile,
 	});
 	const trackedFiles: Array<{ path: string; content: string; executable?: boolean }> = [
-		{ path: path.join(files.agentDir, "README.md"), content: buildAgentReadme(projectName) },
+		{ path: files.cookReadmePath, content: buildCookReadme(projectName) },
 		{ path: files.workflowPath, content: `${JSON.stringify(buildWorkflowRecord(), null, 2)}\n` },
 		{ path: files.profilePath, content: `${JSON.stringify(profileRecord, null, 2)}\n` },
-		{ path: files.legacyProfileShimPath, content: `${JSON.stringify(profileRecord, null, 2)}\n` },
+	];
+	const localRuntimeHelperFiles: Array<{ path: string; content: string; executable?: boolean }> = [
 		{ path: path.join(files.agentDir, "verify_completion_stop.sh"), content: buildVerifyStopScript(verifierCommand), executable: true },
 		{ path: path.join(files.agentDir, "verify_completion_control_plane.sh"), content: buildVerifyControlPlaneScript(), executable: true },
 	];
@@ -579,6 +583,12 @@ export async function scaffoldCompletionFiles(
 		await fsp.writeFile(file.path, file.content, "utf8");
 		if (file.executable) await fsp.chmod(file.path, 0o755);
 		(existed ? updated : created).push(path.relative(root, file.path));
+	}
+	for (const file of localRuntimeHelperFiles) {
+		await fsp.mkdir(path.dirname(file.path), { recursive: true });
+		await fsp.writeFile(file.path, file.content, "utf8");
+		if (file.executable) await fsp.chmod(file.path, 0o755);
+		created.push(path.relative(root, file.path));
 	}
 	for (const file of runtimeFiles) {
 		await fsp.mkdir(path.dirname(file.path), { recursive: true });

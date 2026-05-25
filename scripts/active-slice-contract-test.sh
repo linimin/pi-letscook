@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+bash "$PKG_ROOT/scripts/ensure-local-completion-forwarders.sh"
 pi() {
   command pi --no-extensions "$@"
 }
@@ -116,8 +117,8 @@ assertIncludes('agents/completion-implementer.md', '`basis_commit`');
 assertIncludes('agents/completion-implementer.md', '`remaining_contract_ids_before`');
 assertIncludes('agents/completion-implementer.md', '`release_blocker_count_before`');
 assertIncludes('agents/completion-implementer.md', '`high_value_gap_count_before`');
-assertIncludes('agents/completion-implementer.md', '.agent/config/workflow.json');
-assertIncludes('agents/completion-implementer.md', '.agent/config/profile.json');
+assertIncludes('agents/completion-implementer.md', '.cook/workflow.json');
+assertIncludes('agents/completion-implementer.md', '.cook/profile.json');
 assertIncludes('agents/completion-implementer.md', '.agent/current/active-slice.json');
 assertIncludes('agents/completion-implementer.md', '.agent/current/plan.json');
 assertIncludes('agents/completion-implementer.md', '.agent/current/state.json');
@@ -126,17 +127,17 @@ assertExcludes('agents/completion-implementer.md', '.agent/active-slice.json');
 assertExcludes('agents/completion-implementer.md', '.agent/plan.json');
 assertExcludes('agents/completion-implementer.md', '.agent/state.json');
 assertExcludes('agents/completion-implementer.md', '.agent/slice-history.jsonl');
-assertIncludes('agents/completion-regrounder.md', '.agent/config/workflow.json');
-assertIncludes('agents/completion-regrounder.md', '.agent/config/profile.json');
+assertIncludes('agents/completion-regrounder.md', '.cook/workflow.json');
+assertIncludes('agents/completion-regrounder.md', '.cook/profile.json');
 assertIncludes('agents/completion-regrounder.md', '.agent/current/plan.json');
 assertIncludes('agents/completion-regrounder.md', '.agent/current/active-slice.json');
 assertIncludes('agents/completion-regrounder.md', '.agent/current/state.json');
 assertExcludes('agents/completion-regrounder.md', '.agent/plan.json');
 assertExcludes('agents/completion-regrounder.md', '.agent/active-slice.json');
 assertExcludes('agents/completion-regrounder.md', '.agent/state.json current_stop_wave_id');
-assertExcludes('agents/completion-regrounder.md', '.agent/profile.json required_stop_judges');
-assertIncludes('agents/completion-bootstrapper.md', '.agent/config/workflow.json');
-assertIncludes('agents/completion-bootstrapper.md', '.agent/config/profile.json');
+assertExcludes('agents/completion-regrounder.md', '.cook/profile.json required_stop_judges');
+assertIncludes('agents/completion-bootstrapper.md', '.cook/workflow.json');
+assertIncludes('agents/completion-bootstrapper.md', '.cook/profile.json');
 assertIncludes('agents/completion-bootstrapper.md', '.agent/current/state.json');
 assertIncludes('agents/completion-bootstrapper.md', '.agent/current/plan.json');
 assertIncludes('agents/completion-bootstrapper.md', '.agent/current/active-slice.json');
@@ -181,7 +182,7 @@ assertIncludes('scripts/verify-completion-control-plane.js', "const planMirrorFi
 assertIncludes('scripts/verify-completion-control-plane.js', 'slice_id must match a slice in .agent/current/plan.json when status carries an exact handoff');
 assertIncludes('scripts/verify-completion-control-plane.js', '.agent/current/active-slice.json must match the selected .agent/current/plan.json slice across: ');
 assertIncludes('scripts/verify-completion-control-plane.js', '.agent/current/active-slice.json implementation_surfaces must cover every tracked file changed from basis_commit to current HEAD; missing: ');
-assertIncludes('scripts/release-check.sh', 'git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh scripts/verify-completion-control-plane.js scripts/verify-completion-stop.sh >/dev/null');
+assertIncludes('scripts/release-check.sh', 'git ls-files --error-unmatch .cook/README.md .cook/workflow.json .cook/profile.json scripts/verify-completion-control-plane.js scripts/verify-completion-stop.sh >/dev/null');
 NODE
 
 ROOT="$TMPDIR/repo"
@@ -202,7 +203,7 @@ capsule = {
         "Use supported bare /cook startup only."
     ],
     "acceptance": [
-        "Materialize .agent/config/workflow.json, .agent/config/profile.json, .agent/current/state.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before the fixture rewrites them.",
+        "Materialize .cook/workflow.json, .cook/profile.json, .agent/current/state.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before the fixture rewrites them.",
         "Keep scripts/active-slice-contract-test.sh aligned with the packaged startup contract."
     ],
     "risks": [
@@ -421,17 +422,17 @@ PY
 
 bash .agent/verify_completion_control_plane.sh >/dev/null
 
-git rm --cached -q .agent/profile.json
+git rm --cached -q .cook/profile.json
 if bash .agent/verify_completion_control_plane.sh >"$TMPDIR/untracked-contract.out" 2>"$TMPDIR/untracked-contract.err"; then
   echo 'expected verifier to fail when a required tracked .agent contract file becomes untracked' >&2
   exit 1
 fi
-if ! grep -q 'Required tracked completion contract file is missing from git index: .agent/profile.json' "$TMPDIR/untracked-contract.err"; then
-  echo 'expected verifier failure output to mention the untracked .agent/profile.json contract file' >&2
+if ! grep -q 'Required tracked completion contract file is missing from git index: .cook/profile.json' "$TMPDIR/untracked-contract.err"; then
+  echo 'expected verifier failure output to mention the untracked .cook/profile.json contract file' >&2
   cat "$TMPDIR/untracked-contract.err" >&2
   exit 1
 fi
-git add .agent/profile.json
+git add .cook/profile.json
 bash .agent/verify_completion_control_plane.sh >/dev/null
 
 python3 - <<'PY'
