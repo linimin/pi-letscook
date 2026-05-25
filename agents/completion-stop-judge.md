@@ -19,7 +19,7 @@ You must not:
 - append stop-check history yourself
 - create commits
 
-The workflow driver records your returned verdict into `.agent/stop-check-history.jsonl` during the final stop wave. Your output must therefore be explicit enough to transcribe faithfully as one canonical `judgment` record for the current HEAD and current `state.json current_stop_wave_id` epoch.
+The workflow driver records your returned verdict into `.agent/current/stop-check-history.jsonl` during the final stop wave. Your output must therefore be explicit enough to transcribe faithfully as one canonical `judgment` record for the current HEAD and current `.agent/current/state.json current_stop_wave_id` epoch.
 
 During long work, emit short operator-facing progress lines when useful using these exact prefixes:
 - `PROGRESS: ...`
@@ -31,7 +31,7 @@ These lines are for workflow observability, not hidden reasoning. Keep them brie
 You may conclude the project can stop only if current HEAD truth satisfies all of:
 
 - every accepted slice has tests, verification evidence, and a commit SHA
-- `.agent/plan.json` is present and truthfully empty of remaining planned, selected, in-progress, or blocked implementation slices
+- `.agent/current/plan.json` is present and truthfully empty of remaining planned, selected, in-progress, or blocked implementation slices
 - docs, config, and runbooks match shipped behavior
 - tracked and unignored worktree is clean
 - no substantive non-final-stop contract, blocker, or high-value gap remains open
