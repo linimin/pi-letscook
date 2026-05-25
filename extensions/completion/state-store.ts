@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { promises as fsp } from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import type { CompletionStateSnapshot, JsonRecord } from "./types";
 
@@ -10,9 +9,15 @@ const DEFAULT_TASK_TYPE = "completion-workflow";
 const DEFAULT_EVALUATION_PROFILE = "completion-rubric-v1";
 const DEFAULT_REQUIRED_STOP_JUDGES = 2;
 const DEFAULT_STOP_AGGREGATION_POLICY = "unanimous-current-head-v1";
+const AGENT_DIRNAME = ".agent";
+const CONFIG_DIRNAME = "config";
+const CURRENT_DIRNAME = "current";
+const PROFILE_FILENAME = "profile.json";
+const WORKFLOW_FILENAME = "workflow.json";
 const TRACKED_CONTRACT_FILES = [
 	".agent/README.md",
-	".agent/mission.md",
+	".agent/config/workflow.json",
+	".agent/config/profile.json",
 	".agent/profile.json",
 	".agent/verify_completion_stop.sh",
 	".agent/verify_completion_control_plane.sh",
@@ -37,20 +42,26 @@ function asNumber(value: unknown): number | undefined {
 }
 
 export function resolveFiles(root: string) {
-	const agentDir = path.join(root, ".agent");
-	const tmpDir = path.join(agentDir, "tmp");
+	const agentDir = path.join(root, AGENT_DIRNAME);
+	const configDir = path.join(agentDir, CONFIG_DIRNAME);
+	const currentDir = path.join(agentDir, CURRENT_DIRNAME);
+	const tmpDir = path.join(currentDir, "tmp");
 	return {
 		root,
 		agentDir,
+		configDir,
+		currentDir,
 		tmpDir,
-		profilePath: path.join(agentDir, "profile.json"),
-		statePath: path.join(agentDir, "state.json"),
-		planPath: path.join(agentDir, "plan.json"),
-		activePath: path.join(agentDir, "active-slice.json"),
-		sliceHistoryPath: path.join(agentDir, "slice-history.jsonl"),
-		stopHistoryPath: path.join(agentDir, "stop-check-history.jsonl"),
-		startupBriefPath: path.join(agentDir, "startup-brief.json"),
-		verificationEvidencePath: path.join(agentDir, "verification-evidence.json"),
+		workflowPath: path.join(configDir, WORKFLOW_FILENAME),
+		profilePath: path.join(configDir, PROFILE_FILENAME),
+		legacyProfileShimPath: path.join(agentDir, PROFILE_FILENAME),
+		statePath: path.join(currentDir, "state.json"),
+		planPath: path.join(currentDir, "plan.json"),
+		activePath: path.join(currentDir, "active-slice.json"),
+		sliceHistoryPath: path.join(currentDir, "slice-history.jsonl"),
+		stopHistoryPath: path.join(currentDir, "stop-check-history.jsonl"),
+		startupBriefPath: path.join(currentDir, "startup-brief.json"),
+		verificationEvidencePath: path.join(currentDir, "verification-evidence.json"),
 		compactionMarkerPath: path.join(tmpDir, "post-compaction-recovery.json"),
 	};
 }
@@ -72,8 +83,12 @@ function completionSearchRoots(startCwd: string): string[] {
 
 export function findCompletionRoot(startCwd: string): string | undefined {
 	for (const candidateRoot of completionSearchRoots(startCwd)) {
-		const profilePath = walkUpForDir(candidateRoot, [".agent", "profile.json"]);
-		if (profilePath) return path.dirname(path.dirname(profilePath));
+		const workflowPath = walkUpForDir(candidateRoot, [AGENT_DIRNAME, CONFIG_DIRNAME, WORKFLOW_FILENAME]);
+		if (workflowPath) return path.dirname(path.dirname(path.dirname(workflowPath)));
+		const profilePath = walkUpForDir(candidateRoot, [AGENT_DIRNAME, CONFIG_DIRNAME, PROFILE_FILENAME]);
+		if (profilePath) return path.dirname(path.dirname(path.dirname(profilePath)));
+		const legacyProfileShimPath = walkUpForDir(candidateRoot, [AGENT_DIRNAME, PROFILE_FILENAME]);
+		if (legacyProfileShimPath) return path.dirname(path.dirname(legacyProfileShimPath));
 	}
 	return undefined;
 }
@@ -135,19 +150,45 @@ function findActiveSlice(plan: JsonRecord | undefined, active: JsonRecord | unde
 	return candidateSlices(plan).find((slice) => asString(slice.slice_id) === sliceId);
 }
 
+async function hasCompleteRuntimeState(files: ReturnType<typeof resolveFiles>): Promise<boolean> {
+	const requiredRuntimePaths = [
+		files.statePath,
+		files.planPath,
+		files.activePath,
+		files.startupBriefPath,
+		files.verificationEvidencePath,
+		files.sliceHistoryPath,
+		files.stopHistoryPath,
+	];
+	for (const targetPath of requiredRuntimePaths) {
+		if (!(await pathExists(targetPath))) return false;
+	}
+	return true;
+}
+
+export async function removeCompletionRuntimeState(target: string | ReturnType<typeof resolveFiles>): Promise<void> {
+	const files = typeof target === "string" ? resolveFiles(target) : target;
+	await fsp.rm(files.currentDir, { recursive: true, force: true });
+}
+
 export async function loadCompletionSnapshot(startCwd: string): Promise<CompletionStateSnapshot | undefined> {
 	const root = findCompletionRoot(startCwd);
 	if (!root) return undefined;
 	const files = resolveFiles(root);
+	const workflow = await readJson(files.workflowPath);
 	const profile = await readJson(files.profilePath);
+	if (asString(workflow?.protocol_id) !== PROTOCOL_ID) return undefined;
 	if (asString(profile?.protocol_id) !== PROTOCOL_ID) return undefined;
+	if (!(await hasCompleteRuntimeState(files))) return undefined;
 	const state = await readJson(files.statePath);
 	const plan = await readJson(files.planPath);
 	const active = await readJson(files.activePath);
 	const startupBrief = await readJson(files.startupBriefPath);
 	const verificationEvidence = await readJson(files.verificationEvidencePath);
+	if (!state || !plan || !active || !startupBrief || !verificationEvidence) return undefined;
 	return {
 		files,
+		workflow,
 		profile,
 		state,
 		plan,
@@ -214,6 +255,28 @@ async function detectVerifierCommand(root: string): Promise<string | undefined> 
 	return undefined;
 }
 
+export function buildWorkflowRecord(): JsonRecord {
+	return {
+		schema_version: 1,
+		protocol_id: PROTOCOL_ID,
+		layout_version: 2,
+		config_dir: `.agent/${CONFIG_DIRNAME}`,
+		runtime_dir: `.agent/${CURRENT_DIRNAME}`,
+		runtime_artifacts: [
+			"state.json",
+			"startup-brief.json",
+			"plan.json",
+			"active-slice.json",
+			"slice-history.jsonl",
+			"stop-check-history.jsonl",
+			"verification-evidence.json",
+			"tmp/",
+		],
+		cleanup_on: ["replacement", "cancel", "done"],
+		archive_policy: "disabled",
+	};
+}
+
 export function buildProfileRecord(args: {
 	projectName: string;
 	requiredStopJudges: number;
@@ -256,7 +319,7 @@ export function defaultState(
 		workflow_entry_source: "/cook",
 		workflow_entry_confirmed_at: confirmedAt,
 		workflow_session_id: buildWorkflowSessionId(),
-		startup_brief_path: ".agent/startup-brief.json",
+		startup_brief_path: ".agent/current/startup-brief.json",
 		current_phase: "reground",
 		continuation_policy: "continue",
 		continuation_reason: routing?.continuationReason ?? "Fresh completion bootstrap requires canonical re-ground",
@@ -368,7 +431,7 @@ export function defaultVerificationEvidence(): JsonRecord {
 }
 
 export function buildAgentReadme(projectName: string): string {
-	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Canonical tracked contract files\n\n- \`.agent/README.md\`\n- \`.agent/mission.md\`\n- \`.agent/profile.json\`\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored canonical execution state\n\n- \`.agent/state.json\`\n- \`.agent/startup-brief.json\`\n- \`.agent/plan.json\`\n- \`.agent/active-slice.json\`\n- \`.agent/slice-history.jsonl\`\n- \`.agent/stop-check-history.jsonl\`\n- \`.agent/verification-evidence.json\`\n- \`.agent/*.log\`\n- \`.agent/tmp/\`\n\n\`.agent/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`. Canonical \`.agent/state.json current_stop_wave_id\` carries the current stop-wave epoch so the same HEAD may restart stop evaluation without requiring a synthetic tracked commit.\n\n\`.agent/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/plan.json\` or \`.agent/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical \`.agent/**\` state plus current repo truth.\n\nProject: ${projectName}\n`;
+	return `# Completion Control Plane\n\nThis repository uses the \`completion\` workflow for long-running coding tasks.\n\n## Tracked repo-level workflow contract\n\n- \`.agent/README.md\`\n- \`.agent/config/workflow.json\`\n- \`.agent/config/profile.json\`\n- \`.agent/profile.json\` *(temporary compatibility shim for the current workflow round)*\n- \`.agent/verify_completion_stop.sh\`\n- \`.agent/verify_completion_control_plane.sh\`\n\n## Ignored runtime state\n\n- \`.agent/current/state.json\`\n- \`.agent/current/startup-brief.json\`\n- \`.agent/current/plan.json\`\n- \`.agent/current/active-slice.json\`\n- \`.agent/current/slice-history.jsonl\`\n- \`.agent/current/stop-check-history.jsonl\`\n- \`.agent/current/verification-evidence.json\`\n- \`.agent/current/*.log\`\n- \`.agent/current/tmp/\`\n\n\`.agent/config/workflow.json\` defines the storage contract: tracked repo policy stays under \`.agent/config/**\`, runtime state lives under \`.agent/current/**\`, archive is disabled, and replacement/cancel/done paths must delete \`.agent/current/\`.\n\n\`.agent/config/profile.json\` carries the stop-wave defaults for this repo, including \`required_stop_judges\` and \`stop_aggregation_policy\`. The packaged default is \`required_stop_judges: 2\` plus \`stop_aggregation_policy: "${DEFAULT_STOP_AGGREGATION_POLICY}"\`. Canonical \`.agent/current/state.json current_stop_wave_id\` carries the current stop-wave epoch so the same HEAD may restart stop evaluation without requiring a synthetic tracked commit.\n\n\`.agent/current/startup-brief.json\` preserves the confirmed \`/cook\` startup intent as canonical intake for re-grounding. It does not replace \`.agent/current/plan.json\` or \`.agent/current/active-slice.json\`, which remain under regrounder authority.\n\n\`.agent/current/verification-evidence.json\` is the durable canonical record of deterministic verification for the selected slice or current HEAD. Recovery, review, audit, and stop-check reminder surfaces consume it instead of temp-only artifacts or conversational summaries when it is populated.\n\nThe source of truth for long-running completion work is canonical tracked \`.agent/config/**\`, ignored \`.agent/current/**\`, and current repo truth.\n\nProject: ${projectName}\n`;
 }
 
 export function buildMission(projectName: string, missionAnchor: string): string {
@@ -421,25 +484,25 @@ function gitHeadSha() {
   return asString(result.stdout);
 }
 
-const profile = readJson('.agent/profile.json');
-const state = readJson('.agent/state.json');
+const profile = readJson('.agent/config/profile.json');
+const state = readJson('.agent/current/state.json');
 const requiredStopJudges = asNumber(profile.required_stop_judges);
 if (!Number.isInteger(requiredStopJudges) || requiredStopJudges < 1) {
-  fail('.agent/profile.json required_stop_judges must be a positive integer before stop verification can run.');
+  fail('.agent/config/profile.json required_stop_judges must be a positive integer before stop verification can run.');
 }
 const stopAggregationPolicy = asString(profile.stop_aggregation_policy);
 if (stopAggregationPolicy !== '${DEFAULT_STOP_AGGREGATION_POLICY}') {
-  fail('.agent/profile.json stop_aggregation_policy must be ${DEFAULT_STOP_AGGREGATION_POLICY} before stop verification can run.');
+  fail('.agent/config/profile.json stop_aggregation_policy must be ${DEFAULT_STOP_AGGREGATION_POLICY} before stop verification can run.');
 }
 
 const currentPhase = asString(state.current_phase) ?? 'unknown';
 const stopWaveActive = currentPhase === 'stop_wave' || currentPhase === 'done';
 const currentStopWaveId = asNumber(state.current_stop_wave_id) ?? 0;
 if (!Number.isInteger(currentStopWaveId) || currentStopWaveId < 0) {
-  fail('.agent/state.json current_stop_wave_id must be a non-negative integer before stop verification can run.');
+  fail('.agent/current/state.json current_stop_wave_id must be a non-negative integer before stop verification can run.');
 }
 const activeStopWaveId = stopWaveActive ? currentStopWaveId || 1 : currentStopWaveId;
-const rawHistory = fs.existsSync('.agent/stop-check-history.jsonl') ? fs.readFileSync('.agent/stop-check-history.jsonl', 'utf8') : '';
+const rawHistory = fs.existsSync('.agent/current/stop-check-history.jsonl') ? fs.readFileSync('.agent/current/stop-check-history.jsonl', 'utf8') : '';
 const seededHeadSha = asString(process.env.COMPLETION_STOP_HEAD);
 if (!seededHeadSha && !stopWaveActive && rawHistory.trim().length === 0) {
   console.log('[completion] current phase ' + currentPhase + ' is not stop_wave/done; current-HEAD stop judgments are not required yet');
@@ -454,10 +517,10 @@ for (const [index, rawLine] of rawHistory.split(/\\r?\\n/).entries()) {
   try {
     parsed = JSON.parse(line);
   } catch (error) {
-    fail('.agent/stop-check-history.jsonl contains invalid JSON at line ' + (index + 1) + ': ' + error.message);
+    fail('.agent/current/stop-check-history.jsonl contains invalid JSON at line ' + (index + 1) + ': ' + error.message);
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    fail('.agent/stop-check-history.jsonl line ' + (index + 1) + ' must be a JSON object judgment record.');
+    fail('.agent/current/stop-check-history.jsonl line ' + (index + 1) + ' must be a JSON object judgment record.');
   }
   if (parsed.type !== 'judgment') continue;
   if (asString(parsed.head_sha) !== headSha) continue;
@@ -716,17 +779,21 @@ async function ensureGitignore(root: string): Promise<boolean> {
 		"# completion protocol",
 		".agent/*",
 		"!.agent/README.md",
-		"!.agent/mission.md",
+		"!.agent/config/",
+		".agent/config/*",
+		"!.agent/config/workflow.json",
+		"!.agent/config/profile.json",
 		"!.agent/profile.json",
 		"!.agent/verify_completion_stop.sh",
 		"!.agent/verify_completion_control_plane.sh",
-		".agent/tmp/",
+		".agent/current/",
 	];
 	const block = blockLines.join("\n");
 	const existing = (await pathExists(gitignorePath)) ? await fsp.readFile(gitignorePath, "utf8") : "";
+	const legacyBlockLines = ["!.agent/mission.md", ".agent/tmp/"];
 	const filteredLines = existing
 		.split(/\r?\n/)
-		.filter((line) => !blockLines.includes(line.trim()));
+		.filter((line) => !blockLines.includes(line.trim()) && !legacyBlockLines.includes(line.trim()));
 	while (filteredLines.length > 0 && filteredLines[filteredLines.length - 1]?.trim() === "") {
 		filteredLines.pop();
 	}
@@ -765,21 +832,32 @@ export async function scaffoldCompletionFiles(
 	const created: string[] = [];
 	const updated: string[] = [];
 	await fsp.mkdir(files.agentDir, { recursive: true });
-	await fsp.mkdir(path.join(files.agentDir, "tmp"), { recursive: true });
+	await fsp.mkdir(files.configDir, { recursive: true });
+	await removeCompletionRuntimeState(files);
+	await fsp.mkdir(files.currentDir, { recursive: true });
+	await fsp.mkdir(files.tmpDir, { recursive: true });
 	const projectName = path.basename(root);
 	const docsSurfaces = await detectDocsSurfaces(root);
 	const verifierCommand = await detectVerifierCommand(root);
 	const requiredStopJudges = DEFAULT_REQUIRED_STOP_JUDGES;
 	const stopAggregationPolicy = DEFAULT_STOP_AGGREGATION_POLICY;
+	const profileRecord = buildProfileRecord({
+		projectName,
+		requiredStopJudges,
+		stopAggregationPolicy,
+		docsSurfaces,
+		taskType: options?.analysis?.taskType,
+		evaluationProfile: options?.analysis?.evaluationProfile,
+	});
 	const trackedFiles: Array<{ path: string; content: string; executable?: boolean }> = [
 		{ path: path.join(files.agentDir, "README.md"), content: buildAgentReadme(projectName) },
-		{ path: path.join(files.agentDir, "mission.md"), content: buildMission(projectName, missionAnchor) },
-		{
-			path: files.profilePath,
-			content: `${JSON.stringify(buildProfileRecord({ projectName, requiredStopJudges, stopAggregationPolicy, docsSurfaces, taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile }), null, 2)}\n`,
-		},
+		{ path: files.workflowPath, content: `${JSON.stringify(buildWorkflowRecord(), null, 2)}\n` },
+		{ path: files.profilePath, content: `${JSON.stringify(profileRecord, null, 2)}\n` },
+		{ path: files.legacyProfileShimPath, content: `${JSON.stringify(profileRecord, null, 2)}\n` },
 		{ path: path.join(files.agentDir, "verify_completion_stop.sh"), content: buildVerifyStopScript(verifierCommand), executable: true },
 		{ path: path.join(files.agentDir, "verify_completion_control_plane.sh"), content: buildVerifyControlPlaneScript(), executable: true },
+	];
+	const runtimeFiles: Array<{ path: string; content: string }> = [
 		{
 			path: files.statePath,
 			content: `${JSON.stringify(defaultState(missionAnchor, { taskType: options?.analysis?.taskType, evaluationProfile: options?.analysis?.evaluationProfile, continuationReason: options?.continuationReason }, options?.advisoryStartupBrief, { requiredStopJudges }), null, 2)}\n`,
@@ -795,9 +873,15 @@ export async function scaffoldCompletionFiles(
 		{ path: files.stopHistoryPath, content: "" },
 	];
 	for (const file of trackedFiles) {
-		if (await pathExists(file.path)) continue;
+		const existed = await pathExists(file.path);
+		await fsp.mkdir(path.dirname(file.path), { recursive: true });
 		await fsp.writeFile(file.path, file.content, "utf8");
 		if (file.executable) await fsp.chmod(file.path, 0o755);
+		(existed ? updated : created).push(path.relative(root, file.path));
+	}
+	for (const file of runtimeFiles) {
+		await fsp.mkdir(path.dirname(file.path), { recursive: true });
+		await fsp.writeFile(file.path, file.content, "utf8");
 		created.push(path.relative(root, file.path));
 	}
 	if (await ensureGitignore(root)) updated.push(".gitignore");

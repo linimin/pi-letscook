@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "protocol_id": "completion",
+  "layout_version": 2,
+  "config_dir": ".agent/config",
+  "runtime_dir": ".agent/current",
+  "runtime_artifacts": [
+    "state.json",
+    "startup-brief.json",
+    "plan.json",
+    "active-slice.json",
+    "slice-history.jsonl",
+    "stop-check-history.jsonl",
+    "verification-evidence.json",
+    "tmp/"
+  ],
+  "cleanup_on": [
+    "replacement",
+    "cancel",
+    "done"
+  ],
+  "archive_policy": "disabled"
+}

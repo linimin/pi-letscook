@@ -2,7 +2,6 @@ import { promises as fsp } from "node:fs";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
-	buildMission,
 	buildProfileRecord,
 	currentEvaluationProfile,
 	currentMissionAnchor,
@@ -15,6 +14,7 @@ import {
 	detectDocsSurfaces,
 	findRepoRoot,
 	loadCompletionSnapshot,
+	removeCompletionRuntimeState,
 	writeJsonFile,
 } from "./state-store";
 import { buildAdvisoryStartupBrief } from "./prompt-surfaces";
@@ -497,14 +497,19 @@ async function refocusCompletionMission(
 		plan_basis: "user_refocus",
 	};
 	const nextActive = defaultActiveSlice(missionAnchor, { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile });
+	await removeCompletionRuntimeState(snapshot.files);
+	await fsp.mkdir(snapshot.files.currentDir, { recursive: true });
+	await fsp.mkdir(snapshot.files.tmpDir, { recursive: true });
 	await Promise.all([
-		fsp.writeFile(path.join(snapshot.files.agentDir, "mission.md"), buildMission(path.basename(root), missionAnchor), "utf8"),
 		writeJsonFile(snapshot.files.profilePath, nextProfile),
+		writeJsonFile(snapshot.files.legacyProfileShimPath, nextProfile),
 		writeJsonFile(snapshot.files.statePath, nextState),
 		writeJsonFile(snapshot.files.startupBriefPath, defaultStartupBrief(missionAnchor, { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile }, advisoryStartupBrief)),
 		writeJsonFile(snapshot.files.planPath, nextPlan),
 		writeJsonFile(snapshot.files.activePath, nextActive),
 		writeJsonFile(snapshot.files.verificationEvidencePath, defaultVerificationEvidence()),
+		fsp.writeFile(snapshot.files.sliceHistoryPath, "", "utf8"),
+		fsp.writeFile(snapshot.files.stopHistoryPath, "", "utf8"),
 	]);
 }
 

@@ -5,7 +5,8 @@ const { spawnSync } = require('node:child_process');
 
 const REQUIRED_TRACKED_CONTRACT_FILES = [
   '.agent/README.md',
-  '.agent/mission.md',
+  '.agent/config/workflow.json',
+  '.agent/config/profile.json',
   '.agent/profile.json',
   '.agent/verify_completion_stop.sh',
   '.agent/verify_completion_control_plane.sh',
@@ -80,20 +81,22 @@ function trackedDiffFiles(fromCommit, toCommit) {
     .filter(Boolean);
 }
 
-const profile = readJson('.agent/profile.json');
-const state = readJson('.agent/state.json');
-const startupBrief = fs.existsSync('.agent/startup-brief.json') ? readJson('.agent/startup-brief.json') : undefined;
-const plan = readJson('.agent/plan.json');
-const active = readJson('.agent/active-slice.json');
-const evidence = readJson('.agent/verification-evidence.json');
+const workflow = readJson('.agent/config/workflow.json');
+const profile = readJson('.agent/config/profile.json');
+const profileShim = readJson('.agent/profile.json');
+const state = readJson('.agent/current/state.json');
+const startupBrief = fs.existsSync('.agent/current/startup-brief.json') ? readJson('.agent/current/startup-brief.json') : undefined;
+const plan = readJson('.agent/current/plan.json');
+const active = readJson('.agent/current/active-slice.json');
+const evidence = readJson('.agent/current/verification-evidence.json');
 
 ensureTrackedContractFiles();
 
 for (const [file, record] of [
-  ['.agent/profile.json', profile],
-  ['.agent/state.json', state],
-  ['.agent/plan.json', plan],
-  ['.agent/active-slice.json', active],
+  ['.agent/config/profile.json', profile],
+  ['.agent/current/state.json', state],
+  ['.agent/current/plan.json', plan],
+  ['.agent/current/active-slice.json', active],
 ]) {
   if (!asString(record.task_type)) fail(file + ' is missing task_type');
   if (!asString(record.evaluation_profile)) fail(file + ' is missing evaluation_profile');
@@ -103,49 +106,57 @@ const taskType = asString(profile.task_type);
 const evaluationProfile = asString(profile.evaluation_profile);
 const requiredStopJudges = asNumber(profile.required_stop_judges);
 const stopAggregationPolicy = asString(profile.stop_aggregation_policy);
+if (asString(workflow.protocol_id) !== 'completion') fail('.agent/config/workflow.json protocol_id must be completion');
+if (asString(workflow.runtime_dir) !== '.agent/current') fail('.agent/config/workflow.json runtime_dir must be .agent/current');
+if (asString(workflow.config_dir) !== '.agent/config') fail('.agent/config/workflow.json config_dir must be .agent/config');
+if (asString(workflow.archive_policy) != 'disabled') fail('.agent/config/workflow.json archive_policy must be disabled');
 if (!Number.isInteger(requiredStopJudges) || requiredStopJudges < 1) {
-  fail('.agent/profile.json required_stop_judges must be a positive integer');
+  fail('.agent/config/profile.json required_stop_judges must be a positive integer');
 }
 if (stopAggregationPolicy !== 'unanimous-current-head-v1') {
-  fail('.agent/profile.json stop_aggregation_policy must be unanimous-current-head-v1');
+  fail('.agent/config/profile.json stop_aggregation_policy must be unanimous-current-head-v1');
 }
-if (asString(state.task_type) !== taskType) fail('.agent/state.json task_type must match .agent/profile.json task_type');
-if (asString(plan.task_type) !== taskType) fail('.agent/plan.json task_type must match .agent/profile.json task_type');
-if (asString(active.task_type) !== taskType) fail('.agent/active-slice.json task_type must match .agent/profile.json task_type');
-if (asString(state.evaluation_profile) !== evaluationProfile) fail('.agent/state.json evaluation_profile must match .agent/profile.json evaluation_profile');
-if (asString(plan.evaluation_profile) !== evaluationProfile) fail('.agent/plan.json evaluation_profile must match .agent/profile.json evaluation_profile');
-if (asString(active.evaluation_profile) !== evaluationProfile) fail('.agent/active-slice.json evaluation_profile must match .agent/profile.json evaluation_profile');
+if (JSON.stringify(profileShim) !== JSON.stringify(profile)) fail('.agent/profile.json must stay an exact temporary compatibility shim for .agent/config/profile.json');
+if (asString(state.task_type) !== taskType) fail('.agent/current/state.json task_type must match .agent/config/profile.json task_type');
+if (asString(plan.task_type) !== taskType) fail('.agent/current/plan.json task_type must match .agent/config/profile.json task_type');
+if (asString(active.task_type) !== taskType) fail('.agent/current/active-slice.json task_type must match .agent/config/profile.json task_type');
+if (asString(state.evaluation_profile) !== evaluationProfile) fail('.agent/current/state.json evaluation_profile must match .agent/config/profile.json evaluation_profile');
+if (asString(plan.evaluation_profile) !== evaluationProfile) fail('.agent/current/plan.json evaluation_profile must match .agent/config/profile.json evaluation_profile');
+if (asString(active.evaluation_profile) !== evaluationProfile) fail('.agent/current/active-slice.json evaluation_profile must match .agent/config/profile.json evaluation_profile');
 const remainingStopJudges = asNumber(state.remaining_stop_judges);
-if (remainingStopJudges === undefined) fail('.agent/state.json remaining_stop_judges must be numeric');
-if (remainingStopJudges < 0) fail('.agent/state.json remaining_stop_judges must not be negative');
+if (remainingStopJudges === undefined) fail('.agent/current/state.json remaining_stop_judges must be numeric');
+if (remainingStopJudges < 0) fail('.agent/current/state.json remaining_stop_judges must not be negative');
 const currentStopWaveId = asNumber(state.current_stop_wave_id);
 if (currentStopWaveId !== undefined) {
   if (!Number.isInteger(currentStopWaveId) || currentStopWaveId < 0) {
-    fail('.agent/state.json current_stop_wave_id must be a non-negative integer');
+    fail('.agent/current/state.json current_stop_wave_id must be a non-negative integer');
   }
 }
 
 if (asString(evidence.artifact_type) !== 'completion-verification-evidence') {
-  fail('.agent/verification-evidence.json artifact_type must be completion-verification-evidence');
+  fail('.agent/current/verification-evidence.json artifact_type must be completion-verification-evidence');
 }
 
 const workflowEntryStatus = asString(state.workflow_entry_status);
 if (workflowEntryStatus === 'active' || startupBrief) {
-  if (!startupBrief) fail('.agent/startup-brief.json must exist when workflow entry is active');
+  if (!startupBrief) fail('.agent/current/startup-brief.json must exist when workflow entry is active');
   if (asString(startupBrief.artifact_type) !== 'completion-startup-brief') {
-    fail('.agent/startup-brief.json artifact_type must be completion-startup-brief');
+    fail('.agent/current/startup-brief.json artifact_type must be completion-startup-brief');
   }
   if (!asString(state.workflow_session_id)) {
-    fail('.agent/state.json workflow_session_id must be present when workflow entry is active');
+    fail('.agent/current/state.json workflow_session_id must be present when workflow entry is active');
+  }
+  if (asString(state.startup_brief_path) !== '.agent/current/startup-brief.json') {
+    fail('.agent/current/state.json startup_brief_path must point to .agent/current/startup-brief.json');
   }
   if (asString(startupBrief.mission) !== asString(state.mission_anchor)) {
-    fail('.agent/startup-brief.json mission must match .agent/state.json mission_anchor');
+    fail('.agent/current/startup-brief.json mission must match .agent/current/state.json mission_anchor');
   }
   if (asString(startupBrief.task_type) !== taskType) {
-    fail('.agent/startup-brief.json task_type must match .agent/profile.json task_type');
+    fail('.agent/current/startup-brief.json task_type must match .agent/config/profile.json task_type');
   }
   if (asString(startupBrief.evaluation_profile) !== evaluationProfile) {
-    fail('.agent/startup-brief.json evaluation_profile must match .agent/profile.json evaluation_profile');
+    fail('.agent/current/startup-brief.json evaluation_profile must match .agent/config/profile.json evaluation_profile');
   }
 }
 
@@ -157,21 +168,21 @@ const activeSliceId = asString(active.slice_id);
 const planSlice = activeSliceId ? planSlices.find((slice) => asString(slice && slice.slice_id) === activeSliceId) : undefined;
 
 if (exactHandoff && !planSlice) {
-  fail('slice_id must match a slice in .agent/plan.json when status carries an exact handoff');
+  fail('slice_id must match a slice in .agent/current/plan.json when status carries an exact handoff');
 }
 
 if (exactHandoff) {
   const requiredStringFields = ['goal', 'why_now', 'basis_commit'];
   for (const field of requiredStringFields) {
-    if (!asString(active[field])) fail('.agent/active-slice.json is missing ' + field + ' when status carries an exact handoff');
+    if (!asString(active[field])) fail('.agent/current/active-slice.json is missing ' + field + ' when status carries an exact handoff');
   }
   const requiredArrayFields = ['contract_ids', 'acceptance_criteria', 'blocked_on', 'locked_notes', 'must_fix_findings', 'implementation_surfaces', 'verification_commands', 'remaining_contract_ids_before'];
   for (const field of requiredArrayFields) {
-    if (!Array.isArray(active[field])) fail('.agent/active-slice.json is missing ' + field + ' when status carries an exact handoff');
+    if (!Array.isArray(active[field])) fail('.agent/current/active-slice.json is missing ' + field + ' when status carries an exact handoff');
   }
   const requiredNumberFields = ['priority', 'release_blocker_count_before', 'high_value_gap_count_before'];
   for (const field of requiredNumberFields) {
-    if (asNumber(active[field]) === undefined) fail('.agent/active-slice.json is missing ' + field + ' when status carries an exact handoff');
+    if (asNumber(active[field]) === undefined) fail('.agent/current/active-slice.json is missing ' + field + ' when status carries an exact handoff');
   }
 
   const mismatchFields = [];
@@ -197,45 +208,45 @@ if (exactHandoff) {
     if (asString(planValue) !== asString(activeValue)) mismatchFields.push(field);
   }
   if (mismatchFields.length > 0) {
-    fail('.agent/active-slice.json must match the selected .agent/plan.json slice across: ' + mismatchFields.join(', '));
+    fail('.agent/current/active-slice.json must match the selected .agent/current/plan.json slice across: ' + mismatchFields.join(', '));
   }
 
   if (asString(evidence.subject_type) !== 'selected_slice') {
     fail('subject_type must be selected_slice when active slice exact handoff requires verification evidence');
   }
-  if (asString(evidence.slice_id) !== activeSliceId) fail('.agent/verification-evidence.json slice_id must match .agent/active-slice.json slice_id');
-  if (asString(evidence.goal) !== asString(active.goal)) fail('.agent/verification-evidence.json goal must match .agent/active-slice.json goal');
-  if (!sameStringArrays(asStringArray(evidence.contract_ids), asStringArray(active.contract_ids))) fail('.agent/verification-evidence.json contract_ids must match .agent/active-slice.json contract_ids');
-  if (asString(evidence.basis_commit) !== asString(active.basis_commit)) fail('.agent/verification-evidence.json basis_commit must match .agent/active-slice.json basis_commit');
+  if (asString(evidence.slice_id) !== activeSliceId) fail('.agent/current/verification-evidence.json slice_id must match .agent/current/active-slice.json slice_id');
+  if (asString(evidence.goal) !== asString(active.goal)) fail('.agent/current/verification-evidence.json goal must match .agent/current/active-slice.json goal');
+  if (!sameStringArrays(asStringArray(evidence.contract_ids), asStringArray(active.contract_ids))) fail('.agent/current/verification-evidence.json contract_ids must match .agent/current/active-slice.json contract_ids');
+  if (asString(evidence.basis_commit) !== asString(active.basis_commit)) fail('.agent/current/verification-evidence.json basis_commit must match .agent/current/active-slice.json basis_commit');
   if (!sameStringArrays(asStringArray(evidence.verification_commands), asStringArray(active.verification_commands))) {
-    fail('.agent/verification-evidence.json verification_commands must match .agent/active-slice.json verification_commands');
+    fail('.agent/current/verification-evidence.json verification_commands must match .agent/current/active-slice.json verification_commands');
   }
-  if (!asString(evidence.recorded_at)) fail('.agent/verification-evidence.json recorded_at must be present for selected-slice evidence');
-  if (asString(evidence.outcome) === 'not_recorded') fail('.agent/verification-evidence.json outcome must not be not_recorded for selected-slice evidence');
+  if (!asString(evidence.recorded_at)) fail('.agent/current/verification-evidence.json recorded_at must be present for selected-slice evidence');
+  if (asString(evidence.outcome) === 'not_recorded') fail('.agent/current/verification-evidence.json outcome must not be not_recorded for selected-slice evidence');
   const headSha = gitHeadSha();
   if (headSha && asString(evidence.head_sha) !== headSha) {
-    fail('.agent/verification-evidence.json head_sha must match current HEAD');
+    fail('.agent/current/verification-evidence.json head_sha must match current HEAD');
   }
 
   const basisCommit = asString(active.basis_commit);
   if (basisCommit && headSha) {
-    ensureCommitExists(basisCommit, '.agent/active-slice.json basis_commit');
+    ensureCommitExists(basisCommit, '.agent/current/active-slice.json basis_commit');
     const ancestorCheck = runGit(['merge-base', '--is-ancestor', basisCommit, headSha], { allowFailure: true });
     if (ancestorCheck.status !== 0) {
-      fail(`.agent/active-slice.json basis_commit must be an ancestor of current HEAD: ${basisCommit} -> ${headSha}`);
+      fail(`.agent/current/active-slice.json basis_commit must be an ancestor of current HEAD: ${basisCommit} -> ${headSha}`);
     }
     const changedFiles = trackedDiffFiles(basisCommit, headSha);
     const implementationSurfaces = new Set(asStringArray(active.implementation_surfaces));
     const missingSurfaces = changedFiles.filter((file) => !implementationSurfaces.has(file));
     if (missingSurfaces.length > 0) {
-      fail('.agent/active-slice.json implementation_surfaces must cover every tracked file changed from basis_commit to current HEAD; missing: ' + missingSurfaces.join(', '));
+      fail('.agent/current/active-slice.json implementation_surfaces must cover every tracked file changed from basis_commit to current HEAD; missing: ' + missingSurfaces.join(', '));
     }
   }
 } else {
   const subjectType = asString(evidence.subject_type);
   if (subjectType === 'none') {
     if (asString(evidence.outcome) && asString(evidence.outcome) !== 'not_recorded') {
-      fail('.agent/verification-evidence.json outcome must stay not_recorded when subject_type=none');
+      fail('.agent/current/verification-evidence.json outcome must stay not_recorded when subject_type=none');
     }
   }
 }

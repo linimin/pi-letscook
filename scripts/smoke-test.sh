@@ -172,11 +172,11 @@ assert proposal['mission'] == 'Exercise smoke-test bootstrap from inline /cook p
 assert 'Initialized completion control plane in' in output, 'startup /cook inline prompt should initialize the control plane'
 PY
 
-for file in .agent/profile.json .agent/state.json .agent/startup-brief.json .agent/plan.json .agent/active-slice.json .agent/verification-evidence.json; do
+for file in .agent/config/workflow.json .agent/config/profile.json .agent/current/state.json .agent/current/startup-brief.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
   [[ -f "$file" ]] || { echo "missing canonical bootstrap file: $file" >&2; exit 1; }
 done
 
-git ls-files --error-unmatch .agent/README.md .agent/mission.md .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null
+git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null
 bash .agent/verify_completion_control_plane.sh >/dev/null
 bash .agent/verify_completion_stop.sh >/dev/null
 
@@ -188,14 +188,19 @@ from pathlib import Path
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 
-profile = json.loads(Path('.agent/profile.json').read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
-startup_brief = json.loads(Path('.agent/startup-brief.json').read_text())
-evidence = json.loads(Path('.agent/verification-evidence.json').read_text())
+workflow = json.loads(Path('.agent/config/workflow.json').read_text())
+profile = json.loads(Path('.agent/config/profile.json').read_text())
+profile_shim = json.loads(Path('.agent/profile.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
+startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
+evidence = json.loads(Path('.agent/current/verification-evidence.json').read_text())
 kickoff = Path(sys.argv[1]).read_text()
 
+assert workflow['runtime_dir'] == '.agent/current', 'workflow.json should direct runtime state to .agent/current after bootstrap'
+assert workflow['archive_policy'] == 'disabled', 'workflow.json should keep archive disabled after bootstrap'
+assert profile_shim == profile, 'root profile shim should mirror .agent/config/profile.json after bootstrap'
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after bootstrap'
 assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after bootstrap'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after bootstrap'
@@ -208,7 +213,7 @@ assert active['implementation_surfaces'] == [], 'active-slice.json should scaffo
 assert active['verification_commands'] == [], 'active-slice.json should scaffold empty verification_commands'
 assert state['workflow_entry_status'] == 'active', 'state.json should mark workflow entry active after /cook Start'
 assert state['workflow_entry_source'] == '/cook', 'state.json should record /cook as workflow entry source'
-assert state['startup_brief_path'] == '.agent/startup-brief.json', 'state.json should point to startup-brief.json'
+assert state['startup_brief_path'] == '.agent/current/startup-brief.json', 'state.json should point to startup-brief.json'
 assert isinstance(state['workflow_session_id'], str) and state['workflow_session_id'], 'state.json should record a workflow session id'
 brief = state['advisory_startup_brief']
 assert brief['kind'] == 'startup_brief', 'state.json should preserve the confirmed startup brief as advisory intake'
@@ -289,7 +294,7 @@ expected_eval_profile = 'completion-rubric-v1'
 resume_path = Path(sys.argv[1])
 routing = json.loads(Path(sys.argv[2]).read_text())
 chooser_path = Path(sys.argv[3])
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 
 resume = resume_path.read_text()
 assert 'Canonical routing profile:' in resume, 'resume prompt should expose canonical routing profile'
@@ -317,7 +322,7 @@ expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 auto_resume = Path(sys.argv[1]).read_text()
 
-state = __import__('json').loads(Path('.agent/state.json').read_text())
+state = __import__('json').loads(Path('.agent/current/state.json').read_text())
 assert 'Resume the completion workflow from canonical state.' in auto_resume, 'auto-resume prompt should use the canonical resume workflow prompt'
 assert 'Canonical routing profile:' in auto_resume, 'auto-resume prompt should expose canonical routing profile'
 assert f'- task_type: {expected_task_type}' in auto_resume, 'auto-resume prompt missing canonical task_type'
@@ -328,7 +333,7 @@ PY
 python3 - <<'PY'
 import json
 from pathlib import Path
-path = Path('.agent/state.json')
+path = Path('.agent/current/state.json')
 state = json.loads(path.read_text())
 state.pop('task_type', None)
 path.write_text(json.dumps(state, indent=2) + '\n')
@@ -342,8 +347,8 @@ fi
 python3 - <<'PY'
 import json
 from pathlib import Path
-profile = json.loads(Path('.agent/profile.json').read_text())
-state_path = Path('.agent/state.json')
+profile = json.loads(Path('.agent/config/profile.json').read_text())
+state_path = Path('.agent/current/state.json')
 state = json.loads(state_path.read_text())
 state['task_type'] = profile['task_type']
 state_path.write_text(json.dumps(state, indent=2) + '\n')
@@ -352,7 +357,7 @@ PY
 python3 - <<'PY'
 import json
 from pathlib import Path
-path = Path('.agent/active-slice.json')
+path = Path('.agent/current/active-slice.json')
 active = json.loads(path.read_text())
 active.pop('evaluation_profile', None)
 path.write_text(json.dumps(active, indent=2) + '\n')
@@ -366,8 +371,8 @@ fi
 python3 - <<'PY'
 import json
 from pathlib import Path
-profile = json.loads(Path('.agent/profile.json').read_text())
-active_path = Path('.agent/active-slice.json')
+profile = json.loads(Path('.agent/config/profile.json').read_text())
+active_path = Path('.agent/current/active-slice.json')
 active = json.loads(active_path.read_text())
 active['evaluation_profile'] = profile['evaluation_profile']
 active_path.write_text(json.dumps(active, indent=2) + '\n')
@@ -383,7 +388,7 @@ python3 - <<'PY'
 import json
 import subprocess
 from pathlib import Path
-path = Path('.agent/active-slice.json')
+path = Path('.agent/current/active-slice.json')
 active = json.loads(path.read_text())
 head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
 active.update({
@@ -410,8 +415,8 @@ PY
 python3 - <<'PY'
 import json
 from pathlib import Path
-active = json.loads(Path('.agent/active-slice.json').read_text())
-plan_path = Path('.agent/plan.json')
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
+plan_path = Path('.agent/current/plan.json')
 plan = json.loads(plan_path.read_text())
 plan['candidate_slices'] = [{
     'slice_id': active['slice_id'],
@@ -439,7 +444,7 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 
-active = json.loads(Path('.agent/active-slice.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 evidence = {
     'schema_version': 1,
     'artifact_type': 'completion-verification-evidence',
@@ -454,7 +459,7 @@ evidence = {
     'recorded_at': '2026-05-03T00:00:00Z',
     'summary': 'Smoke selected-slice evidence matches the temporary active-slice fixture.',
 }
-Path('.agent/verification-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+Path('.agent/current/verification-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
 PY
 
 if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
@@ -465,7 +470,7 @@ fi
 python3 - <<'PY'
 import json
 from pathlib import Path
-path = Path('.agent/active-slice.json')
+path = Path('.agent/current/active-slice.json')
 active = json.loads(path.read_text())
 active['priority'] = 1
 active['why_now'] = 'smoke test exact handoff'
@@ -475,7 +480,7 @@ PY
 python3 - <<'PY'
 import json
 from pathlib import Path
-path = Path('.agent/active-slice.json')
+path = Path('.agent/current/active-slice.json')
 active = json.loads(path.read_text())
 active.pop('implementation_surfaces', None)
 active.pop('verification_commands', None)
@@ -490,7 +495,7 @@ fi
 python3 - <<'PY'
 import json
 from pathlib import Path
-path = Path('.agent/active-slice.json')
+path = Path('.agent/current/active-slice.json')
 active = json.loads(path.read_text())
 active['implementation_surfaces'] = ['extensions/completion/index.ts', '.agent/verify_completion_control_plane.sh']
 active['verification_commands'] = ['bash .agent/verify_completion_control_plane.sh', 'npm run smoke-test']

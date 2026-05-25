@@ -47,7 +47,7 @@ elif mode == 'live':
     assert data['activeRole'] == 'completion-implementer', data
     assert data['livePreview'] == 'Loading canonical completion state', data
     assert data['liveState'] == 'active', data
-    assert data['liveToolActivity'] == 'read .agent/state.json', data
+    assert data['liveToolActivity'] == 'read .agent/current/state.json', data
     assert data['liveAssistantSummary'] == 'Loading canonical completion state', data
     assert data['liveProgress'] == 'Loading canonical completion state', data
     assert data['liveRationale'] == 'verifying selected slice handoff', data
@@ -64,7 +64,7 @@ elif mode == 'live':
     assert widget == [], widget
     live_details = data['liveDetailsLines']
     assert live_details[0] == 'running completion role completion-implementer', live_details
-    assert 'tool: read .agent/state.json' in live_details, live_details
+    assert 'tool: read .agent/current/state.json' in live_details, live_details
 elif mode == 'waiting':
     assert data['liveState'] == 'waiting', data
     assert data['liveIdleMs'] == 20000, data
@@ -93,11 +93,33 @@ pi -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-status-none.out" 2>"$TMPDIR
 assert_status_json "$NO_SNAPSHOT_JSON" none
 
 FIXTURE_ROOT="$TMPDIR/fixture"
-mkdir -p "$FIXTURE_ROOT/.agent"
+mkdir -p "$FIXTURE_ROOT/.agent/config" "$FIXTURE_ROOT/.agent/current"
 cd "$FIXTURE_ROOT"
 git init -q
 
-cat > .agent/profile.json <<'JSON'
+cat > .agent/config/workflow.json <<'JSON'
+{
+  "schema_version": 1,
+  "protocol_id": "completion",
+  "layout_version": 2,
+  "config_dir": ".agent/config",
+  "runtime_dir": ".agent/current",
+  "runtime_artifacts": [
+    "state.json",
+    "startup-brief.json",
+    "plan.json",
+    "active-slice.json",
+    "slice-history.jsonl",
+    "stop-check-history.jsonl",
+    "verification-evidence.json",
+    "tmp/"
+  ],
+  "cleanup_on": ["replacement", "cancel", "done"],
+  "archive_policy": "disabled"
+}
+JSON
+
+cat > .agent/config/profile.json <<'JSON'
 {
   "schema_version": 1,
   "protocol_id": "completion",
@@ -105,14 +127,18 @@ cat > .agent/profile.json <<'JSON'
   "required_stop_judges": 2,
   "stop_aggregation_policy": "unanimous-current-head-v1",
   "priority_policy_id": "completion-default",
+  "task_type": "completion-workflow",
+  "evaluation_profile": "completion-rubric-v1",
   "docs_surfaces": ["README.md"]
 }
 JSON
 
-cat > .agent/state.json <<'JSON'
+cat > .agent/current/state.json <<'JSON'
 {
   "schema_version": 1,
   "mission_anchor": "Verify persistent completion observability status surfaces.",
+  "task_type": "completion-workflow",
+  "evaluation_profile": "completion-rubric-v1",
   "current_phase": "implement",
   "continuation_policy": "continue",
   "continuation_reason": "Status surface regression fixture.",
@@ -134,10 +160,12 @@ cat > .agent/state.json <<'JSON'
 }
 JSON
 
-cat > .agent/plan.json <<'JSON'
+cat > .agent/current/plan.json <<'JSON'
 {
   "schema_version": 1,
   "mission_anchor": "Verify persistent completion observability status surfaces.",
+  "task_type": "completion-workflow",
+  "evaluation_profile": "completion-rubric-v1",
   "last_reground_at": "2026-04-30T00:00:00Z",
   "plan_basis": "observability_status_fixture",
   "candidate_slices": [
@@ -159,10 +187,12 @@ cat > .agent/plan.json <<'JSON'
 }
 JSON
 
-cat > .agent/active-slice.json <<'JSON'
+cat > .agent/current/active-slice.json <<'JSON'
 {
   "schema_version": 1,
   "mission_anchor": "Verify persistent completion observability status surfaces.",
+  "task_type": "completion-workflow",
+  "evaluation_profile": "completion-rubric-v1",
   "status": "selected",
   "slice_id": "fixture-status-surface",
   "goal": "Render the remaining completion widget surface from canonical state.",
@@ -183,6 +213,29 @@ cat > .agent/active-slice.json <<'JSON'
 }
 JSON
 
+cat > .agent/current/startup-brief.json <<'JSON'
+{
+  "schema_version": 1,
+  "artifact_type": "completion-startup-brief",
+  "mission": "Verify persistent completion observability status surfaces.",
+  "task_type": "completion-workflow",
+  "evaluation_profile": "completion-rubric-v1"
+}
+JSON
+
+cat > .agent/current/verification-evidence.json <<'JSON'
+{
+  "schema_version": 1,
+  "artifact_type": "completion-verification-evidence",
+  "subject_type": "none",
+  "outcome": "not_recorded",
+  "verification_commands": []
+}
+JSON
+
+: > .agent/current/slice-history.jsonl
+: > .agent/current/stop-check-history.jsonl
+
 STATIC_JSON="$TMPDIR/static-status.json"
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 PI_COMPLETION_STATUS_SNAPSHOT_FILE="$STATIC_JSON" \
@@ -197,7 +250,7 @@ LIVE_ROLE_EVENT_STREAM_JSON="$(cat <<'JSON'
     {
       "type": "tool_execution_start",
       "toolName": "read",
-      "args": {"path": ".agent/state.json"},
+      "args": {"path": ".agent/current/state.json"},
       "at": 2000
     },
     {

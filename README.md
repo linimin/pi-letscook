@@ -124,7 +124,7 @@ Start a new workflow directly from explicit inline startup intent:
 
 When you accept startup or refocus, `/cook` persists the chosen workflow state in canonical `.agent/**` files before the re-ground round begins.
 
-The confirmed startup brief is also preserved there in `.agent/startup-brief.json` as canonical intake for later re-grounding. It does not replace `.agent/plan.json` or `.agent/active-slice.json`, which remain under regrounder authority.
+The confirmed startup brief is also preserved there in `.agent/current/startup-brief.json` as canonical intake for later re-grounding. It does not replace `.agent/current/plan.json` or `.agent/current/active-slice.json`, which remain under regrounder authority.
 
 The pre-`/cook` handoff capsule itself is not canonical workflow state. It is only startup intake for `/cook`.
 
@@ -176,7 +176,7 @@ The packaged control plane now also carries canonical routing signals:
 - `task_type: completion-workflow`
 - `evaluation_profile: completion-rubric-v1`
 
-Those identifiers are persisted in `.agent/profile.json`, `.agent/state.json`, `.agent/plan.json`, and `.agent/active-slice.json`, then surfaced in kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.
+Those identifiers are persisted in tracked `.agent/config/profile.json` plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`, then surfaced in kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.
 
 The active-slice exact implementer handoff is now the canonical implementation contract for selected, in-progress, committed, and done slices. In addition to the locked slice goal, acceptance criteria, contract IDs, blocked-on list, `priority`, and `why_now`, the v2 contract requires:
 
@@ -190,7 +190,7 @@ The selected plan slice must mirror that exact contract across goal, contract ID
 
 Reviewer, auditor, and stop-judge dispatch/reminder surfaces now also thread the current active-slice implementation contract (`implementation_surfaces`, `verification_commands`, locked notes, must-fix findings, `basis_commit`, and before-slice counters) alongside the canonical `evaluation_profile` so those read-only roles can reason from canonical state after compaction.
 
-Deterministic verification now also persists a durable canonical artifact in `.agent/verification-evidence.json`. Fresh scaffolds create an idle placeholder, implementers update it for the selected slice or current HEAD, reminder/recovery/evaluation surfaces thread its path and summary, and `.agent/verify_completion_control_plane.sh`, `bash scripts/canonical-evidence-artifact-test.sh`, `npm run release-check`, and `bash .agent/verify_completion_stop.sh` fail closed when that artifact is missing, stale, or out of parity with the selected slice or current HEAD.
+Deterministic verification now also persists a durable canonical artifact in `.agent/current/verification-evidence.json`. Fresh scaffolds create an idle placeholder, implementers update it for the selected slice or current HEAD, reminder/recovery/evaluation surfaces thread its path and summary, and `.agent/verify_completion_control_plane.sh`, `bash scripts/canonical-evidence-artifact-test.sh`, `npm run release-check`, and `bash .agent/verify_completion_stop.sh` fail closed when that artifact is missing, stale, or out of parity with the selected slice or current HEAD.
 
 Canonical reviewer/auditor/stop-judge transcription now fails closed on malformed rubric-bearing reports: the shared rubric heading plus all four rubric dimensions must be present, required role fields must remain intact, and reviewer/stop-judge yes/no verdicts cannot contradict rubric `fail` lines.
 
@@ -200,7 +200,7 @@ Deterministic active-slice contract regression now lives in `bash scripts/active
 
 Deterministic verification for this packaged contract also lives in `npm run rubric-contract-test`, which now exercises reviewer, auditor, and stop-judge transcription paths while the bootstrap/refocus/context regressions plus control-plane verifier fail closed when required canonical signaling is missing.
 
-Active `/cook` workflows now also auto-reconcile routine unrelated tracked worktree dirt instead of bouncing that decision back to the user. When the dirty tracked files are outside the latest slice or current reconciliation surfaces and can be isolated safely, the workflow should preserve them with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory step on a clean worktree, and restore them before handing control back. Only overlapping changes, ownership ambiguity, or stash/restore conflicts should force a user-facing decision.
+Active `/cook` workflows now also auto-reconcile routine unrelated tracked worktree dirt instead of bouncing that decision back to the user. When the dirty tracked files are outside the latest slice or current reconciliation surfaces and can be isolated safely, the workflow should preserve them with a reversible mechanism such as a named git stash plus a `.agent/current/tmp/dirty-worktree-autostash.json` note, continue the mandatory step on a clean worktree, and restore them before handing control back. Only overlapping changes, ownership ambiguity, or stash/restore conflicts should force a user-facing decision.
 
 ## Canonical files
 
@@ -209,18 +209,21 @@ This package stores canonical workflow state under:
 ```text
 .agent/
   README.md
-  mission.md
-  profile.json
+  config/
+    workflow.json
+    profile.json
+  profile.json            # temporary compatibility shim for the current workflow round
   verify_completion_stop.sh
   verify_completion_control_plane.sh
-  state.json
-  startup-brief.json
-  plan.json
-  active-slice.json
-  slice-history.jsonl
-  stop-check-history.jsonl
-  verification-evidence.json
-  tmp/
+  current/
+    state.json
+    startup-brief.json
+    plan.json
+    active-slice.json
+    slice-history.jsonl
+    stop-check-history.jsonl
+    verification-evidence.json
+    tmp/
 ```
 
 Canonical truth is the combination of:
@@ -233,28 +236,29 @@ Canonical truth is the combination of:
 Tracked repo-contract files:
 
 - `.agent/README.md`
-- `.agent/mission.md`
-- `.agent/profile.json`
+- `.agent/config/workflow.json`
+- `.agent/config/profile.json`
+- `.agent/profile.json` *(temporary compatibility shim for the current workflow round)*
 - `.agent/verify_completion_stop.sh`
 - `.agent/verify_completion_control_plane.sh`
 
 Ignored execution-state files:
 
-- `.agent/state.json`
-- `.agent/startup-brief.json`
-- `.agent/plan.json`
-- `.agent/active-slice.json`
-- `.agent/slice-history.jsonl`
-- `.agent/stop-check-history.jsonl`
-- `state.json current_stop_wave_id` defines the current stop-wave epoch so the same HEAD can restart stop evaluation without requiring a synthetic tracked commit.
-- `.agent/verification-evidence.json`
-- `.agent/*.log`
-- `.agent/tmp/`
+- `.agent/current/state.json`
+- `.agent/current/startup-brief.json`
+- `.agent/current/plan.json`
+- `.agent/current/active-slice.json`
+- `.agent/current/slice-history.jsonl`
+- `.agent/current/stop-check-history.jsonl`
+- `state.json current_stop_wave_id` in `.agent/current/state.json` defines the current stop-wave epoch so the same HEAD can restart stop evaluation without requiring a synthetic tracked commit.
+- `.agent/current/verification-evidence.json`
+- `.agent/current/*.log`
+- `.agent/current/tmp/`
 
 In short:
 
-- tracked `.agent` files define the repo-level workflow contract
-- ignored `.agent` files are the local control-plane state for the current run
+- tracked `.agent/config/**` files define the repo-level workflow contract
+- ignored `.agent/current/**` files are the local control-plane state for the current run
 
 ## Package layout
 
@@ -278,7 +282,7 @@ npm run rubric-contract-test
 npm run release-check
 ```
 
-`npm run release-check` is the broad packaged-release verifier. It begins with `bash .agent/verify_completion_control_plane.sh`, so missing or stale `.agent/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped `/cook` public parity surfaces in `README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
+`npm run release-check` is the broad packaged-release verifier. It begins with `bash .agent/verify_completion_control_plane.sh`, so missing or stale `.agent/current/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped `/cook` public parity surfaces in `README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
 
 The direct package-root verifier commands above intentionally self-isolate the repo-local extension when they shell back into `pi`, so you should not need to wrap them with `pi --no-extensions` even if `@linimin/pi-letscook` is also installed globally on the same machine.
 

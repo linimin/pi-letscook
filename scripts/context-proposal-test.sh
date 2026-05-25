@@ -95,9 +95,9 @@ mark_done() {
 import json
 from pathlib import Path
 
-state_path = Path('.agent/state.json')
-plan_path = Path('.agent/plan.json')
-active_path = Path('.agent/active-slice.json')
+state_path = Path('.agent/current/state.json')
+plan_path = Path('.agent/current/plan.json')
+active_path = Path('.agent/current/active-slice.json')
 
 state = json.loads(state_path.read_text())
 state.update({
@@ -206,7 +206,7 @@ snapshot = Path(sys.argv[3])
 assert Path('.agent').exists(), 'primary-agent handoff generation should scaffold canonical state in the same /cook entry'
 assert snapshot.exists(), 'primary-agent handoff generation should emit a startup proposal snapshot'
 proposal = json.loads(snapshot.read_text())
-brief = json.loads(Path('.agent/state.json').read_text())['advisory_startup_brief']
+brief = json.loads(Path('.agent/current/state.json').read_text())['advisory_startup_brief']
 assert proposal['source'] == 'handoff_capsule', 'generated primary-agent handoff should be consumed as handoff capsule startup source'
 assert brief['source'] == 'primary_agent_handoff', 'generated primary-agent handoff should record primary_agent_handoff advisory intake'
 assert 'Initialized completion control plane' in output, 'same-entry primary-agent handoff generation should initialize canonical workflow state'
@@ -350,14 +350,15 @@ from pathlib import Path
 mission = 'Remove the completion status line while keeping the completion widget.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
-mission_text = Path('.agent/mission.md').read_text()
-profile = json.loads(Path('.agent/profile.json').read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+workflow = json.loads(Path('.agent/config/workflow.json').read_text())
+profile = json.loads(Path('.agent/config/profile.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 proposal = json.loads(Path(sys.argv[1]).read_text())
 
-assert mission in mission_text, '.agent/mission.md did not record the explicit-handoff mission anchor'
+assert workflow['runtime_dir'] == '.agent/current', 'workflow.json should point runtime state at .agent/current'
+assert workflow['archive_policy'] == 'disabled', 'workflow.json should keep archive disabled after explicit-handoff bootstrap'
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after explicit-handoff bootstrap'
 assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after explicit-handoff bootstrap'
 assert profile['required_stop_judges'] == 2, 'profile.json required_stop_judges mismatch after explicit-handoff bootstrap'
@@ -424,9 +425,9 @@ routing = json.loads(Path(sys.argv[1]).read_text())
 resume = Path(sys.argv[2]).read_text()
 chooser_path = Path(sys.argv[3])
 proposal_path = Path(sys.argv[4])
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert routing['mode'] == 'bare', 'active bare /cook resume regression should snapshot bare routing mode'
 assert 'explicitGoal' not in routing, 'active bare /cook resume routing should not expose removed explicit-goal shim fields'
@@ -472,9 +473,9 @@ routing = json.loads(Path(sys.argv[1]).read_text())
 resume = Path(sys.argv[2]).read_text()
 chooser_path = Path(sys.argv[3])
 proposal_path = Path(sys.argv[4])
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert routing['mode'] == 'bare', 'discussion-driven refocus removal should snapshot bare routing mode'
 assert routing['action'] == 'continue', 'bare /cook should resume instead of deriving a replacement workflow from recent discussion'
@@ -547,9 +548,9 @@ routing = json.loads(Path(sys.argv[1]).read_text())
 resume = Path(sys.argv[2]).read_text()
 chooser_path = Path(sys.argv[3])
 proposal_path = Path(sys.argv[4])
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert routing['mode'] == 'bare', 'summary-only active bare /cook regression should snapshot bare routing mode'
 assert routing['action'] == 'continue', 'summary-only active bare /cook should resume rather than derive replacement startup'
@@ -662,12 +663,12 @@ import json
 import sys
 from pathlib import Path
 tracked = {
-    'mission.md': Path('.agent/mission.md').read_text(),
-    'profile.json': Path('.agent/profile.json').read_text(),
-    'state.json': Path('.agent/state.json').read_text(),
-    'plan.json': Path('.agent/plan.json').read_text(),
-    'active-slice.json': Path('.agent/active-slice.json').read_text(),
-    'verification-evidence.json': Path('.agent/verification-evidence.json').read_text(),
+    'workflow.json': Path('.agent/config/workflow.json').read_text(),
+    'profile.json': Path('.agent/config/profile.json').read_text(),
+    'state.json': Path('.agent/current/state.json').read_text(),
+    'plan.json': Path('.agent/current/plan.json').read_text(),
+    'active-slice.json': Path('.agent/current/active-slice.json').read_text(),
+    'verification-evidence.json': Path('.agent/current/verification-evidence.json').read_text(),
 }
 Path(sys.argv[1]).write_text(json.dumps(tracked, indent=2) + '\n')
 PY
@@ -692,12 +693,12 @@ proposal_path = Path(sys.argv[4])
 output = Path(sys.argv[5]).read_text() + Path(sys.argv[6]).read_text()
 before = json.loads(Path(sys.argv[7]).read_text())
 after = {
-    'mission.md': Path('.agent/mission.md').read_text(),
-    'profile.json': Path('.agent/profile.json').read_text(),
-    'state.json': Path('.agent/state.json').read_text(),
-    'plan.json': Path('.agent/plan.json').read_text(),
-    'active-slice.json': Path('.agent/active-slice.json').read_text(),
-    'verification-evidence.json': Path('.agent/verification-evidence.json').read_text(),
+    'workflow.json': Path('.agent/config/workflow.json').read_text(),
+    'profile.json': Path('.agent/config/profile.json').read_text(),
+    'state.json': Path('.agent/current/state.json').read_text(),
+    'plan.json': Path('.agent/current/plan.json').read_text(),
+    'active-slice.json': Path('.agent/current/active-slice.json').read_text(),
+    'verification-evidence.json': Path('.agent/current/verification-evidence.json').read_text(),
 }
 
 assert routing['mode'] == 'bare', 'fresh non-startable explicit handoff should snapshot bare routing mode'
@@ -720,7 +721,7 @@ SESSION_TWO_COMPLETED_SUPPRESS="$TMPDIR/session-two-completed-suppress.jsonl"
 CURRENT_DONE_MISSION="$(python3 - <<'PY'
 import json
 from pathlib import Path
-print(json.loads(Path('.agent/state.json').read_text())['mission_anchor'])
+print(json.loads(Path('.agent/current/state.json').read_text())['mission_anchor'])
 PY
 )"
 DISCUSSION_TWO_COMPLETED_SUPPRESS="Mission: ${CURRENT_DONE_MISSION}
@@ -748,7 +749,7 @@ from pathlib import Path
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
 expected = sys.argv[4]
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 
 assert state['mission_anchor'] == expected, 'completed-topic suppression should keep the done workflow mission anchor unchanged'
 assert state['continuation_policy'] == 'done', 'completed-topic suppression should keep the workflow closed'
@@ -762,11 +763,11 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 state['latest_verified_slice'] = 'verified-logout-redirect'
-Path('.agent/state.json').write_text(json.dumps(state, indent=2) + '\n')
+Path('.agent/current/state.json').write_text(json.dumps(state, indent=2) + '\n')
 
-evidence = json.loads(Path('.agent/verification-evidence.json').read_text())
+evidence = json.loads(Path('.agent/current/verification-evidence.json').read_text())
 evidence.update({
     'subject_type': 'selected_slice',
     'slice_id': 'verified-logout-redirect',
@@ -774,7 +775,7 @@ evidence.update({
     'summary': 'Verified logout redirect regression coverage already matches the selected slice and current HEAD.',
     'outcome': 'pass',
 })
-Path('.agent/verification-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+Path('.agent/current/verification-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
 PY
 
 SESSION_TWO_VERIFIED_SUPPRESS="$TMPDIR/session-two-verified-suppress.jsonl"
@@ -847,7 +848,7 @@ from pathlib import Path
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
 previous = sys.argv[4]
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 if snapshot.exists():
     proposal = json.loads(snapshot.read_text())
     assert proposal['source'] == 'handoff_capsule', 'done-workflow generated startup should snapshot the primary-agent handoff source'
@@ -925,14 +926,15 @@ from pathlib import Path
 mission = 'Ship the next workflow round from a fresh explicit handoff.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
-mission_text = Path('.agent/mission.md').read_text()
-profile = json.loads(Path('.agent/profile.json').read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+workflow = json.loads(Path('.agent/config/workflow.json').read_text())
+profile = json.loads(Path('.agent/config/profile.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 proposal = json.loads(Path(sys.argv[1]).read_text())
 
-assert mission in mission_text, '.agent/mission.md did not update to the next-round explicit-handoff mission anchor'
+assert workflow['runtime_dir'] == '.agent/current', 'workflow.json should keep runtime state under .agent/current for next-round startup'
+assert workflow['archive_policy'] == 'disabled', 'workflow.json should keep archive disabled for next-round startup'
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after next-round explicit handoff startup'
 assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after next-round explicit handoff startup'
 assert profile['required_stop_judges'] == 2, 'profile.json required_stop_judges mismatch after next-round explicit handoff startup'
@@ -1006,18 +1008,20 @@ capsule = {
 print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
 PY
 )"
+printf 'stale replacement sentinel\n' > .agent/current/stale-runtime.txt
+
 python3 - "$ACTIVE_INLINE_PROMPT_BASELINE" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 tracked = [
-    Path('.agent/mission.md'),
-    Path('.agent/profile.json'),
-    Path('.agent/state.json'),
-    Path('.agent/plan.json'),
-    Path('.agent/active-slice.json'),
-    Path('.agent/verification-evidence.json'),
+    Path('.agent/config/workflow.json'),
+    Path('.agent/config/profile.json'),
+    Path('.agent/current/state.json'),
+    Path('.agent/current/plan.json'),
+    Path('.agent/current/active-slice.json'),
+    Path('.agent/current/verification-evidence.json'),
 ]
 Path(sys.argv[1]).write_text(json.dumps({path.name: path.read_text() for path in tracked}, indent=2) + '\n')
 PY
@@ -1042,12 +1046,12 @@ proposal = json.loads(Path(sys.argv[4]).read_text())
 chooser = json.loads(Path(sys.argv[5]).read_text())
 before = json.loads(Path(sys.argv[6]).read_text())
 tracked = [
-    Path('.agent/mission.md'),
-    Path('.agent/profile.json'),
-    Path('.agent/state.json'),
-    Path('.agent/plan.json'),
-    Path('.agent/active-slice.json'),
-    Path('.agent/verification-evidence.json'),
+    Path('.agent/config/workflow.json'),
+    Path('.agent/config/profile.json'),
+    Path('.agent/current/state.json'),
+    Path('.agent/current/plan.json'),
+    Path('.agent/current/active-slice.json'),
+    Path('.agent/current/verification-evidence.json'),
 ]
 after = {path.name: path.read_text() for path in tracked}
 state = json.loads(after['state.json'])
@@ -1058,6 +1062,7 @@ assert proposal['mission'] == 'Replace the active workflow from inline /cook pro
 assert 'Replace the active workflow from inline /cook prompt.' in chooser['title'], 'active inline prompt should surface the replacement mission in the chooser snapshot'
 assert state['mission_anchor'] == 'Replace the active workflow from inline /cook prompt.', 'active inline prompt should rewrite canonical mission state after confirmation'
 assert before != after, 'active inline prompt should update canonical files after replacement'
+assert not Path('.agent/current/stale-runtime.txt').exists(), 'active inline prompt replacement should delete stale .agent/current runtime files before rewriting state'
 assert 'Refocused completion mission from explicit primary-agent handoff to: Replace the active workflow from inline /cook prompt.' in output, 'active inline prompt should report the accepted replacement'
 PY
 
@@ -1068,6 +1073,7 @@ DONE_INLINE_PROMPT_ROUTING="$TMPDIR/context-proposal-done-inline-prompt-routing.
 DONE_INLINE_PROMPT_PROPOSAL="$TMPDIR/context-proposal-done-inline-prompt-proposal.json"
 DONE_INLINE_PROMPT_CHOOSER="$TMPDIR/context-proposal-done-inline-prompt-chooser.json"
 DONE_INLINE_PROMPT_BASELINE="$TMPDIR/context-proposal-done-inline-before.json"
+printf 'stale done sentinel\n' > .agent/current/stale-runtime.txt
 DONE_INLINE_PROMPT_HANDOFF="$(python3 - <<'PY'
 import json
 capsule = {
@@ -1112,12 +1118,12 @@ import sys
 from pathlib import Path
 
 tracked = [
-    Path('.agent/mission.md'),
-    Path('.agent/profile.json'),
-    Path('.agent/state.json'),
-    Path('.agent/plan.json'),
-    Path('.agent/active-slice.json'),
-    Path('.agent/verification-evidence.json'),
+    Path('.agent/config/workflow.json'),
+    Path('.agent/config/profile.json'),
+    Path('.agent/current/state.json'),
+    Path('.agent/current/plan.json'),
+    Path('.agent/current/active-slice.json'),
+    Path('.agent/current/verification-evidence.json'),
 ]
 Path(sys.argv[1]).write_text(json.dumps({path.name: path.read_text() for path in tracked}, indent=2) + '\n')
 PY
@@ -1141,12 +1147,12 @@ proposal = json.loads(Path(sys.argv[4]).read_text())
 chooser = Path(sys.argv[5])
 before = json.loads(Path(sys.argv[6]).read_text())
 tracked = [
-    Path('.agent/mission.md'),
-    Path('.agent/profile.json'),
-    Path('.agent/state.json'),
-    Path('.agent/plan.json'),
-    Path('.agent/active-slice.json'),
-    Path('.agent/verification-evidence.json'),
+    Path('.agent/config/workflow.json'),
+    Path('.agent/config/profile.json'),
+    Path('.agent/current/state.json'),
+    Path('.agent/current/plan.json'),
+    Path('.agent/current/active-slice.json'),
+    Path('.agent/current/verification-evidence.json'),
 ]
 state_before = json.loads(before['state.json'])
 after = {path.name: path.read_text() for path in tracked}
@@ -1162,6 +1168,7 @@ assert state['mission_anchor'] == 'Start the next workflow round from inline /co
 assert plan['mission_anchor'] == state['mission_anchor'], 'done inline prompt should rewrite the plan mission anchor'
 assert active['mission_anchor'] == state['mission_anchor'], 'done inline prompt should rewrite the active-slice mission anchor'
 assert before != after, 'done inline prompt should rewrite canonical files after confirmation'
+assert not Path('.agent/current/stale-runtime.txt').exists(), 'done inline prompt should delete stale .agent/current runtime files before starting the next round'
 assert 'Started a new completion workflow round from explicit primary-agent handoff: Start the next workflow round from inline /cook prompt.' in output, 'done inline prompt should report the next-round startup'
 PY
 
@@ -1214,7 +1221,7 @@ from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
 snapshot = Path(sys.argv[3])
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 
 if snapshot.exists():
     pass
@@ -1273,7 +1280,7 @@ import sys
 from pathlib import Path
 
 snapshot = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 
 assert snapshot['proposalHeading'] == 'Startup brief', 'custom confirmation snapshot should expose a dedicated startup-brief section'
 assert snapshot['critiqueHeading'] == 'Notes and risks', 'custom confirmation snapshot should expose notes separately from the startup-brief body'
@@ -1430,7 +1437,7 @@ import sys
 from pathlib import Path
 
 snapshot = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 
 assert snapshot['source'] == 'handoff_capsule', 'explicit handoff startup should snapshot the handoff capsule as the proposal source'
 assert snapshot['mission'] == 'Fix login redirect callback behavior.', 'explicit handoff startup should preserve the primary-agent mission'
@@ -1796,7 +1803,7 @@ import sys
 from pathlib import Path
 
 snapshot = json.loads(Path(sys.argv[1]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 
 assert snapshot['source'] == 'handoff_capsule', 'done-workflow handoff should still use the explicit handoff capsule'
 assert snapshot['mission'] == 'Reopen the login redirect work for the callback edge case.', 'done-workflow handoff should preserve the fresh mission'

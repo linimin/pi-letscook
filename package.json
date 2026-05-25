@@ -23,7 +23,8 @@
   ],
   "files": [
     ".agent/README.md",
-    ".agent/mission.md",
+    ".agent/config/workflow.json",
+    ".agent/config/profile.json",
     ".agent/profile.json",
     ".agent/verify_completion_stop.sh",
     ".agent/verify_completion_control_plane.sh",

@@ -40,25 +40,25 @@ function gitHeadSha() {
   return asString(result.stdout);
 }
 
-const profile = readJson('.agent/profile.json');
-const state = readJson('.agent/state.json');
+const profile = readJson('.agent/config/profile.json');
+const state = readJson('.agent/current/state.json');
 const requiredStopJudges = asNumber(profile.required_stop_judges);
 if (!Number.isInteger(requiredStopJudges) || requiredStopJudges < 1) {
-  fail('.agent/profile.json required_stop_judges must be a positive integer before stop verification can run.');
+  fail('.agent/config/profile.json required_stop_judges must be a positive integer before stop verification can run.');
 }
 const stopAggregationPolicy = asString(profile.stop_aggregation_policy);
 if (stopAggregationPolicy !== 'unanimous-current-head-v1') {
-  fail('.agent/profile.json stop_aggregation_policy must be unanimous-current-head-v1 before stop verification can run.');
+  fail('.agent/config/profile.json stop_aggregation_policy must be unanimous-current-head-v1 before stop verification can run.');
 }
 
 const currentPhase = asString(state.current_phase) ?? 'unknown';
 const stopWaveActive = currentPhase === 'stop_wave' || currentPhase === 'done';
 const currentStopWaveId = asNumber(state.current_stop_wave_id) ?? 0;
 if (!Number.isInteger(currentStopWaveId) || currentStopWaveId < 0) {
-  fail('.agent/state.json current_stop_wave_id must be a non-negative integer before stop verification can run.');
+  fail('.agent/current/state.json current_stop_wave_id must be a non-negative integer before stop verification can run.');
 }
 const activeStopWaveId = stopWaveActive ? currentStopWaveId || 1 : currentStopWaveId;
-const rawHistory = fs.existsSync('.agent/stop-check-history.jsonl') ? fs.readFileSync('.agent/stop-check-history.jsonl', 'utf8') : '';
+const rawHistory = fs.existsSync('.agent/current/stop-check-history.jsonl') ? fs.readFileSync('.agent/current/stop-check-history.jsonl', 'utf8') : '';
 const seededHeadSha = asString(process.env.COMPLETION_STOP_HEAD);
 if (!seededHeadSha && !stopWaveActive && rawHistory.trim().length === 0) {
   console.log('[completion] current phase ' + currentPhase + ' is not stop_wave/done; current-HEAD stop judgments are not required yet');
@@ -73,10 +73,10 @@ for (const [index, rawLine] of rawHistory.split(/\r?\n/).entries()) {
   try {
     parsed = JSON.parse(line);
   } catch (error) {
-    fail('.agent/stop-check-history.jsonl contains invalid JSON at line ' + (index + 1) + ': ' + error.message);
+    fail('.agent/current/stop-check-history.jsonl contains invalid JSON at line ' + (index + 1) + ': ' + error.message);
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    fail('.agent/stop-check-history.jsonl line ' + (index + 1) + ' must be a JSON object judgment record.');
+    fail('.agent/current/stop-check-history.jsonl line ' + (index + 1) + ' must be a JSON object judgment record.');
   }
   if (parsed.type !== 'judgment') continue;
   if (asString(parsed.head_sha) !== headSha) continue;

@@ -13,8 +13,12 @@ export type JsonRecord = Record<string, unknown>;
 export type CompletionFiles = {
 	root: string;
 	agentDir: string;
+	configDir: string;
+	currentDir: string;
 	tmpDir: string;
+	workflowPath: string;
 	profilePath: string;
+	legacyProfileShimPath: string;
 	statePath: string;
 	planPath: string;
 	activePath: string;
@@ -27,6 +31,7 @@ export type CompletionFiles = {
 
 export type CompletionStateSnapshot = {
 	files: CompletionFiles;
+	workflow?: JsonRecord;
 	profile?: JsonRecord;
 	state?: JsonRecord;
 	plan?: JsonRecord;
