@@ -445,7 +445,7 @@ export function buildVerifyStopScript(verifierCommand?: string): string {
 	return `#!/usr/bin/env bash
 set -euo pipefail
 
-# .agent/verification-evidence.json parity is enforced by .agent/verify_completion_control_plane.sh before stop-wave policy checks.
+# .agent/current/verification-evidence.json parity is enforced by .agent/verify_completion_control_plane.sh before stop-wave policy checks.
 bash .agent/verify_completion_control_plane.sh
 
 CURRENT_HEAD="$(git rev-parse HEAD 2>/dev/null || true)"

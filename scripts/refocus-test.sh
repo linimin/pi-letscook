@@ -143,12 +143,12 @@ PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-refocus-bootstrap.out" 2>"$TMPDIR/pi-completion-refocus-bootstrap.err" &
 PI_PID=$!
 for _ in $(seq 1 60); do
-  if [[ -f .agent/profile.json && -f .agent/state.json && -f .agent/plan.json && -f .agent/active-slice.json ]]; then
+  if [[ -f .agent/config/workflow.json && -f .agent/config/profile.json && -f .agent/current/state.json && -f .agent/current/plan.json && -f .agent/current/active-slice.json ]]; then
     break
   fi
   sleep 1
 done
-if [[ ! -f .agent/profile.json || ! -f .agent/state.json || ! -f .agent/plan.json || ! -f .agent/active-slice.json ]]; then
+if [[ ! -f .agent/config/workflow.json || ! -f .agent/config/profile.json || ! -f .agent/current/state.json || ! -f .agent/current/plan.json || ! -f .agent/current/active-slice.json ]]; then
   echo "completion bootstrap did not materialize canonical files in time" >&2
   cat "$TMPDIR/pi-completion-refocus-bootstrap.err" >&2 || true
   kill "$PI_PID" >/dev/null 2>&1 || true
@@ -161,7 +161,7 @@ wait "$PI_PID" >/dev/null 2>&1 || true
 INITIAL_MISSION="$(python3 - <<'PY'
 import json
 from pathlib import Path
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 print(state['mission_anchor'])
 PY
 )"
@@ -214,12 +214,12 @@ import sys
 from pathlib import Path
 
 tracked = [
-    Path('.agent/mission.md'),
-    Path('.agent/profile.json'),
-    Path('.agent/state.json'),
-    Path('.agent/plan.json'),
-    Path('.agent/active-slice.json'),
-    Path('.agent/verification-evidence.json'),
+    Path('.agent/config/workflow.json'),
+    Path('.agent/config/profile.json'),
+    Path('.agent/current/state.json'),
+    Path('.agent/current/plan.json'),
+    Path('.agent/current/active-slice.json'),
+    Path('.agent/current/verification-evidence.json'),
 ]
 Path(sys.argv[1]).write_text(json.dumps({path.name: path.read_text() for path in tracked}, indent=2) + '\n')
 PY
@@ -246,12 +246,12 @@ chooser = json.loads(Path(sys.argv[5]).read_text())
 initial_mission = sys.argv[6]
 before = json.loads(Path(sys.argv[7]).read_text())
 tracked = [
-    Path('.agent/mission.md'),
-    Path('.agent/profile.json'),
-    Path('.agent/state.json'),
-    Path('.agent/plan.json'),
-    Path('.agent/active-slice.json'),
-    Path('.agent/verification-evidence.json'),
+    Path('.agent/config/workflow.json'),
+    Path('.agent/config/profile.json'),
+    Path('.agent/current/state.json'),
+    Path('.agent/current/plan.json'),
+    Path('.agent/current/active-slice.json'),
+    Path('.agent/current/verification-evidence.json'),
 ]
 after = {path.name: path.read_text() for path in tracked}
 state = json.loads(after['state.json'])
@@ -332,13 +332,16 @@ new_anchor = 'Remove completion status line, keep widget.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 routing = json.loads(Path(sys.argv[1]).read_text())
-mission_text = Path('.agent/mission.md').read_text()
-profile = json.loads(Path('.agent/profile.json').read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+workflow = json.loads(Path('.agent/config/workflow.json').read_text())
+profile = json.loads(Path('.agent/config/profile.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
-assert new_anchor in mission_text, '.agent/mission.md did not update to the refocused mission anchor'
+assert workflow['protocol_id'] == 'completion', 'workflow.json protocol_id mismatch after refocus'
+assert workflow['config_dir'] == '.agent/config', 'workflow.json config_dir mismatch after refocus'
+assert workflow['runtime_dir'] == '.agent/current', 'workflow.json runtime_dir mismatch after refocus'
+assert workflow['cleanup_on'] == ['replacement', 'cancel', 'done'], 'workflow.json cleanup_on mismatch after refocus'
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after refocus'
 assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after refocus'
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after refocus'
@@ -369,7 +372,7 @@ PY
 UPDATED_MISSION="$(python3 - <<'PY'
 import json
 from pathlib import Path
-state = json.loads(Path('.agent/state.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
 print(state['mission_anchor'])
 PY
 )"
@@ -448,9 +451,9 @@ routing = json.loads(Path(sys.argv[2]).read_text())
 output = Path(sys.argv[3]).read_text() + Path(sys.argv[4]).read_text()
 updated_mission = sys.argv[5]
 replacement_mission = sys.argv[6]
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert state['mission_anchor'] == updated_mission, 'chooser cancel should keep the current mission anchor'
 assert plan['mission_anchor'] == updated_mission, 'chooser cancel should keep plan.json unchanged'
@@ -494,9 +497,9 @@ routing = json.loads(Path(sys.argv[2]).read_text())
 output = Path(sys.argv[3]).read_text() + Path(sys.argv[4]).read_text()
 updated_mission = sys.argv[5]
 replacement_mission = sys.argv[6]
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert state['mission_anchor'] == updated_mission, 'final Start/Cancel cancel should keep the current mission anchor'
 assert plan['mission_anchor'] == updated_mission, 'final Start/Cancel cancel should keep plan.json unchanged'
@@ -532,11 +535,10 @@ expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 proposal = json.loads(Path(sys.argv[1]).read_text())
 routing = json.loads(Path(sys.argv[2]).read_text())
-mission_text = Path('.agent/mission.md').read_text()
-profile = json.loads(Path('.agent/profile.json').read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+profile = json.loads(Path('.agent/config/profile.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert proposal['mission'] == new_anchor, 'accepted bare refocus should preserve the replacement proposal mission'
 assert routing['mode'] == 'bare', 'accepted bare refocus should keep bare routing mode'
@@ -546,7 +548,6 @@ assert routing['action'] == 'refocus', 'accepted bare refocus should keep the ex
 assert routing['reason'] == 'fresh_explicit_handoff', 'accepted bare refocus should keep the explicit-handoff reason'
 assert routing['currentMissionAnchor'] == 'Remove completion status line, keep widget.', 'accepted bare refocus should expose the original mission until Start is accepted'
 assert routing['proposalSource'] == 'handoff_capsule', 'accepted bare refocus should preserve the explicit-handoff source'
-assert new_anchor in mission_text, '.agent/mission.md did not update to the bare refocus mission anchor'
 assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after bare refocus'
 assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after bare refocus'
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after bare refocus'
@@ -630,9 +631,9 @@ from pathlib import Path
 new_anchor = 'Exercise same-entry active-workflow replacement synthesis.'
 proposal = json.loads(Path(sys.argv[1]).read_text())
 routing = json.loads(Path(sys.argv[2]).read_text())
-state = json.loads(Path('.agent/state.json').read_text())
-plan = json.loads(Path('.agent/plan.json').read_text())
-active = json.loads(Path('.agent/active-slice.json').read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert proposal['mission'] == new_anchor, 'same-entry synthesized replacement should preserve the replacement proposal mission'
 assert routing['action'] == 'refocus', 'same-entry synthesized replacement should classify active bare /cook as refocus'
@@ -642,6 +643,49 @@ assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatc
 assert plan['mission_anchor'] == new_anchor, 'plan.json mission_anchor mismatch after same-entry synthesized refocus'
 assert active['mission_anchor'] == new_anchor, 'active-slice.json mission_anchor mismatch after same-entry synthesized refocus'
 assert state['continuation_reason'].startswith('User refocused workflow via /cook:'), 'same-entry synthesized replacement should record the /cook refocus continuation reason'
+PY
+
+DONE_CLEANUP_REMINDER="$TMPDIR/done-cleanup-reminder.txt"
+DONE_CLEANUP_HANDOFF="$TMPDIR/done-cleanup-handoff.txt"
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+state_path = Path('.agent/current/state.json')
+state = json.loads(state_path.read_text())
+state.update({
+    'current_phase': 'done',
+    'continuation_policy': 'done',
+    'continuation_reason': 'Refocus regression fixture completed; cleanup should remove .agent/current before the next ordinary turn.',
+    'project_done': True,
+    'remaining_release_blockers': 0,
+    'remaining_high_value_gaps': 0,
+    'unsatisfied_contract_ids': [],
+    'release_blocker_ids': [],
+    'next_mandatory_action': None,
+    'next_mandatory_role': None,
+    'remaining_stop_judges': 0,
+    'contract_status': 'done',
+})
+state_path.write_text(json.dumps(state, indent=2) + '\n')
+PY
+printf 'stale done cleanup sentinel\n' > .agent/current/stale-runtime.txt
+rm -f "$DONE_CLEANUP_REMINDER" "$DONE_CLEANUP_HANDOFF"
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+PI_COMPLETION_TEST_SYSTEM_REMINDER_PATH="$DONE_CLEANUP_REMINDER" \
+PI_COMPLETION_TEST_COOK_HANDOFF_REMINDER_PATH="$DONE_CLEANUP_HANDOFF" \
+pi -e "$PKG_ROOT" -p "Summarize the repo briefly after workflow completion." \
+  >"$TMPDIR/pi-completion-done-cleanup.out" 2>"$TMPDIR/pi-completion-done-cleanup.err"
+
+python3 - "$DONE_CLEANUP_REMINDER" "$DONE_CLEANUP_HANDOFF" <<'PY'
+import sys
+from pathlib import Path
+
+reminder = Path(sys.argv[1])
+handoff = Path(sys.argv[2])
+assert not Path('.agent/current').exists(), 'completed workflow should delete .agent/current before the next ordinary turn'
+assert not reminder.exists(), 'completed workflow cleanup should suppress the old closed-workflow reminder once .agent/current is deleted'
+assert not handoff.exists(), 'completed workflow cleanup should leave ordinary chat outside workflow routing until /cook is run again'
 PY
 
 echo "refocus test passed: $TMPDIR"

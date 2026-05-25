@@ -120,18 +120,18 @@ assertIncludes('scripts/release-check.sh', 'bash ./scripts/active-slice-contract
 assertIncludes('.agent/verify_completion_stop.sh', 'npm run release-check >/dev/null');
 assertIncludes('extensions/completion/state-store.ts', 'export function buildVerifyControlPlaneScript(');
 assertIncludes('extensions/completion/state-store.ts', 'return fs.readFileSync(trackedScriptPath, "utf8");');
-assertIncludes('extensions/completion/prompt-surfaces.ts', 'Selected/in-progress/committed/done .agent/active-slice.json is the canonical implementation contract.');
+assertIncludes('extensions/completion/prompt-surfaces.ts', 'Selected/in-progress/committed/done .agent/current/active-slice.json is the canonical implementation contract.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Active slice contract drift: ${args.activeContractDrift}');
 assertIncludes('extensions/completion/index.ts', 'Canonical active-slice contract drift is currently: ${activeContractDrift}');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`active_slice_contract_drift_fields: ${args.activeSliceContractDrift}`');
-assertIncludes('extensions/completion/index.ts', 'treat .agent/active-slice.json as the canonical implementation contract');
+assertIncludes('extensions/completion/index.ts', 'treat .agent/current/active-slice.json as the canonical implementation contract');
 assertIncludes('.agent/verify_completion_control_plane.sh', 'const REQUIRED_TRACKED_CONTRACT_FILES = [');
 assertIncludes('.agent/verify_completion_control_plane.sh', 'Required tracked completion contract file is missing from git index:');
 assertIncludes('.agent/verify_completion_control_plane.sh', "const planMirrorFields = ['locked_notes', 'must_fix_findings', 'implementation_surfaces', 'verification_commands', 'basis_commit', 'remaining_contract_ids_before', 'release_blocker_count_before', 'high_value_gap_count_before'];");
-assertIncludes('.agent/verify_completion_control_plane.sh', 'slice_id must match a slice in .agent/plan.json when status carries an exact handoff');
-assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/active-slice.json must match the selected .agent/plan.json slice across: ');
-assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/active-slice.json implementation_surfaces must cover every tracked file changed from basis_commit to current HEAD; missing: ');
-assertIncludes('scripts/release-check.sh', 'git ls-files --error-unmatch .agent/README.md .agent/mission.md .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null');
+assertIncludes('.agent/verify_completion_control_plane.sh', 'slice_id must match a slice in .agent/current/plan.json when status carries an exact handoff');
+assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/current/active-slice.json must match the selected .agent/current/plan.json slice across: ');
+assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/current/active-slice.json implementation_surfaces must cover every tracked file changed from basis_commit to current HEAD; missing: ');
+assertIncludes('scripts/release-check.sh', 'git ls-files --error-unmatch .agent/README.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_stop.sh .agent/verify_completion_control_plane.sh >/dev/null');
 NODE
 
 ROOT="$TMPDIR/repo"
@@ -152,7 +152,7 @@ capsule = {
         "Use supported bare /cook startup only."
     ],
     "acceptance": [
-        "Materialize .agent/profile.json, .agent/state.json, .agent/plan.json, .agent/active-slice.json, and .agent/verification-evidence.json before the fixture rewrites them.",
+        "Materialize .agent/config/workflow.json, .agent/config/profile.json, .agent/current/state.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before the fixture rewrites them.",
         "Keep scripts/active-slice-contract-test.sh aligned with the packaged startup contract."
     ],
     "risks": [
@@ -167,7 +167,7 @@ capsule = {
         "Do not broaden the fixture beyond active-slice contract surfaces."
     ],
     "implementation_surfaces": [
-        ".agent/active-slice.json",
+        ".agent/current/active-slice.json",
         "scripts/active-slice-contract-test.sh"
     ],
     "verification_commands": [
@@ -246,7 +246,7 @@ state = {
     'workflow_entry_source': '/cook',
     'workflow_entry_confirmed_at': '2026-05-03T00:00:00Z',
     'workflow_session_id': 'active-slice-fixture-session',
-    'startup_brief_path': '.agent/startup-brief.json',
+    'startup_brief_path': '.agent/current/startup-brief.json',
     'current_phase': 'implement',
     'continuation_policy': 'continue',
     'continuation_reason': 'Fixture for active-slice contract regression coverage.',
@@ -320,8 +320,8 @@ active = {
     'why_now': 'Fixture for active-slice contract parity.',
 }
 
-Path('.agent/state.json').write_text(json.dumps(state, indent=2) + '\n')
-Path('.agent/startup-brief.json').write_text(json.dumps({
+Path('.agent/current/state.json').write_text(json.dumps(state, indent=2) + '\n')
+Path('.agent/current/startup-brief.json').write_text(json.dumps({
     'schema_version': 1,
     'artifact_type': 'completion-startup-brief',
     'source': 'primary_agent',
@@ -337,9 +337,9 @@ Path('.agent/startup-brief.json').write_text(json.dumps({
     'task_type': task_type,
     'evaluation_profile': evaluation_profile,
 }, indent=2) + '\n')
-Path('.agent/plan.json').write_text(json.dumps(plan, indent=2) + '\n')
-Path('.agent/active-slice.json').write_text(json.dumps(active, indent=2) + '\n')
-Path('.agent/verification-evidence.json').write_text(json.dumps({
+Path('.agent/current/plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+Path('.agent/current/active-slice.json').write_text(json.dumps(active, indent=2) + '\n')
+Path('.agent/current/verification-evidence.json').write_text(json.dumps({
     'schema_version': 1,
     'artifact_type': 'completion-verification-evidence',
     'subject_type': 'selected_slice',
@@ -365,7 +365,7 @@ import sys
 from pathlib import Path
 
 text = Path(sys.argv[1]).read_text()
-assert 'treat .agent/active-slice.json as the canonical implementation contract' in text, text
+assert 'treat .agent/current/active-slice.json as the canonical implementation contract' in text, text
 assert 'drifts from the selected plan slice or the exact handoff is unclear' in text, text
 PY
 
@@ -390,8 +390,8 @@ import json
 import subprocess
 from pathlib import Path
 
-plan_path = Path('.agent/plan.json')
-active_path = Path('.agent/active-slice.json')
+plan_path = Path('.agent/current/plan.json')
+active_path = Path('.agent/current/active-slice.json')
 base_plan = json.loads(plan_path.read_text())
 base_active = json.loads(active_path.read_text())
 

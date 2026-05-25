@@ -32,7 +32,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - Run exactly one implementation slice at a time.
 - A slice is not complete unless it lands as a new commit.
 - Before selecting or advancing to the next slice after a committed slice, the tracked and unignored worktree must be clean. If it is not clean, treat that dirty state as a blocker to next-slice progression and reopen or continue the latest slice for reconciliation.
-- When that dirty tracked worktree contains changes unrelated to the latest slice or current reconciliation surfaces and those changes can be isolated safely, auto-preserve them with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory workflow step, and restore them before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
+- When that dirty tracked worktree contains changes unrelated to the latest slice or current reconciliation surfaces and those changes can be isolated safely, auto-preserve them with a reversible mechanism such as a named git stash plus a `.agent/current/tmp/dirty-worktree-autostash.json` note, continue the mandatory workflow step, and restore them before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
 - Docs, config, and runbooks must stay truthful to shipped behavior.
 - `.agent/verify_completion_stop.sh` is a generated repo-level baseline verifier. Onboarding should create a working version from current repo truth rather than an unconditional failing placeholder.
 - The packaged default stop policy is `required_stop_judges: 2` plus `stop_aggregation_policy: "unanimous-current-head-v1"` in `.agent/profile.json`.
@@ -48,7 +48,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
 - Use `completion-bootstrapper` only for first-time setup or missing tracked contract-file repair.
 - Use `completion-regrounder` for canonical re-grounding, slice selection, post-review or post-audit reconciliation, and final stop reconciliation.
-- Default scratch space for temporary files is repo-local `.agent/tmp/`.
+- Default scratch space for temporary files is repo-local `.agent/current/tmp/`.
 - Do not write scratch artifacts to `/tmp` or `/private/tmp` by default.
 - If a tool or platform behavior explicitly requires OS temp, prefer a scoped path such as `$TMPDIR/pi-completion/<repo-name>/` and treat it as disposable.
 - Never keep canonical state, required verification evidence, or the only copy of a deliverable exclusively in temp paths.
@@ -63,8 +63,8 @@ The workflow driver may:
 - update canonical `.agent/**` state truthfully when needed for handoff
 - choose which completion role to invoke next according to the mandatory dispatch table below
 - summarize or compare role outputs for the user
-- append canonical `.agent/slice-history.jsonl` records, but only as a faithful transcription of actual completion-role outputs
-- append canonical `.agent/stop-check-history.jsonl` `judgment` records during the final stop wave, but only as a faithful transcription of actual `completion-stop-judge` outputs
+- append canonical `.agent/current/slice-history.jsonl` records, but only as a faithful transcription of actual completion-role outputs
+- append canonical `.agent/current/stop-check-history.jsonl` `judgment` records during the final stop wave, but only as a faithful transcription of actual `completion-stop-judge` outputs
 
 The workflow driver must not, while completion is active and a slice is selected or in progress:
 
@@ -80,7 +80,7 @@ If the workflow driver detects that the next mandatory action belongs to a compl
 
 1. If tracked protocol contract files are missing or first-time onboarding is required, invoke `completion-bootstrapper`.
 2. If canonical `.agent` execution state is missing, invalid, contradictory, stale, or ambiguous after compaction or recovery, invoke `completion-regrounder`.
-3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/plan.json` and return the next exact handoff payload.
+3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/current/plan.json` and return the next exact handoff payload.
 4. If a slice is `selected` or `in_progress` and no new slice commit exists yet, invoke `completion-implementer`.
 5. If the latest committed slice lacks a review result, invoke `completion-reviewer`.
 6. If the latest committed slice lacks an audit result, invoke `completion-auditor`.
@@ -102,14 +102,14 @@ Tracked repo-contract files:
 
 Ignored canonical execution-state files:
 
-- `.agent/state.json`
-- `.agent/startup-brief.json`
-- `.agent/plan.json`
-- `.agent/active-slice.json`
-- `.agent/slice-history.jsonl`
-- `.agent/stop-check-history.jsonl`
-- `.agent/verification-evidence.json`
-- `.agent/*.log`
+- `.agent/current/state.json`
+- `.agent/current/startup-brief.json`
+- `.agent/current/plan.json`
+- `.agent/current/active-slice.json`
+- `.agent/current/slice-history.jsonl`
+- `.agent/current/stop-check-history.jsonl`
+- `.agent/current/verification-evidence.json`
+- `.agent/current/*.log`
 
 ## Canonical Inputs
 
@@ -118,13 +118,13 @@ Read these when making completion decisions:
 - `.agent/mission.md`
 - `.agent/README.md`
 - `.agent/profile.json`
-- `.agent/state.json`
-- `.agent/startup-brief.json`
-- `.agent/plan.json`
-- `.agent/active-slice.json`
-- `.agent/slice-history.jsonl`
-- `.agent/stop-check-history.jsonl`
-- `.agent/verification-evidence.json`
+- `.agent/current/state.json`
+- `.agent/current/startup-brief.json`
+- `.agent/current/plan.json`
+- `.agent/current/active-slice.json`
+- `.agent/current/slice-history.jsonl`
+- `.agent/current/stop-check-history.jsonl`
+- `.agent/current/verification-evidence.json`
 
 Optional context only:
 
@@ -134,9 +134,9 @@ Optional context only:
 
 ## Scratch Space
 
-- Use `.agent/tmp/` for repo-local temporary files created during completion work.
-- `.agent/tmp/` is scratch space only. Do not treat it as canonical state or durable handoff storage.
-- Keep `.agent/tmp/` ignored in `.gitignore` alongside other non-contract `.agent/*` execution artifacts.
+- Use `.agent/current/tmp/` for repo-local temporary files created during completion work.
+- `.agent/current/tmp/` is scratch space only. Do not treat it as canonical state or durable handoff storage.
+- Keep `.agent/current/tmp/` ignored in `.gitignore` alongside other non-contract `.agent/*` execution artifacts.
 - Use OS temp only when a tool explicitly requires it, and prefer `$TMPDIR/pi-completion/<repo-name>/` over broad `/tmp` usage.
 
 ## Compaction And Recovery
@@ -145,27 +145,27 @@ Canonical truth remains in `.agent/**`.
 
 After context compaction, suspected memory loss, stalled-role recovery, or any ambiguous completion state, the workflow driver must re-read:
 
-- `.agent/state.json`
-- `.agent/plan.json`
-- `.agent/active-slice.json`
-- `.agent/verification-evidence.json`
+- `.agent/current/state.json`
+- `.agent/current/plan.json`
+- `.agent/current/active-slice.json`
+- `.agent/current/verification-evidence.json`
 
 The workflow driver must invoke `completion-regrounder` before continuing whenever any of the following is true:
 
 - `requires_reground` is `true`
 - `requires_reground` is unknown because canonical state is missing or unreadable
 - `next_mandatory_action` is missing, unknown, or ambiguous
-- `active-slice.json` does not match `.agent/plan.json`
+- `active-slice.json` does not match `.agent/current/plan.json`
 - acceptance criteria for the selected or active slice are missing or unclear
-- the exact implementer handoff snapshot in `.agent/active-slice.json` is missing, stale, or contradictory
+- the exact implementer handoff snapshot in `.agent/current/active-slice.json` is missing, stale, or contradictory
 
 The exact implementer handoff now includes implementation-scope surfaces and expected verification commands in addition to the locked slice goal, acceptance, notes, and before-slice counters.
 
-At workflow start, treat `.agent/startup-brief.json` as the confirmed intent anchor that regrounding must reconcile against current repo truth before selecting slices.
+At workflow start, treat `.agent/current/startup-brief.json` as the confirmed intent anchor that regrounding must reconcile against current repo truth before selecting slices.
 
 The workflow driver must not continue implementation, review, audit, or stop evaluation from compacted conversation memory alone.
 
-After compaction or recovery, `completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work. If `.agent/active-slice.json` still contains a truthful exact handoff snapshot, continue from canonical state rather than asking the user to resend the original caller payload.
+After compaction or recovery, `completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work. If `.agent/current/active-slice.json` still contains a truthful exact handoff snapshot, continue from canonical state rather than asking the user to resend the original caller payload.
 
 ## Shared Report Header
 

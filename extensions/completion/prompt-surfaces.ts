@@ -489,7 +489,7 @@ export function buildSystemReminder(args: {
 }): string {
 	const lines = [
 		"Completion workflow detected.",
-		"Canonical truth lives in .agent/state.json, .agent/plan.json, .agent/active-slice.json, .agent/slice-history.jsonl, .agent/stop-check-history.jsonl, and .agent/verification-evidence.json.",
+		"Canonical truth lives in .agent/current/state.json, .agent/current/plan.json, .agent/current/active-slice.json, .agent/current/slice-history.jsonl, .agent/current/stop-check-history.jsonl, and .agent/current/verification-evidence.json.",
 		`Mission anchor: ${args.missionAnchor ?? "(unknown)"}`,
 		`Task type: ${args.taskType ?? "(missing)"}`,
 		`Evaluation profile: ${args.evaluationProfile ?? "(missing)"}`,
@@ -508,7 +508,7 @@ export function buildSystemReminder(args: {
 		"When recovering from compaction, prefer a deterministic restart from canonical files over conversational inference.",
 	];
 	if (args.exactActiveContract) {
-		lines.push("Selected/in-progress/committed/done .agent/active-slice.json is the canonical implementation contract.");
+		lines.push("Selected/in-progress/committed/done .agent/current/active-slice.json is the canonical implementation contract.");
 		lines.push(`Active slice contract drift: ${args.activeContractDrift}`);
 	}
 	if (args.activePriorityLine) lines.push(args.activePriorityLine);
@@ -634,10 +634,10 @@ export function buildResumeCapsule(args: {
 		"",
 		"Rules:",
 		"- Treat this block as continuity support derived from canonical .agent state.",
-		"- For selected/in-progress/committed/done slices, .agent/active-slice.json is the canonical implementation contract and the selected plan slice must mirror it exactly.",
+		"- For selected/in-progress/committed/done slices, .agent/current/active-slice.json is the canonical implementation contract and the selected plan slice must mirror it exactly.",
 		"- Preserve exact slice_id, goal, contract_ids, acceptance criteria, blocked_on, priority, why_now, implementation surfaces, verification commands, locked notes, must-fix findings, basis_commit, and before-slice counters where still true.",
-		"- When populated, .agent/verification-evidence.json is the durable canonical verification record for the selected slice or current HEAD and should be consumed instead of temp-only artifacts or conversational summaries.",
-		"- After compaction, re-read .agent/state.json, .agent/plan.json, .agent/active-slice.json, .agent/slice-history.jsonl, .agent/stop-check-history.jsonl, and .agent/verification-evidence.json before resuming long-running completion work.",
+		"- When populated, .agent/current/verification-evidence.json is the durable canonical verification record for the selected slice or current HEAD and should be consumed instead of temp-only artifacts or conversational summaries.",
+		"- After compaction, re-read .agent/current/state.json, .agent/current/plan.json, .agent/current/active-slice.json, .agent/current/slice-history.jsonl, .agent/current/stop-check-history.jsonl, and .agent/current/verification-evidence.json before resuming long-running completion work.",
 		"- Invoke completion-regrounder before continuing when requires_reground is true or unknown.",
 		"- Invoke completion-regrounder before continuing when next_mandatory_role or next_mandatory_action is unknown or ambiguous.",
 		"- Invoke completion-regrounder before continuing when active_slice_matches_plan is no, active_slice_contract_drift_fields is not none, or implementer_handoff_snapshot is missing_or_unclear.",

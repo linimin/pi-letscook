@@ -12,13 +12,13 @@
 
 ## Ignored Canonical Execution State
 
-- `.agent/state.json`
-- `.agent/plan.json`
-- `.agent/active-slice.json`
-- `.agent/slice-history.jsonl`
-- `.agent/stop-check-history.jsonl`
-- `.agent/verification-evidence.json`
-- `.agent/*.log`
+- `.agent/current/state.json`
+- `.agent/current/plan.json`
+- `.agent/current/active-slice.json`
+- `.agent/current/slice-history.jsonl`
+- `.agent/current/stop-check-history.jsonl`
+- `.agent/current/verification-evidence.json`
+- `.agent/current/*.log`
 
 ## Canonical Inputs
 
@@ -27,12 +27,12 @@ Read these when making completion decisions:
 - `.agent/mission.md`
 - `.agent/README.md`
 - `.agent/profile.json`
-- `.agent/state.json`
-- `.agent/plan.json`
-- `.agent/active-slice.json`
-- `.agent/slice-history.jsonl`
-- `.agent/stop-check-history.jsonl`
-- `.agent/verification-evidence.json`
+- `.agent/current/state.json`
+- `.agent/current/plan.json`
+- `.agent/current/active-slice.json`
+- `.agent/current/slice-history.jsonl`
+- `.agent/current/stop-check-history.jsonl`
+- `.agent/current/verification-evidence.json`
 
 Optional context only:
 
@@ -42,8 +42,8 @@ Optional context only:
 
 ## Scratch Space
 
-- Use repo-local `.agent/tmp/` as the default temporary workspace for completion.
-- Keep `.agent/tmp/` ignored in `.gitignore` alongside other non-contract `.agent/*` execution artifacts.
+- Use repo-local `.agent/current/tmp/` as the default temporary workspace for completion.
+- Keep `.agent/current/tmp/` ignored in `.gitignore` alongside other non-contract `.agent/*` execution artifacts.
 - Do not write scratch artifacts to `/tmp` or `/private/tmp` by default.
 - If a tool explicitly requires OS temp, prefer a scoped path such as `$TMPDIR/pi-completion/<repo-name>/` and treat it as disposable.
 - Do not store canonical state, required verification evidence, or the only copy of a deliverable exclusively in scratch paths.
@@ -169,7 +169,7 @@ Rules:
 3. Done requires all satisfied. A slice may only transition to `done` when every acceptance criterion is satisfied and `evidence` contains the proof for each one.
 4. Re-ground validation. During re-ground, the current slice backlog must be revalidated against repo truth. A slice previously marked `done` whose criteria no longer hold must be reopened.
 5. Clean handoff before next slice. After a committed slice is reviewed and audited, the tracked and unignored worktree must be clean before the next slice is selected.
-6. Dirty-worktree auto-reconcile. If tracked worktree dirt is unrelated to the latest slice or current reconciliation surfaces and can be isolated safely, the workflow should auto-preserve it with a reversible mechanism such as a named git stash plus a `.agent/tmp/dirty-worktree-autostash.json` note, continue the mandatory workflow step, and restore it before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
+6. Dirty-worktree auto-reconcile. If tracked worktree dirt is unrelated to the latest slice or current reconciliation surfaces and can be isolated safely, the workflow should auto-preserve it with a reversible mechanism such as a named git stash plus a `.agent/current/tmp/dirty-worktree-autostash.json` note, continue the mandatory workflow step, and restore it before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
 
 `active-slice.json` carries one current slice cursor.
 
@@ -278,7 +278,7 @@ Policy meaning:
 
 `completion-reviewer`, `completion-auditor`, and `completion-stop-judge` must emit rubric-backed evaluations using the same shared dimension names and verdict semantics.
 
-The shared rubric foundation now sits alongside canonical `task_type` and `evaluation_profile` signaling in `.agent/profile.json`, `.agent/state.json`, `.agent/plan.json`, and `.agent/active-slice.json`. That signaling is routing metadata only; later slices may still add stricter profile-aware rubric-output enforcement.
+The shared rubric foundation now sits alongside canonical `task_type` and `evaluation_profile` signaling in `.agent/profile.json`, `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`. That signaling is routing metadata only; later slices may still add stricter profile-aware rubric-output enforcement.
 
 Required rubric section:
 
@@ -358,7 +358,7 @@ It must not, while a slice is selected or in progress:
 
 1. If tracked protocol contract files are missing or first-time onboarding is required, invoke `completion-bootstrapper`.
 2. If canonical `.agent` execution state is missing, stale, invalid, contradictory, or ambiguous after compaction or recovery, invoke `completion-regrounder` first.
-3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/plan.json` and return the next exact handoff payload.
+3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/current/plan.json` and return the next exact handoff payload.
 4. If a slice is `selected` or `in_progress` and no new commit exists for it yet, invoke `completion-implementer`.
 5. If the latest committed slice lacks review, invoke `completion-reviewer`.
 6. If the latest committed slice lacks audit, invoke `completion-auditor`.
@@ -370,23 +370,23 @@ It must not, while a slice is selected or in progress:
 
 After context compaction, suspected memory loss, stalled-role recovery, or any ambiguous completion state, the workflow root must re-read:
 
-- `.agent/state.json`
-- `.agent/plan.json`
-- `.agent/active-slice.json`
-- `.agent/verification-evidence.json`
+- `.agent/current/state.json`
+- `.agent/current/plan.json`
+- `.agent/current/active-slice.json`
+- `.agent/current/verification-evidence.json`
 
 The workflow root must invoke `completion-regrounder` before continuing whenever any of the following is true:
 
 - `requires_reground` is `true`
 - `requires_reground` is unknown because canonical state is missing or unreadable
 - `next_mandatory_action` is missing, unknown, or ambiguous
-- `active-slice.json` does not match `.agent/plan.json`
+- `active-slice.json` does not match `.agent/current/plan.json`
 - acceptance criteria for the selected or active slice are missing or unclear
-- the exact implementer handoff snapshot in `.agent/active-slice.json` is missing, stale, or contradictory
+- the exact implementer handoff snapshot in `.agent/current/active-slice.json` is missing, stale, or contradictory
 
 The workflow root must not continue implementation, review, audit, or stop evaluation from compacted conversation memory alone.
 
-After compaction or recovery, `completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work. If `.agent/active-slice.json` still contains a truthful exact handoff snapshot, continue from canonical state rather than asking the user to resend the original caller payload.
+After compaction or recovery, `completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work. If `.agent/current/active-slice.json` still contains a truthful exact handoff snapshot, continue from canonical state rather than asking the user to resend the original caller payload.
 
 ## Default Priority Policy
 

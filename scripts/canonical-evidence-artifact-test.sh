@@ -92,7 +92,7 @@ PY
 
 cleanup() {
   if [[ -n "$CURRENT_EVIDENCE_BACKUP" && -f "$CURRENT_EVIDENCE_BACKUP" ]]; then
-    cp "$CURRENT_EVIDENCE_BACKUP" "$PKG_ROOT/.agent/verification-evidence.json"
+    cp "$CURRENT_EVIDENCE_BACKUP" "$PKG_ROOT/.agent/current/verification-evidence.json"
   fi
   rm -rf "$TMPDIR"
 }
@@ -126,48 +126,48 @@ const assertSectionIncludes = (file, heading, snippet) => {
   }
 };
 
-assertIncludes('README.md', '.agent/verification-evidence.json');
+assertIncludes('README.md', '.agent/current/verification-evidence.json');
 assertIncludes('README.md', 'Fresh scaffolds create an idle placeholder');
 assertIncludes('README.md', 'bash scripts/canonical-evidence-artifact-test.sh');
-assertIncludes('.agent/README.md', '.agent/verification-evidence.json');
+assertIncludes('.agent/README.md', '.agent/current/verification-evidence.json');
 assertIncludes('.agent/README.md', 'durable canonical record of deterministic verification');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '- `.agent/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work.');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Ignored Canonical Execution State', '- `.agent/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.agent/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '- `.agent/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/state.json`, `.agent/plan.json`, `.agent/active-slice.json`, and `.agent/verification-evidence.json` before resuming work.');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/current/verification-evidence.json`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '- `.agent/current/verification-evidence.json`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work.');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Ignored Canonical Execution State', '- `.agent/current/verification-evidence.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '- `.agent/current/verification-evidence.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence summary: ${args.evidence.summary}');
 assertIncludes('extensions/completion/index.ts', 'Canonical verification evidence artifact is currently: ${evidence.path} (${evidence.status})');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- verification_evidence_path: ${evidence.path}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- verification_evidence_summary: ${evidence.summary}`');
-assertIncludes('extensions/completion/index.ts', 'Consume .agent/verification-evidence.json instead of temp-only verification summaries when it is populated.');
+assertIncludes('extensions/completion/index.ts', 'Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.');
 assertIncludes('scripts/release-check.sh', 'bash .agent/verify_completion_control_plane.sh');
 assertIncludes('scripts/release-check.sh', 'bash ./scripts/canonical-evidence-artifact-test.sh');
-assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/verification-evidence.json');
+assertIncludes('.agent/verify_completion_control_plane.sh', '.agent/current/verification-evidence.json');
 assertIncludes('.agent/verify_completion_control_plane.sh', 'subject_type must be selected_slice when active slice exact handoff requires verification evidence');
-assertIncludes('.agent/verify_completion_stop.sh', '.agent/verification-evidence.json parity');
+assertIncludes('.agent/verify_completion_stop.sh', '.agent/current/verification-evidence.json parity');
 NODE
 
 bash .agent/verify_completion_control_plane.sh >/dev/null
 
 CURRENT_EVIDENCE_BACKUP="$TMPDIR/current-verification-evidence.json"
-cp .agent/verification-evidence.json "$CURRENT_EVIDENCE_BACKUP"
+cp .agent/current/verification-evidence.json "$CURRENT_EVIDENCE_BACKUP"
 
 CURRENT_EVIDENCE_SUBJECT_TYPE="$(python3 - <<'PY'
 import json
 from pathlib import Path
-print(json.loads(Path('.agent/verification-evidence.json').read_text()).get('subject_type', ''))
+print(json.loads(Path('.agent/current/verification-evidence.json').read_text()).get('subject_type', ''))
 PY
 )"
 
 python3 - <<'PY'
 import json
 from pathlib import Path
-path = Path('.agent/verification-evidence.json')
+path = Path('.agent/current/verification-evidence.json')
 evidence = json.loads(path.read_text())
 evidence['head_sha'] = 'stale-head'
 path.write_text(json.dumps(evidence, indent=2) + '\n')
@@ -185,7 +185,7 @@ if [[ "$CURRENT_EVIDENCE_SUBJECT_TYPE" == "selected_slice" ]]; then
   fi
 fi
 
-cp "$CURRENT_EVIDENCE_BACKUP" .agent/verification-evidence.json
+cp "$CURRENT_EVIDENCE_BACKUP" .agent/current/verification-evidence.json
 bash .agent/verify_completion_control_plane.sh >/dev/null
 
 ROOT="$TMPDIR/repo"
@@ -222,7 +222,7 @@ capsule = {
         "Do not broaden the bootstrap fixture beyond the evidence-artifact surfaces."
     ],
     "implementation_surfaces": [
-        ".agent/verification-evidence.json",
+        ".agent/current/verification-evidence.json",
         "scripts/canonical-evidence-artifact-test.sh"
     ],
     "verification_commands": [
@@ -251,7 +251,7 @@ PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-canonical-evidence-bootstrap.out" 2>"$TMPDIR/pi-canonical-evidence-bootstrap.err"
 
-for file in .agent/profile.json .agent/state.json .agent/plan.json .agent/active-slice.json .agent/verification-evidence.json; do
+for file in .agent/profile.json .agent/current/state.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
   [[ -f "$file" ]] || { echo "missing canonical bootstrap file: $file" >&2; exit 1; }
 done
 
@@ -262,7 +262,7 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 
-evidence = json.loads(Path('.agent/verification-evidence.json').read_text())
+evidence = json.loads(Path('.agent/current/verification-evidence.json').read_text())
 assert evidence['artifact_type'] == 'completion-verification-evidence', evidence
 assert evidence['subject_type'] == 'none', evidence
 assert evidence['verification_commands'] == [], evidence
@@ -289,7 +289,7 @@ verification_commands = [
     'bash .agent/verify_completion_stop.sh',
 ]
 implementation_surfaces = [
-    '.agent/verification-evidence.json',
+    '.agent/current/verification-evidence.json',
     '.agent/verify_completion_control_plane.sh',
     '.agent/verify_completion_stop.sh',
 ]
@@ -304,7 +304,7 @@ state = {
     'workflow_entry_source': '/cook',
     'workflow_entry_confirmed_at': '2026-05-03T00:00:00Z',
     'workflow_session_id': 'evidence-fixture-session',
-    'startup_brief_path': '.agent/startup-brief.json',
+    'startup_brief_path': '.agent/current/startup-brief.json',
     'current_phase': 'implement',
     'continuation_policy': 'continue',
     'continuation_reason': 'Fixture for canonical evidence artifact regression coverage.',
@@ -395,10 +395,10 @@ startup_brief = {
     'evaluation_profile': evaluation_profile,
 }
 
-Path('.agent/state.json').write_text(json.dumps(state, indent=2) + '\n')
-Path('.agent/startup-brief.json').write_text(json.dumps(startup_brief, indent=2) + '\n')
-Path('.agent/plan.json').write_text(json.dumps(plan, indent=2) + '\n')
-Path('.agent/active-slice.json').write_text(json.dumps(active, indent=2) + '\n')
+Path('.agent/current/state.json').write_text(json.dumps(state, indent=2) + '\n')
+Path('.agent/current/startup-brief.json').write_text(json.dumps(startup_brief, indent=2) + '\n')
+Path('.agent/current/plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+Path('.agent/current/active-slice.json').write_text(json.dumps(active, indent=2) + '\n')
 PY
 
 if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
@@ -406,7 +406,7 @@ if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
   exit 1
 fi
 
-rm .agent/verification-evidence.json
+rm .agent/current/verification-evidence.json
 if bash .agent/verify_completion_control_plane.sh >/dev/null 2>&1; then
   echo "expected control-plane verification to fail when verification-evidence.json is missing" >&2
   exit 1
@@ -436,7 +436,7 @@ invalid = {
     'recorded_at': '2026-05-03T00:00:00Z',
     'summary': 'Stale selected-slice evidence.',
 }
-Path('.agent/verification-evidence.json').write_text(json.dumps(invalid, indent=2) + '\n')
+Path('.agent/current/verification-evidence.json').write_text(json.dumps(invalid, indent=2) + '\n')
 PY
 
 HEAD_OUTPUT="$(bash .agent/verify_completion_control_plane.sh 2>&1 || true)"
@@ -462,7 +462,7 @@ invalid = {
     'recorded_at': '2026-05-03T00:00:00Z',
     'summary': 'Out-of-parity command set.',
 }
-Path('.agent/verification-evidence.json').write_text(json.dumps(invalid, indent=2) + '\n')
+Path('.agent/current/verification-evidence.json').write_text(json.dumps(invalid, indent=2) + '\n')
 PY
 
 COMMAND_OUTPUT="$(bash .agent/verify_completion_control_plane.sh 2>&1 || true)"
@@ -494,7 +494,7 @@ valid = {
     'recorded_at': '2026-05-03T00:00:00Z',
     'summary': 'Selected-slice verification evidence matches the active slice and current HEAD.',
 }
-Path('.agent/verification-evidence.json').write_text(json.dumps(valid, indent=2) + '\n')
+Path('.agent/current/verification-evidence.json').write_text(json.dumps(valid, indent=2) + '\n')
 PY
 
 bash .agent/verify_completion_control_plane.sh >/dev/null
@@ -517,9 +517,9 @@ python3 - <<'PY'
 import json
 from pathlib import Path
 
-state_path = Path('.agent/state.json')
-plan_path = Path('.agent/plan.json')
-active_path = Path('.agent/active-slice.json')
+state_path = Path('.agent/current/state.json')
+plan_path = Path('.agent/current/plan.json')
+active_path = Path('.agent/current/active-slice.json')
 
 state = json.loads(state_path.read_text())
 state.update({

@@ -71,6 +71,7 @@ import {
 	loadCompletionSnapshot,
 	pathExists,
 	readText,
+	removeCompletionRuntimeState,
 	scaffoldCompletionFiles as scaffoldCompletionFilesOnDisk,
 } from "./state-store";
 import type { TranscriptionResult } from "./transcription";
@@ -313,6 +314,23 @@ function buildDoneWorkflowBoundaryReminder(snapshot: CompletionStateSnapshot): s
 		"For ordinary user requests, respond normally and ignore prior completion-protocol instructions that were only relevant to the finished workflow.",
 		"Only /cook may reactivate workflow routing for the next round.",
 	].join(" ");
+}
+
+function shouldCleanupClosedWorkflowRuntime(snapshot: CompletionStateSnapshot | undefined): boolean {
+	if (!snapshot) return false;
+	const continuationPolicy = asString(snapshot.state?.continuation_policy);
+	if (continuationPolicy === "done") return true;
+	const currentPhase = asString(snapshot.state?.current_phase);
+	if (currentPhase === "done") return true;
+	const workflowEntryStatus = asString(snapshot.state?.workflow_entry_status)?.toLowerCase();
+	return workflowEntryStatus === "cancelled" || workflowEntryStatus === "canceled" || workflowEntryStatus === "done";
+}
+
+async function cleanupClosedWorkflowRuntimeIfNeeded(cwd: string): Promise<boolean> {
+	const snapshot = await loadCompletionSnapshot(cwd);
+	if (!shouldCleanupClosedWorkflowRuntime(snapshot)) return false;
+	await removeCompletionRuntimeState(snapshot.files);
+	return true;
 }
 
 function maybeWriteActiveWorkflowRoutingSnapshot(assessment: ActiveWorkflowProposalAssessment): void {
@@ -1043,13 +1061,18 @@ export default function completionExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("turn_end", async (_event, ctx) => {
+		await cleanupClosedWorkflowRuntimeIfNeeded(getCtxCwd(ctx));
 		await refreshCompletionStatus({ ctx, ...statusSurfaceArgs });
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
-		const snapshot = await loadCompletionSnapshot(getCtxCwd(ctx));
+		const cwd = getCtxCwd(ctx);
+		let snapshot = await loadCompletionSnapshot(cwd);
 		if (snapshot && (await pathExists(snapshot.files.compactionMarkerPath))) {
 			await fsp.rm(snapshot.files.compactionMarkerPath, { force: true });
+		}
+		if (await cleanupClosedWorkflowRuntimeIfNeeded(cwd)) {
+			snapshot = undefined;
 		}
 		await refreshCompletionStatus({ ctx, ...statusSurfaceArgs });
 		if (isCompletionWorkflowSessionTurn(snapshot, ctx)) {
@@ -1058,6 +1081,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
+		await cleanupClosedWorkflowRuntimeIfNeeded(getCtxCwd(ctx));
 		const loaded = await loadCompletionDataForReminder(getCtxCwd(ctx));
 		const systemPrompt = getSystemPromptSafe(ctx);
 		if (!systemPrompt) return;

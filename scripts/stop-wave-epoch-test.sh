@@ -7,7 +7,7 @@ cd "$ROOT"
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 REPO="$TMPDIR/repo"
-mkdir -p "$REPO/.agent"
+mkdir -p "$REPO/.agent/config" "$REPO/.agent/current"
 cd "$REPO"
 
 git init -q
@@ -20,6 +20,8 @@ HEAD_SHA="$(git rev-parse HEAD)"
 
 cp "$ROOT/.agent/README.md" .agent/README.md
 cp "$ROOT/.agent/mission.md" .agent/mission.md
+cp "$ROOT/.agent/config/workflow.json" .agent/config/workflow.json
+cp "$ROOT/.agent/config/profile.json" .agent/config/profile.json
 cp "$ROOT/.agent/profile.json" .agent/profile.json
 cp "$ROOT/.agent/verify_completion_control_plane.sh" .agent/verify_completion_control_plane.sh
 cp "$ROOT/.agent/verify_completion_stop.sh" .agent/verify_completion_stop.sh
@@ -31,7 +33,7 @@ text = path.read_text()
 path.write_text(text.replace('npm run release-check >/dev/null', 'true'))
 PY
 
-git add .agent/README.md .agent/mission.md .agent/profile.json .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh
+git add .agent/README.md .agent/mission.md .agent/config/workflow.json .agent/config/profile.json .agent/profile.json .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh
 git commit -q -m "scaffold tracked completion contract files"
 HEAD_SHA="$(git rev-parse HEAD)"
 
@@ -41,7 +43,7 @@ import os
 from pathlib import Path
 head = os.environ['HEAD_SHA']
 mission = 'Stop-wave epoch regression fixture.'
-profile = json.loads(Path('.agent/profile.json').read_text())
+profile = json.loads(Path('.agent/config/profile.json').read_text())
 state = {
     'schema_version': 1,
     'mission_anchor': mission,
@@ -49,7 +51,7 @@ state = {
     'workflow_entry_source': '/cook',
     'workflow_entry_confirmed_at': '2026-05-24T00:00:00Z',
     'workflow_session_id': 'stop-wave-epoch-fixture',
-    'startup_brief_path': '.agent/startup-brief.json',
+    'startup_brief_path': '.agent/current/startup-brief.json',
     'current_phase': 'stop_wave',
     'continuation_policy': 'continue',
     'continuation_reason': 'Restart stop wave on the same HEAD after earlier no-stop evidence became stale.',
@@ -133,12 +135,12 @@ evidence = {
     'recorded_at': None,
     'summary': 'No selected-slice verification evidence is required for the stop-wave epoch fixture.',
 }
-Path('.agent/state.json').write_text(json.dumps(state, indent=2) + '\n')
-Path('.agent/startup-brief.json').write_text(json.dumps(startup_brief, indent=2) + '\n')
-Path('.agent/plan.json').write_text(json.dumps(plan, indent=2) + '\n')
-Path('.agent/active-slice.json').write_text(json.dumps(active, indent=2) + '\n')
-Path('.agent/verification-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
-Path('.agent/stop-check-history.jsonl').write_text(json.dumps({
+Path('.agent/current/state.json').write_text(json.dumps(state, indent=2) + '\n')
+Path('.agent/current/startup-brief.json').write_text(json.dumps(startup_brief, indent=2) + '\n')
+Path('.agent/current/plan.json').write_text(json.dumps(plan, indent=2) + '\n')
+Path('.agent/current/active-slice.json').write_text(json.dumps(active, indent=2) + '\n')
+Path('.agent/current/verification-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
+Path('.agent/current/stop-check-history.jsonl').write_text(json.dumps({
     'schema_version': 1,
     'type': 'judgment',
     'recorded_at': 1,
@@ -148,7 +150,7 @@ Path('.agent/stop-check-history.jsonl').write_text(json.dumps({
     'blocker_count': 1,
     'high_value_gap_count': 0,
 }) + '\n')
-Path('.agent/slice-history.jsonl').write_text('')
+Path('.agent/current/slice-history.jsonl').write_text('')
 PY
 
 HEAD_SHA="$HEAD_SHA" python3 - <<'PY'
@@ -186,7 +188,7 @@ records = [
         'high_value_gap_count': 0,
     },
 ]
-with Path('.agent/stop-check-history.jsonl').open('a', encoding='utf8') as fh:
+with Path('.agent/current/stop-check-history.jsonl').open('a', encoding='utf8') as fh:
     for record in records:
         fh.write(json.dumps(record) + '\n')
 PY
@@ -205,15 +207,15 @@ const { parseReportFields, transcribeCanonicalRoleReport } = require(path.join(p
     output: report,
     reportFields: parseReportFields(report),
     snapshotFiles: {
-      statePath: path.join(process.cwd(), '.agent/state.json'),
-      stopHistoryPath: path.join(process.cwd(), '.agent/stop-check-history.jsonl'),
-      sliceHistoryPath: path.join(process.cwd(), '.agent/slice-history.jsonl'),
+      statePath: path.join(process.cwd(), '.agent/current/state.json'),
+      stopHistoryPath: path.join(process.cwd(), '.agent/current/stop-check-history.jsonl'),
+      sliceHistoryPath: path.join(process.cwd(), '.agent/current/slice-history.jsonl'),
     },
     headSha,
     recordedAt: 4,
   });
   if (result.errors.length > 0) throw new Error(result.errors.join(' | '));
-  const lines = fs.readFileSync('.agent/stop-check-history.jsonl', 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  const lines = fs.readFileSync('.agent/current/stop-check-history.jsonl', 'utf8').trim().split('\n').map((line) => JSON.parse(line));
   const last = lines[lines.length - 1];
   if (last.stop_wave_id !== 2) throw new Error('transcribed stop judgment must include current stop_wave_id 2');
 })();
