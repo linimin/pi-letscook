@@ -2,7 +2,6 @@ import { promises as fsp } from "node:fs";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
-	buildProfileRecord,
 	currentEvaluationProfile,
 	currentMissionAnchor,
 	currentTaskType,
@@ -11,7 +10,6 @@ import {
 	defaultStartupBrief,
 	defaultState,
 	defaultVerificationEvidence,
-	detectDocsSurfaces,
 	findRepoRoot,
 	loadCompletionSnapshot,
 	removeCompletionRuntimeState,
@@ -164,12 +162,6 @@ function asString(value: unknown): string | undefined {
 
 function asNumber(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asStringArray(value: unknown): string[] {
-	return Array.isArray(value)
-		? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-		: [];
 }
 
 function roleFromEnv(): string | undefined {
@@ -470,19 +462,8 @@ async function refocusCompletionMission(
 	advisoryStartupBrief?: Record<string, unknown>,
 ): Promise<void> {
 	const requiredStopJudges = asNumber(snapshot.profile?.required_stop_judges) ?? 2;
-	const stopAggregationPolicy = asString(snapshot.profile?.stop_aggregation_policy) ?? "unanimous-current-head-v1";
 	const root = snapshot.files.root;
 	const routing = deps.finalizeContextProposalAnalysis(analysis, [rawGoal, missionAnchor]);
-	const docsSurfaces = asStringArray(snapshot.profile?.docs_surfaces);
-	const nextProfile = buildProfileRecord({
-		projectName: asString(snapshot.profile?.project_name) ?? path.basename(root),
-		requiredStopJudges,
-		stopAggregationPolicy,
-		priorityPolicyId: asString(snapshot.profile?.priority_policy_id) ?? "completion-default",
-		docsSurfaces: docsSurfaces.length > 0 ? docsSurfaces : await detectDocsSurfaces(root),
-		taskType: routing.taskType,
-		evaluationProfile: routing.evaluationProfile,
-	});
 	const nextState = {
 		...defaultState(missionAnchor, {
 			taskType: routing.taskType,
@@ -501,7 +482,6 @@ async function refocusCompletionMission(
 	await fsp.mkdir(snapshot.files.currentDir, { recursive: true });
 	await fsp.mkdir(snapshot.files.tmpDir, { recursive: true });
 	await Promise.all([
-		writeJsonFile(snapshot.files.profilePath, nextProfile),
 		writeJsonFile(snapshot.files.statePath, nextState),
 		writeJsonFile(snapshot.files.startupBriefPath, defaultStartupBrief(missionAnchor, { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile }, advisoryStartupBrief)),
 		writeJsonFile(snapshot.files.planPath, nextPlan),

@@ -13,12 +13,8 @@ export type JsonRecord = Record<string, unknown>;
 export type CompletionFiles = {
 	root: string;
 	agentDir: string;
-	cookDir: string;
 	currentDir: string;
 	tmpDir: string;
-	workflowPath: string;
-	profilePath: string;
-	cookReadmePath: string;
 	statePath: string;
 	planPath: string;
 	activePath: string;

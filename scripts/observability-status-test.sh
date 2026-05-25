@@ -97,42 +97,6 @@ mkdir -p "$FIXTURE_ROOT/.cook" "$FIXTURE_ROOT/.agent/current"
 cd "$FIXTURE_ROOT"
 git init -q
 
-cat > .cook/workflow.json <<'JSON'
-{
-  "schema_version": 1,
-  "protocol_id": "completion",
-  "layout_version": 2,
-  "config_dir": ".cook",
-  "runtime_dir": ".agent/current",
-  "runtime_artifacts": [
-    "state.json",
-    "startup-brief.json",
-    "plan.json",
-    "active-slice.json",
-    "slice-history.jsonl",
-    "stop-check-history.jsonl",
-    "verification-evidence.json",
-    "tmp/"
-  ],
-  "cleanup_on": ["replacement", "cancel", "done"],
-  "archive_policy": "disabled"
-}
-JSON
-
-cat > .cook/profile.json <<'JSON'
-{
-  "schema_version": 1,
-  "protocol_id": "completion",
-  "project_name": "status-surface-fixture",
-  "required_stop_judges": 2,
-  "stop_aggregation_policy": "unanimous-current-head-v1",
-  "priority_policy_id": "completion-default",
-  "task_type": "completion-workflow",
-  "evaluation_profile": "completion-rubric-v1",
-  "docs_surfaces": ["README.md"]
-}
-JSON
-
 cat > .agent/current/state.json <<'JSON'
 {
   "schema_version": 1,

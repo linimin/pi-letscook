@@ -45,16 +45,10 @@ function gitHeadSha() {
   return asString(result.stdout);
 }
 
-const profile = readJson('.cook/profile.json');
 const state = readJson('.agent/current/state.json');
-const requiredStopJudges = asNumber(profile.required_stop_judges);
-if (!Number.isInteger(requiredStopJudges) || requiredStopJudges < 1) {
-  fail('.cook/profile.json required_stop_judges must be a positive integer before stop verification can run.');
-}
-const stopAggregationPolicy = asString(profile.stop_aggregation_policy);
-if (stopAggregationPolicy !== 'unanimous-current-head-v1') {
-  fail('.cook/profile.json stop_aggregation_policy must be unanimous-current-head-v1 before stop verification can run.');
-}
+// packaged defaults: stop_aggregation_policy must be unanimous-current-head-v1
+const requiredStopJudges = 2;
+const stopAggregationPolicy = 'unanimous-current-head-v1';
 
 const currentPhase = asString(state.current_phase) ?? 'unknown';
 const stopWaveActive = currentPhase === 'stop_wave' || currentPhase === 'done';

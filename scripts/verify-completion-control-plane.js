@@ -2,11 +2,7 @@
 const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 
-const REQUIRED_TRACKED_CONTRACT_FILES = [
-  '.cook/README.md',
-  '.cook/workflow.json',
-  '.cook/profile.json',
-];
+const REQUIRED_TRACKED_CONTRACT_FILES = [];
 
 function fail(message) {
   console.error(message);
@@ -77,8 +73,23 @@ function trackedDiffFiles(fromCommit, toCommit) {
     .filter(Boolean);
 }
 
-const workflow = readJson('.cook/workflow.json');
-const profile = readJson('.cook/profile.json');
+const workflow = {
+  schema_version: 1,
+  protocol_id: 'completion',
+  layout_version: 5,
+  config_dir: null,
+  runtime_dir: '.agent/current',
+  archive_policy: 'disabled',
+};
+const profile = {
+  schema_version: 1,
+  protocol_id: 'completion',
+  required_stop_judges: 2,
+  stop_aggregation_policy: 'unanimous-current-head-v1',
+  priority_policy_id: 'completion-default',
+  task_type: 'completion-workflow',
+  evaluation_profile: 'completion-rubric-v1',
+};
 const runtimeFiles = [
   '.agent/current/state.json',
   '.agent/current/plan.json',
@@ -104,7 +115,7 @@ if (!runtimeFullyPresent) {
 }
 
 for (const [file, record] of [
-  ['.cook/profile.json', profile],
+  ['package defaults', profile],
   ['.agent/current/state.json', state],
   ['.agent/current/plan.json', plan],
   ['.agent/current/active-slice.json', active],
@@ -117,22 +128,22 @@ const taskType = asString(profile.task_type);
 const evaluationProfile = asString(profile.evaluation_profile);
 const requiredStopJudges = asNumber(profile.required_stop_judges);
 const stopAggregationPolicy = asString(profile.stop_aggregation_policy);
-if (asString(workflow.protocol_id) !== 'completion') fail('.cook/workflow.json protocol_id must be completion');
-if (asString(workflow.runtime_dir) !== '.agent/current') fail('.cook/workflow.json runtime_dir must be .agent/current');
-if (asString(workflow.config_dir) !== '.cook') fail('.cook/workflow.json config_dir must be .cook');
-if (asString(workflow.archive_policy) != 'disabled') fail('.cook/workflow.json archive_policy must be disabled');
+if (asString(workflow.protocol_id) !== 'completion') fail('package default workflow protocol_id must be completion');
+if (asString(workflow.runtime_dir) !== '.agent/current') fail('package default workflow runtime_dir must be .agent/current');
+if (workflow.config_dir !== null) fail('package default workflow config_dir must be null');
+if (asString(workflow.archive_policy) != 'disabled') fail('package default workflow archive_policy must be disabled');
 if (!Number.isInteger(requiredStopJudges) || requiredStopJudges < 1) {
-  fail('.cook/profile.json required_stop_judges must be a positive integer');
+  fail('package default profile required_stop_judges must be a positive integer');
 }
 if (stopAggregationPolicy !== 'unanimous-current-head-v1') {
-  fail('.cook/profile.json stop_aggregation_policy must be unanimous-current-head-v1');
+  fail('package default profile stop_aggregation_policy must be unanimous-current-head-v1');
 }
-if (asString(state.task_type) !== taskType) fail('.agent/current/state.json task_type must match .cook/profile.json task_type');
-if (asString(plan.task_type) !== taskType) fail('.agent/current/plan.json task_type must match .cook/profile.json task_type');
-if (asString(active.task_type) !== taskType) fail('.agent/current/active-slice.json task_type must match .cook/profile.json task_type');
-if (asString(state.evaluation_profile) !== evaluationProfile) fail('.agent/current/state.json evaluation_profile must match .cook/profile.json evaluation_profile');
-if (asString(plan.evaluation_profile) !== evaluationProfile) fail('.agent/current/plan.json evaluation_profile must match .cook/profile.json evaluation_profile');
-if (asString(active.evaluation_profile) !== evaluationProfile) fail('.agent/current/active-slice.json evaluation_profile must match .cook/profile.json evaluation_profile');
+if (asString(state.task_type) !== taskType) fail('.agent/current/state.json task_type must match package default task_type');
+if (asString(plan.task_type) !== taskType) fail('.agent/current/plan.json task_type must match package default task_type');
+if (asString(active.task_type) !== taskType) fail('.agent/current/active-slice.json task_type must match package default task_type');
+if (asString(state.evaluation_profile) !== evaluationProfile) fail('.agent/current/state.json evaluation_profile must match package default evaluation_profile');
+if (asString(plan.evaluation_profile) !== evaluationProfile) fail('.agent/current/plan.json evaluation_profile must match package default evaluation_profile');
+if (asString(active.evaluation_profile) !== evaluationProfile) fail('.agent/current/active-slice.json evaluation_profile must match package default evaluation_profile');
 const remainingStopJudges = asNumber(state.remaining_stop_judges);
 if (remainingStopJudges === undefined) fail('.agent/current/state.json remaining_stop_judges must be numeric');
 if (remainingStopJudges < 0) fail('.agent/current/state.json remaining_stop_judges must not be negative');
@@ -163,10 +174,10 @@ if (workflowEntryStatus === 'active' || startupBrief) {
     fail('.agent/current/startup-brief.json mission must match .agent/current/state.json mission_anchor');
   }
   if (asString(startupBrief.task_type) !== taskType) {
-    fail('.agent/current/startup-brief.json task_type must match .cook/profile.json task_type');
+    fail('.agent/current/startup-brief.json task_type must match package default task_type');
   }
   if (asString(startupBrief.evaluation_profile) !== evaluationProfile) {
-    fail('.agent/current/startup-brief.json evaluation_profile must match .cook/profile.json evaluation_profile');
+    fail('.agent/current/startup-brief.json evaluation_profile must match package default evaluation_profile');
   }
 }
 

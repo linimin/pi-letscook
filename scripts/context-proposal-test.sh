@@ -350,19 +350,11 @@ from pathlib import Path
 mission = 'Remove the completion status line while keeping the completion widget.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
-workflow = json.loads(Path('.cook/workflow.json').read_text())
-profile = json.loads(Path('.cook/profile.json').read_text())
 state = json.loads(Path('.agent/current/state.json').read_text())
 plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())
 proposal = json.loads(Path(sys.argv[1]).read_text())
 
-assert workflow['runtime_dir'] == '.agent/current', 'workflow.json should point runtime state at .agent/current'
-assert workflow['archive_policy'] == 'disabled', 'workflow.json should keep archive disabled after explicit-handoff bootstrap'
-assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after explicit-handoff bootstrap'
-assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after explicit-handoff bootstrap'
-assert profile['required_stop_judges'] == 2, 'profile.json required_stop_judges mismatch after explicit-handoff bootstrap'
-assert profile['stop_aggregation_policy'] == 'unanimous-current-head-v1', 'profile.json stop_aggregation_policy mismatch after explicit-handoff bootstrap'
 assert state['mission_anchor'] == mission, 'state.json mission_anchor mismatch after explicit-handoff bootstrap'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after explicit-handoff bootstrap'
 assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after explicit-handoff bootstrap'
@@ -662,10 +654,7 @@ python3 - "$TMPDIR/active-non-startable-before.json" <<'PY'
 import json
 import sys
 from pathlib import Path
-tracked = {
-    'workflow.json': Path('.cook/workflow.json').read_text(),
-    'profile.json': Path('.cook/profile.json').read_text(),
-    'state.json': Path('.agent/current/state.json').read_text(),
+tracked = {    'state.json': Path('.agent/current/state.json').read_text(),
     'plan.json': Path('.agent/current/plan.json').read_text(),
     'active-slice.json': Path('.agent/current/active-slice.json').read_text(),
     'verification-evidence.json': Path('.agent/current/verification-evidence.json').read_text(),
@@ -692,10 +681,7 @@ chooser_path = Path(sys.argv[3])
 proposal_path = Path(sys.argv[4])
 output = Path(sys.argv[5]).read_text() + Path(sys.argv[6]).read_text()
 before = json.loads(Path(sys.argv[7]).read_text())
-after = {
-    'workflow.json': Path('.cook/workflow.json').read_text(),
-    'profile.json': Path('.cook/profile.json').read_text(),
-    'state.json': Path('.agent/current/state.json').read_text(),
+after = {    'state.json': Path('.agent/current/state.json').read_text(),
     'plan.json': Path('.agent/current/plan.json').read_text(),
     'active-slice.json': Path('.agent/current/active-slice.json').read_text(),
     'verification-evidence.json': Path('.agent/current/verification-evidence.json').read_text(),
@@ -926,19 +912,11 @@ from pathlib import Path
 mission = 'Ship the next workflow round from a fresh explicit handoff.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
-workflow = json.loads(Path('.cook/workflow.json').read_text())
-profile = json.loads(Path('.cook/profile.json').read_text())
 state = json.loads(Path('.agent/current/state.json').read_text())
 plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())
 proposal = json.loads(Path(sys.argv[1]).read_text())
 
-assert workflow['runtime_dir'] == '.agent/current', 'workflow.json should keep runtime state under .agent/current for next-round startup'
-assert workflow['archive_policy'] == 'disabled', 'workflow.json should keep archive disabled for next-round startup'
-assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after next-round explicit handoff startup'
-assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after next-round explicit handoff startup'
-assert profile['required_stop_judges'] == 2, 'profile.json required_stop_judges mismatch after next-round explicit handoff startup'
-assert profile['stop_aggregation_policy'] == 'unanimous-current-head-v1', 'profile.json stop_aggregation_policy mismatch after next-round explicit handoff startup'
 assert state['mission_anchor'] == mission, 'state.json mission_anchor mismatch after starting the next workflow round from explicit handoff'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after starting the next workflow round from explicit handoff'
 assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after starting the next workflow round from explicit handoff'
@@ -1016,9 +994,7 @@ import sys
 from pathlib import Path
 
 tracked = [
-    Path('.cook/workflow.json'),
-    Path('.cook/profile.json'),
-    Path('.agent/current/state.json'),
+            Path('.agent/current/state.json'),
     Path('.agent/current/plan.json'),
     Path('.agent/current/active-slice.json'),
     Path('.agent/current/verification-evidence.json'),
@@ -1046,9 +1022,7 @@ proposal = json.loads(Path(sys.argv[4]).read_text())
 chooser = json.loads(Path(sys.argv[5]).read_text())
 before = json.loads(Path(sys.argv[6]).read_text())
 tracked = [
-    Path('.cook/workflow.json'),
-    Path('.cook/profile.json'),
-    Path('.agent/current/state.json'),
+            Path('.agent/current/state.json'),
     Path('.agent/current/plan.json'),
     Path('.agent/current/active-slice.json'),
     Path('.agent/current/verification-evidence.json'),
@@ -1118,9 +1092,7 @@ import sys
 from pathlib import Path
 
 tracked = [
-    Path('.cook/workflow.json'),
-    Path('.cook/profile.json'),
-    Path('.agent/current/state.json'),
+            Path('.agent/current/state.json'),
     Path('.agent/current/plan.json'),
     Path('.agent/current/active-slice.json'),
     Path('.agent/current/verification-evidence.json'),
@@ -1147,9 +1119,7 @@ proposal = json.loads(Path(sys.argv[4]).read_text())
 chooser = Path(sys.argv[5])
 before = json.loads(Path(sys.argv[6]).read_text())
 tracked = [
-    Path('.cook/workflow.json'),
-    Path('.cook/profile.json'),
-    Path('.agent/current/state.json'),
+            Path('.agent/current/state.json'),
     Path('.agent/current/plan.json'),
     Path('.agent/current/active-slice.json'),
     Path('.agent/current/verification-evidence.json'),

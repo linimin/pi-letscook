@@ -22,9 +22,6 @@
     "subagent"
   ],
   "files": [
-    ".cook/README.md",
-    ".cook/workflow.json",
-    ".cook/profile.json",
     "extensions",
     "skills",
     "agents",

@@ -143,12 +143,12 @@ PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-refocus-bootstrap.out" 2>"$TMPDIR/pi-completion-refocus-bootstrap.err" &
 PI_PID=$!
 for _ in $(seq 1 60); do
-  if [[ -f .cook/workflow.json && -f .cook/profile.json && -f .agent/current/state.json && -f .agent/current/plan.json && -f .agent/current/active-slice.json ]]; then
+  if [[ -f .agent/current/state.json && -f .agent/current/plan.json && -f .agent/current/active-slice.json ]]; then
     break
   fi
   sleep 1
 done
-if [[ ! -f .cook/workflow.json || ! -f .cook/profile.json || ! -f .agent/current/state.json || ! -f .agent/current/plan.json || ! -f .agent/current/active-slice.json ]]; then
+if [[ ! ! -f .agent/current/state.json || ! -f .agent/current/plan.json || ! -f .agent/current/active-slice.json ]]; then
   echo "completion bootstrap did not materialize canonical files in time" >&2
   cat "$TMPDIR/pi-completion-refocus-bootstrap.err" >&2 || true
   kill "$PI_PID" >/dev/null 2>&1 || true
@@ -214,9 +214,7 @@ import sys
 from pathlib import Path
 
 tracked = [
-    Path('.cook/workflow.json'),
-    Path('.cook/profile.json'),
-    Path('.agent/current/state.json'),
+            Path('.agent/current/state.json'),
     Path('.agent/current/plan.json'),
     Path('.agent/current/active-slice.json'),
     Path('.agent/current/verification-evidence.json'),
@@ -246,9 +244,7 @@ chooser = json.loads(Path(sys.argv[5]).read_text())
 initial_mission = sys.argv[6]
 before = json.loads(Path(sys.argv[7]).read_text())
 tracked = [
-    Path('.cook/workflow.json'),
-    Path('.cook/profile.json'),
-    Path('.agent/current/state.json'),
+            Path('.agent/current/state.json'),
     Path('.agent/current/plan.json'),
     Path('.agent/current/active-slice.json'),
     Path('.agent/current/verification-evidence.json'),
@@ -332,18 +328,10 @@ new_anchor = 'Remove completion status line, keep widget.'
 expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 routing = json.loads(Path(sys.argv[1]).read_text())
-workflow = json.loads(Path('.cook/workflow.json').read_text())
-profile = json.loads(Path('.cook/profile.json').read_text())
 state = json.loads(Path('.agent/current/state.json').read_text())
 plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
-assert workflow['protocol_id'] == 'completion', 'workflow.json protocol_id mismatch after refocus'
-assert workflow['config_dir'] == '.cook', 'workflow.json config_dir mismatch after refocus'
-assert workflow['runtime_dir'] == '.agent/current', 'workflow.json runtime_dir mismatch after refocus'
-assert workflow['cleanup_on'] == ['replacement', 'cancel', 'done'], 'workflow.json cleanup_on mismatch after refocus'
-assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after refocus'
-assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after refocus'
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after refocus'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after refocus'
 assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after refocus'
@@ -535,7 +523,6 @@ expected_task_type = 'completion-workflow'
 expected_eval_profile = 'completion-rubric-v1'
 proposal = json.loads(Path(sys.argv[1]).read_text())
 routing = json.loads(Path(sys.argv[2]).read_text())
-profile = json.loads(Path('.cook/profile.json').read_text())
 state = json.loads(Path('.agent/current/state.json').read_text())
 plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())
@@ -548,8 +535,6 @@ assert routing['action'] == 'refocus', 'accepted bare refocus should keep the ex
 assert routing['reason'] == 'fresh_explicit_handoff', 'accepted bare refocus should keep the explicit-handoff reason'
 assert routing['currentMissionAnchor'] == 'Remove completion status line, keep widget.', 'accepted bare refocus should expose the original mission until Start is accepted'
 assert routing['proposalSource'] == 'handoff_capsule', 'accepted bare refocus should preserve the explicit-handoff source'
-assert profile['task_type'] == expected_task_type, 'profile.json task_type mismatch after bare refocus'
-assert profile['evaluation_profile'] == expected_eval_profile, 'profile.json evaluation_profile mismatch after bare refocus'
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after bare refocus'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after bare refocus'
 assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after bare refocus'

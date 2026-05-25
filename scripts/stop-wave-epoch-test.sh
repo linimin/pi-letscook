@@ -28,9 +28,6 @@ git add README.md package.json
 git commit -q -m "fixture baseline"
 HEAD_SHA="$(git rev-parse HEAD)"
 
-cp "$ROOT/.cook/README.md" .cook/README.md
-cp "$ROOT/.cook/workflow.json" .cook/workflow.json
-cp "$ROOT/.cook/profile.json" .cook/profile.json
 cat > .agent/verify_completion_control_plane.sh <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -70,7 +67,7 @@ printf 'release-check-ok\n' > "$STATUS_FILE"
 SH
 chmod +x .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh scripts/verify-completion-stop.sh scripts/release-check.sh
 
-git add .cook/README.md .cook/workflow.json .cook/profile.json
+git add .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh scripts/verify-completion-control-plane.js scripts/verify-completion-stop.sh scripts/release-check.sh
 git commit -q -m "scaffold tracked completion contract files"
 HEAD_SHA="$(git rev-parse HEAD)"
 
@@ -80,7 +77,6 @@ import os
 from pathlib import Path
 head = os.environ['HEAD_SHA']
 mission = 'Stop-wave epoch regression fixture.'
-profile = json.loads(Path('.cook/profile.json').read_text())
 state = {
     'schema_version': 1,
     'mission_anchor': mission,
@@ -93,8 +89,8 @@ state = {
     'continuation_policy': 'continue',
     'continuation_reason': 'Restart stop wave on the same HEAD after earlier no-stop evidence became stale.',
     'project_done': False,
-    'task_type': profile['task_type'],
-    'evaluation_profile': profile['evaluation_profile'],
+    'task_type': 'completion-workflow',
+    'evaluation_profile': 'completion-rubric-v1',
     'requires_reground': False,
     'slices_since_last_reground': 0,
     'remaining_release_blockers': 0,
@@ -124,14 +120,14 @@ startup_brief = {
     'acceptance': [],
     'risks': [],
     'notes': ['stop-wave epoch test fixture'],
-    'task_type': profile['task_type'],
-    'evaluation_profile': profile['evaluation_profile'],
+    'task_type': 'completion-workflow',
+    'evaluation_profile': 'completion-rubric-v1',
 }
 plan = {
     'schema_version': 1,
     'mission_anchor': mission,
-    'task_type': profile['task_type'],
-    'evaluation_profile': profile['evaluation_profile'],
+    'task_type': 'completion-workflow',
+    'evaluation_profile': 'completion-rubric-v1',
     'last_reground_at': '2026-05-24T00:00:00Z',
     'plan_basis': 'stop_wave_epoch_fixture',
     'candidate_slices': [],
@@ -139,8 +135,8 @@ plan = {
 active = {
     'schema_version': 1,
     'mission_anchor': mission,
-    'task_type': profile['task_type'],
-    'evaluation_profile': profile['evaluation_profile'],
+    'task_type': 'completion-workflow',
+    'evaluation_profile': 'completion-rubric-v1',
     'status': 'idle',
     'slice_id': None,
     'goal': None,

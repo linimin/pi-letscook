@@ -4,9 +4,5 @@ npm-debug.log*
 .DS_Store
 .env
 
-# completion workflow config and runtime state
+# completion workflow local state
 .agent/
-.cook/*
-!.cook/README.md
-!.cook/workflow.json
-!.cook/profile.json

@@ -84,7 +84,7 @@ export function toolCallBlockReason(args: {
 		}
 
 		if ((role === "completion-bootstrapper" || role === "completion-regrounder") && !isAllowedControlPlanePath(root, rawPath)) {
-			return `${role} may only edit .agent/**, .cook/**, or .gitignore.`;
+			return `${role} may only edit .agent/** or .gitignore.`;
 		}
 
 		if (!role && completionActive && !isAllowedControlPlanePath(root, rawPath)) {

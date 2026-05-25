@@ -130,24 +130,16 @@ const assertSectionIncludes = (file, heading, snippet) => {
 assertIncludes('README.md', '.agent/current/verification-evidence.json');
 assertIncludes('README.md', 'Fresh scaffolds create an idle placeholder');
 assertIncludes('README.md', 'bash scripts/canonical-evidence-artifact-test.sh');
-assertIncludes('.cook/README.md', '.agent/current/verification-evidence.json');
-assertIncludes('.cook/README.md', 'durable canonical record of deterministic verification');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.cook/workflow.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.cook/profile.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/current/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.cook/workflow.json`');
-assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.cook/profile.json`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- package defaults for task_type, evaluation_profile, and stop policy');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');
-assertIncludes('skills/completion-protocol/SKILL.md', 'tracked `.cook/profile.json`');
+assertIncludes('skills/completion-protocol/SKILL.md', 'package defaults');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work.');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Tracked Repo-Contract Files', '- `.cook/workflow.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Tracked Repo-Contract Files', '- `.cook/profile.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Ignored Canonical Execution State', '- `.agent/current/verification-evidence.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.cook/workflow.json`');
-assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.cook/profile.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- package defaults for task_type, evaluation_profile, and stop policy');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');
-assertIncludes('skills/completion-protocol/references/completion.md', 'tracked `.cook/profile.json` plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`');
+assertIncludes('skills/completion-protocol/references/completion.md', 'package defaults plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})');
@@ -265,7 +257,7 @@ PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$BOOTSTRAP_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-canonical-evidence-bootstrap.out" 2>"$TMPDIR/pi-canonical-evidence-bootstrap.err"
 
-for file in .cook/profile.json .agent/current/state.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
+for file in .agent/current/state.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
   [[ -f "$file" ]] || { echo "missing canonical bootstrap file: $file" >&2; exit 1; }
 done
 
