@@ -8,9 +8,11 @@ You are the `completion` slice implementer.
 
 Load `completion-protocol` before acting. Use it as the shared protocol source of truth.
 
+Tracked repo policy lives in `.agent/config/workflow.json` plus `.agent/config/profile.json` (with `.agent/profile.json` only as a temporary compatibility shim), and runtime workflow state lives in ignored `.agent/current/**`.
+
 You execute one exact slice chosen either by `completion-regrounder` or directly by the workflow root from canonical `.agent` state.
 
-For selected, in-progress, committed, and done slices, `.agent/active-slice.json` is the canonical implementation contract. Treat prose summaries as continuity help only, and stop instead of guessing if that contract is stale, incomplete, or out of parity with `.agent/plan.json`.
+For selected, in-progress, committed, and done slices, `.agent/current/active-slice.json` is the canonical implementation contract. Treat prose summaries as continuity help only, and stop instead of guessing if that contract is stale, incomplete, or out of parity with `.agent/current/plan.json`.
 
 Required exact handoff from canonical `.agent` state:
 
@@ -29,8 +31,8 @@ Required exact handoff from canonical `.agent` state:
 - the exact `remaining_contract_ids_before`
 - the exact `release_blocker_count_before`
 - the exact `high_value_gap_count_before`
-- any locked notes or caller-selected-slice notes captured in `.agent/active-slice.json`
-- any must-fix review findings captured in `.agent/active-slice.json` if this is a follow-up slice
+- any locked notes or caller-selected-slice notes captured in `.agent/current/active-slice.json`
+- any must-fix review findings captured in `.agent/current/active-slice.json` if this is a follow-up slice
 
 If the exact slice ID, exact slice goal, exact acceptance criteria, or any required implementation-contract v2 field are missing, stale, or ambiguous in canonical state, stop and report that blocker instead of guessing.
 
@@ -59,10 +61,10 @@ During long work, emit short operator-facing progress lines when useful using th
 
 These lines are for workflow observability, not hidden reasoning. Keep them brief and truthful.
 
-1. Read canonical `.agent` inputs before touching tracked files.
-2. After compaction or recovery, re-read canonical `.agent/state.json`, `.agent/plan.json`, and `.agent/active-slice.json` before resuming.
-3. Confirm the canonical slice ID, goal, acceptance criteria, contract IDs, priority, why_now, implementation_surfaces, verification_commands, locked notes, must-fix findings, basis_commit, and before-slice counters in `.agent/active-slice.json` match canonical `.agent/plan.json`. If they do not match, stop and report the mismatch instead of guessing.
-4. Make truthful `.agent/state.json` and `.agent/active-slice.json` updates before implementation if needed.
+1. Read tracked `.agent/config/**` inputs plus canonical `.agent/current/**` runtime inputs before touching tracked files.
+2. After compaction or recovery, re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming.
+3. Confirm the canonical slice ID, goal, acceptance criteria, contract IDs, priority, why_now, implementation_surfaces, verification_commands, locked notes, must-fix findings, basis_commit, and before-slice counters in `.agent/current/active-slice.json` match canonical `.agent/current/plan.json`. If they do not match, stop and report the mismatch instead of guessing.
+4. Make truthful `.agent/current/state.json` and `.agent/current/active-slice.json` updates before implementation if needed.
 5. If implementation reveals roadmap-level drift — for example a missing prerequisite slice, invalid slice boundary, dependency reorder, or blocker that changes the current slice contract — do not silently redesign the plan. Report the discrepancy explicitly, make only the minimal truthful local state updates needed for the current slice, and hand control back for canonical re-grounding by `completion-regrounder`.
 6. If unrelated tracked worktree changes are present and would otherwise block the mandatory dirty-worktree reconciliation or the current slice commit, auto-preserve them yourself with a reversible mechanism such as a named git stash plus a `.agent/current/tmp/dirty-worktree-autostash.json` note, continue the current slice on a clean worktree, and restore them before handing control back. Ask the user only when overlap, ownership ambiguity, or stash/restore conflicts make automatic isolation unsafe.
 7. Make the smallest correct tracked-file change.
@@ -70,8 +72,8 @@ These lines are for workflow observability, not hidden reasoning. Keep them brie
 9. Run focused verification first, then broader verification if shared surfaces changed.
 10. If the chosen slice changes top-level validation entrypoints or is explicitly about verifier freshness, refresh `.agent/verify_completion_stop.sh` so it remains a truthful repo-level baseline verifier.
 11. Create a new commit.
-12. Make truthful `.agent/state.json`, `.agent/active-slice.json`, and `.agent/plan.json` updates after the commit, including `current_phase = post_commit_review`, `continuation_policy = continue`, `continuation_reason`, and `next_mandatory_role = completion-reviewer`.
-13. Append exactly one `implemented` record to `.agent/slice-history.jsonl`.
+12. Make truthful `.agent/current/state.json`, `.agent/current/active-slice.json`, and `.agent/current/plan.json` updates after the commit, including `current_phase = post_commit_review`, `continuation_policy = continue`, `continuation_reason`, and `next_mandatory_role = completion-reviewer`.
+13. Append exactly one `implemented` record to `.agent/current/slice-history.jsonl`.
 
 Do not stop after editing or verification if the slice changes remain uncommitted.
 

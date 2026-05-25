@@ -102,6 +102,12 @@ const assertIncludes = (file, snippet) => {
     throw new Error(`${file} is missing required active-slice-contract text: ${snippet}`);
   }
 };
+const assertExcludes = (file, snippet) => {
+  const text = read(file);
+  if (text.includes(snippet)) {
+    throw new Error(`${file} still contains stale active-slice-contract text: ${snippet}`);
+  }
+};
 
 assertIncludes('agents/completion-implementer.md', 'canonical implementation contract');
 assertIncludes('agents/completion-implementer.md', '`implementation_surfaces`');
@@ -110,6 +116,25 @@ assertIncludes('agents/completion-implementer.md', '`basis_commit`');
 assertIncludes('agents/completion-implementer.md', '`remaining_contract_ids_before`');
 assertIncludes('agents/completion-implementer.md', '`release_blocker_count_before`');
 assertIncludes('agents/completion-implementer.md', '`high_value_gap_count_before`');
+assertIncludes('agents/completion-implementer.md', '.agent/config/workflow.json');
+assertIncludes('agents/completion-implementer.md', '.agent/config/profile.json');
+assertIncludes('agents/completion-implementer.md', '.agent/current/active-slice.json');
+assertIncludes('agents/completion-implementer.md', '.agent/current/plan.json');
+assertIncludes('agents/completion-implementer.md', '.agent/current/state.json');
+assertIncludes('agents/completion-implementer.md', '.agent/current/verification-evidence.json');
+assertExcludes('agents/completion-implementer.md', '.agent/active-slice.json');
+assertExcludes('agents/completion-implementer.md', '.agent/plan.json');
+assertExcludes('agents/completion-implementer.md', '.agent/state.json');
+assertExcludes('agents/completion-implementer.md', '.agent/slice-history.jsonl');
+assertIncludes('agents/completion-regrounder.md', '.agent/config/workflow.json');
+assertIncludes('agents/completion-regrounder.md', '.agent/config/profile.json');
+assertIncludes('agents/completion-regrounder.md', '.agent/current/plan.json');
+assertIncludes('agents/completion-regrounder.md', '.agent/current/active-slice.json');
+assertIncludes('agents/completion-regrounder.md', '.agent/current/state.json');
+assertExcludes('agents/completion-regrounder.md', '.agent/plan.json');
+assertExcludes('agents/completion-regrounder.md', '.agent/active-slice.json');
+assertExcludes('agents/completion-regrounder.md', '.agent/state.json current_stop_wave_id');
+assertExcludes('agents/completion-regrounder.md', '.agent/profile.json required_stop_judges');
 assertIncludes('README.md', 'canonical implementation contract for selected, in-progress, committed, and done slices');
 assertIncludes('README.md', 'The selected plan slice must mirror that exact contract across goal, contract IDs, acceptance criteria');
 assertIncludes('README.md', '`basis_commit`');
