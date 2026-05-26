@@ -106,6 +106,7 @@ UNCLEAR_ROUTING_SNAPSHOT="$TMPDIR/active-unclear-routing.json"
 UNCLEAR_CHOOSER_SNAPSHOT="$TMPDIR/unexpected-existing-workflow-chooser.json"
 ORDINARY_AUTO_RESUME_PROMPT="$TMPDIR/ordinary-auto-resume-prompt.txt"
 AUTO_RESUME_PROMPT="$TMPDIR/auto-resume-prompt.txt"
+LEGACY_RESUME_PROMPT="$TMPDIR/legacy-resume-prompt.txt"
 INLINE_PROMPT_PROPOSAL_SNAPSHOT="$TMPDIR/inline-prompt-proposal.json"
 BOOTSTRAP_HANDOFF="$(python3 - <<'PY'
 import json
@@ -175,7 +176,8 @@ proposal = json.loads(Path(sys.argv[3]).read_text())
 
 assert Path('.agent').exists(), 'startup /cook inline prompt should create canonical state'
 assert proposal['mission'] == 'Exercise smoke-test bootstrap from inline /cook prompt.', 'startup /cook inline prompt should surface the generated startup brief mission'
-assert 'Initialized completion control plane in' in output, 'startup /cook inline prompt should initialize the control plane'
+assert 'Started completion workflow for:' in output, 'startup /cook inline prompt should report workflow start after saving canonical startup brief'
+assert 'completion-regrounder will derive the initial slice plan from repo truth' in output, 'startup /cook inline prompt should explain that regrounder derives the initial slice plan'
 PY
 
 for file in .agent/current/state.json .agent/current/startup-brief.json .agent/current/plan.json .agent/current/active-slice.json .agent/current/verification-evidence.json; do
@@ -207,6 +209,7 @@ plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())
 startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
 evidence = json.loads(Path('.agent/current/verification-evidence.json').read_text())
+driver_prompt = json.loads(Path('.agent/current/tmp/driver-prompt.json').read_text())
 kickoff = Path(sys.argv[1]).read_text()
 
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after bootstrap'
@@ -221,21 +224,28 @@ assert state['workflow_entry_status'] == 'active', 'state.json should mark workf
 assert state['workflow_entry_source'] == '/cook', 'state.json should record /cook as workflow entry source'
 assert state['startup_brief_path'] == '.agent/current/startup-brief.json', 'state.json should point to startup-brief.json'
 assert isinstance(state['workflow_session_id'], str) and state['workflow_session_id'], 'state.json should record a workflow session id'
-brief = state['advisory_startup_brief']
-assert brief['kind'] == 'startup_brief', 'state.json should preserve the confirmed startup brief as advisory intake'
-assert brief['source'] == 'primary_agent_handoff', 'smoke bootstrap should record the synthesized primary-agent handoff source in advisory intake'
-assert brief['mission'] == state['mission_anchor'], 'advisory startup brief mission should match the canonical mission anchor after bootstrap'
-assert brief['scope'] == ['Materialize the canonical completion control-plane files.', 'Keep the smoke test on supported inline /cook startup behavior.'], 'advisory startup brief should preserve scope items'
-assert brief['constraints'] == ['Keep startup proposal confirmation approval-only.'], 'advisory startup brief should preserve constraints'
+brief = startup_brief
+assert 'advisory_startup_brief' not in state or state['advisory_startup_brief'] is None, 'state.json should no longer carry advisory_startup_brief now that startup-brief.json is canonical'
+assert brief['artifact_type'] == 'completion-startup-brief', 'startup-brief.json should preserve the confirmed startup brief'
+assert brief['source'] == 'primary_agent_handoff', 'smoke bootstrap should record the synthesized primary-agent handoff source in startup-brief.json'
+assert brief['mission'] == state['mission_anchor'], 'startup-brief.json mission should match the canonical mission anchor after bootstrap'
+assert brief['scope'] == ['Materialize the canonical completion control-plane files.', 'Keep the smoke test on supported inline /cook startup behavior.'], 'startup-brief.json should preserve scope items'
+assert brief['constraints'] == ['Keep startup proposal confirmation approval-only.'], 'startup-brief.json should preserve constraints'
 assert brief['acceptance'] == [
     'Write the workflow control-plane files under .agent, including profile.json, state.json, active-slice.json, verification-evidence.json, and the slice backlog file, for the smoke fixture.',
     'Keep scripts/smoke-test.sh and kickoff-prompt coverage truthful for packaged inline-prompt bootstrap.'
-], 'advisory startup brief should preserve acceptance'
-assert brief['risks'] == ['Smoke-test bootstrap should stay anchored to the inline /cook startup intent.'], 'advisory startup brief should preserve handoff risks'
-assert 'First slice goal: Scaffold canonical completion files and verify the packaged startup contract.' in brief['notes'], 'advisory startup brief should preserve the first_slice_goal in notes'
-assert 'Verification commands: npm run smoke-test' in brief['notes'], 'advisory startup brief should preserve verification_commands in notes'
+], 'startup-brief.json should preserve acceptance'
+assert brief['risks'] == ['Smoke-test bootstrap should stay anchored to the inline /cook startup intent.'], 'startup-brief.json should preserve handoff risks'
+assert brief['first_slice_goal_hint'] == 'Scaffold canonical completion files and verify the packaged startup contract.', 'startup-brief.json should preserve first_slice_goal as a structured hint'
+assert brief['implementation_surfaces_hint'] == ['scripts/smoke-test.sh'], 'startup-brief.json should preserve implementation_surfaces as structured hints'
+assert brief['verification_commands_hint'] == ['npm run smoke-test'], 'startup-brief.json should preserve verification_commands as structured hints'
+assert 'First slice goal: Scaffold canonical completion files and verify the packaged startup contract.' in brief['notes'], 'startup-brief.json should preserve the first_slice_goal in notes'
+assert 'Verification commands: npm run smoke-test' in brief['notes'], 'startup-brief.json should preserve verification_commands in notes'
 assert startup_brief['artifact_type'] == 'completion-startup-brief', 'startup-brief.json artifact_type mismatch after bootstrap'
 assert startup_brief['mission'] == state['mission_anchor'], 'startup-brief.json mission should match the canonical mission anchor after bootstrap'
+assert startup_brief['first_slice_goal_hint'] == 'Scaffold canonical completion files and verify the packaged startup contract.', 'startup-brief.json should preserve first_slice_goal hints'
+assert startup_brief['implementation_surfaces_hint'] == ['scripts/smoke-test.sh'], 'startup-brief.json should preserve implementation_surfaces hints'
+assert startup_brief['verification_commands_hint'] == ['npm run smoke-test'], 'startup-brief.json should preserve verification_commands hints'
 assert startup_brief['task_type'] == expected_task_type, 'startup-brief.json task_type mismatch after bootstrap'
 assert startup_brief['evaluation_profile'] == expected_eval_profile, 'startup-brief.json evaluation_profile mismatch after bootstrap'
 assert startup_brief['acceptance'] == brief['acceptance'], 'startup-brief.json should preserve the confirmed acceptance list'
@@ -247,6 +257,9 @@ assert 'Canonical routing profile:' in kickoff, 'kickoff prompt should expose ca
 assert f'- task_type: {expected_task_type}' in kickoff, 'kickoff prompt missing canonical task_type'
 assert f'- evaluation_profile: {expected_eval_profile}' in kickoff, 'kickoff prompt missing canonical evaluation_profile'
 assert f'- workflow_session_id: {state["workflow_session_id"]}' in kickoff, 'kickoff prompt should expose canonical workflow_session_id'
+assert driver_prompt['kind'] == 'kickoff', 'driver-prompt metadata should record kickoff dispatches canonically'
+assert driver_prompt['workflow_session_id'] == state['workflow_session_id'], 'driver-prompt metadata should preserve workflow_session_id'
+assert driver_prompt['prompt_hash'] == __import__('hashlib').sha256(kickoff.rstrip('\n').encode()).hexdigest(), 'driver-prompt metadata should preserve a stable prompt hash'
 PY
 
 rm -f "$ORDINARY_SYSTEM_REMINDER" "$ORDINARY_HANDOFF_REMINDER" "$ORDINARY_AUTO_RESUME_PROMPT"
@@ -303,9 +316,13 @@ chooser_path = Path(sys.argv[3])
 state = json.loads(Path('.agent/current/state.json').read_text())
 
 resume = resume_path.read_text()
+driver_prompt = json.loads(Path('.agent/current/tmp/driver-prompt.json').read_text())
 assert 'Canonical routing profile:' in resume, 'resume prompt should expose canonical routing profile'
 assert f'- task_type: {expected_task_type}' in resume, 'resume prompt missing canonical task_type'
 assert f'- evaluation_profile: {expected_eval_profile}' in resume, 'resume prompt missing canonical evaluation_profile'
+assert driver_prompt['kind'] == 'resume', 'driver-prompt metadata should update to resume when bare /cook resumes workflow'
+assert driver_prompt['workflow_session_id'] == state['workflow_session_id'], 'resume driver-prompt metadata should preserve workflow_session_id'
+assert driver_prompt['prompt_hash'] == __import__('hashlib').sha256(resume.rstrip('\n').encode()).hexdigest(), 'resume driver-prompt metadata should preserve the resume prompt hash'
 assert routing['mode'] == 'bare', 'active bare /cook should snapshot bare routing mode'
 assert routing['action'] == 'continue', 'no-discussion active bare /cook should resume from canonical state without a concrete replacement mission'
 assert routing['reason'] == 'missing_explicit_handoff', 'no-discussion active bare /cook should explain that resume happened because no fresh explicit handoff existed'
@@ -329,11 +346,69 @@ expected_eval_profile = 'completion-rubric-v1'
 auto_resume = Path(sys.argv[1]).read_text()
 
 state = __import__('json').loads(Path('.agent/current/state.json').read_text())
+driver_prompt = __import__('json').loads(Path('.agent/current/tmp/driver-prompt.json').read_text())
 assert 'Resume the completion workflow from canonical state.' in auto_resume, 'auto-resume prompt should use the canonical resume workflow prompt'
 assert 'Canonical routing profile:' in auto_resume, 'auto-resume prompt should expose canonical routing profile'
 assert f'- task_type: {expected_task_type}' in auto_resume, 'auto-resume prompt missing canonical task_type'
 assert f'- evaluation_profile: {expected_eval_profile}' in auto_resume, 'auto-resume prompt missing canonical evaluation_profile'
 assert f'- workflow_session_id: {state["workflow_session_id"]}' in auto_resume, 'auto-resume prompt should expose canonical workflow_session_id'
+assert driver_prompt['kind'] == 'auto-resume', 'driver-prompt metadata should update to auto-resume for sticky continuation'
+assert driver_prompt['workflow_session_id'] == state['workflow_session_id'], 'auto-resume driver-prompt metadata should preserve workflow_session_id'
+assert driver_prompt['prompt_hash'] == __import__('hashlib').sha256(auto_resume.rstrip('\n').encode()).hexdigest(), 'auto-resume driver-prompt metadata should preserve the auto-resume prompt hash'
+PY
+
+# Backward-compatible loading: if an older workflow state still carries advisory_startup_brief
+# but is missing startup-brief.json, loadCompletionSnapshot should recreate startup-brief.json and
+# allow canonical resume from that repaired startup source.
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+state_path = Path('.agent/current/state.json')
+startup_path = Path('.agent/current/startup-brief.json')
+state = json.loads(state_path.read_text())
+startup = json.loads(startup_path.read_text())
+state['advisory_startup_brief'] = {
+    'kind': 'startup_brief',
+    'source': startup['source'],
+    'captured_at': startup.get('confirmed_at'),
+    'goal_text': startup['goal_text'],
+    'mission': startup['mission'],
+    'scope': startup['scope'],
+    'constraints': startup['constraints'],
+    'acceptance': startup['acceptance'],
+    'risks': startup['risks'],
+    'notes': startup['notes'],
+    'first_slice_goal_hint': startup.get('first_slice_goal_hint'),
+    'first_slice_non_goals_hint': startup.get('first_slice_non_goals_hint', []),
+    'implementation_surfaces_hint': startup.get('implementation_surfaces_hint', []),
+    'verification_commands_hint': startup.get('verification_commands_hint', []),
+    'why_this_slice_first_hint': startup.get('why_this_slice_first_hint'),
+    'task_type': startup['task_type'],
+    'evaluation_profile': startup['evaluation_profile'],
+}
+state_path.write_text(json.dumps(state, indent=2) + '\n')
+startup_path.unlink()
+PY
+
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$LEGACY_RESUME_PROMPT" \
+pi -e "$PKG_ROOT" -p "/cook" \
+  >"$TMPDIR/pi-completion-smoke-legacy-resume.out" 2>"$TMPDIR/pi-completion-smoke-legacy-resume.err"
+
+python3 - "$LEGACY_RESUME_PROMPT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+resume = Path(sys.argv[1]).read_text()
+state = json.loads(Path('.agent/current/state.json').read_text())
+startup = json.loads(Path('.agent/current/startup-brief.json').read_text())
+assert startup['artifact_type'] == 'completion-startup-brief', 'legacy compatibility load should recreate startup-brief.json when only advisory_startup_brief remains'
+assert startup['mission'] == state['mission_anchor'], 'recreated startup-brief.json should match the canonical mission anchor'
+assert state['advisory_startup_brief']['mission'] == startup['mission'], 'legacy compatibility load should preserve the legacy advisory mirror if it existed already'
+assert 'Resume the completion workflow from canonical state.' in resume, 'legacy compatibility load should still allow canonical resume after recreating startup-brief.json'
+assert f'- workflow_session_id: {state["workflow_session_id"]}' in resume, 'legacy compatibility load should preserve workflow_session_id during resume'
 PY
 
 RESET_HANDOFF="$(python3 - <<'PY'

@@ -36,7 +36,8 @@ assertIncludes('extensions/completion/role-runner.ts', 'class CookStartupOverlay
 assertIncludes('extensions/completion/role-runner.ts', 'overlay = new CookStartupOverlay(theme, {');
 assertIncludes('extensions/completion/index.ts', 'import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";');
 assertIncludes('extensions/completion/index.ts', 'const result = await runCompletionRole({');
-assertIncludes('extensions/completion/index.ts', 'const raw = await generateCookHandoffWithAgent({');
+assertIncludes('extensions/completion/index.ts', 'generateCookHandoff: async ({ recentEntries, workflowContextLines }) =>');
+assertIncludes('extensions/completion/index.ts', 'generateCookHandoffWithAgent({');
 assertNotIncludes('extensions/completion/index.ts', 'const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-proposal-analyst-", CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT);');
 assertNotIncludes('extensions/completion/index.ts', 'const invocation = getPiInvocation(args);');
 assertNotIncludes('extensions/completion/index.ts', 'async function loadAgentDefinition(');

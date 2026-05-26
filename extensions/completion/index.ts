@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import { promises as fsp } from "node:fs";
 import * as os from "node:os";
@@ -13,9 +14,7 @@ import {
 } from "./driver";
 import {
 	assessMissionAnchor,
-	collectRecentDiscussionEntries,
 	collectRecentSessionMessages,
-	assessLatestCookHandoffProposal,
 	finalizeContextProposalAnalysis,
 	isWeakMissionAnchor,
 	missionAnchorsLikelyEquivalent,
@@ -44,6 +43,8 @@ import {
 	maybeWriteContextProposalConfirmationSnapshot,
 	maybeWriteContextProposalSnapshot,
 } from "./prompt-surfaces";
+import { deriveCookContextProposalWithSynthesis } from "./startup-intent";
+import type { CookContextProposalResult, CookProposalDeps } from "./startup-intent";
 import { toolCallBlockReason } from "./policy-guards";
 import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";
 import {
@@ -67,6 +68,7 @@ import {
 	findCompletionRoot,
 	findRepoRoot,
 	isRecord,
+	canonicalStartupBrief,
 	loadCompletionDataForReminder,
 	loadCompletionSnapshot,
 	pathExists,
@@ -104,7 +106,6 @@ type RubricEvaluationRole = (typeof RUBRIC_EVALUATION_ROLES)[number];
 
 const liveRoleActivityByRoot = new Map<string, LiveRoleActivity>();
 const LIVE_ROLE_HEARTBEAT_MS = 5_000;
-const COOK_HANDOFF_BLOCK_REGEX = /```cook_handoff\s*[\s\S]*?```/giu;
 
 function asBoolean(value: unknown): boolean | undefined {
 	return typeof value === "boolean" ? value : undefined;
@@ -119,21 +120,11 @@ function candidateSlices(plan: JsonRecord | undefined): JsonRecord[] {
 	return Array.isArray(slices) ? slices.filter(isRecord) : [];
 }
 
-type CookContextProposalResult = {
-	proposal?: ContextProposal;
-	blockedFailureMessage?: string;
-};
-
 type ActiveWorkflowProposalAssessment = {
-	action: "continue" | "refocus" | "blocked";
+	action: "continue" | "refocus";
 	currentMissionAnchor: string;
 	proposal?: ContextProposal;
-	blockedFailureMessage?: string;
-	reason:
-		| "matching_mission"
-		| "missing_explicit_handoff"
-		| "fresh_explicit_handoff"
-		| "fresh_explicit_handoff_not_startable";
+	reason: "matching_mission" | "missing_explicit_handoff" | "fresh_explicit_handoff";
 };
 
 function completionTestWorkflowActionOverride(): "continue" | "refocus" | "cancel" | undefined {
@@ -207,7 +198,7 @@ function maybeWriteTestSnapshot(targetPath: string | undefined, content: string)
 
 const COOK_MAIN_CHAT_RERUN_GUIDANCE = "Discuss changes in the main chat and rerun /cook.";
 const COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL =
-	"/cook failed closed because the primary-agent handoff step could not prepare a concrete startup handoff from the current task context. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook.";
+	"/cook failed closed because the primary-agent startup step could not prepare a workflow startup brief from the current task context. Clarify the mission, repo-change intent, or key constraints in the main chat, then rerun /cook.";
 
 function isWorkflowDone(snapshot: CompletionStateSnapshot | undefined): boolean {
 	return asString(snapshot?.state?.continuation_policy) === "done";
@@ -220,7 +211,7 @@ function activateCompletionRoutingForRoot(_root: string | undefined): void {
 function hasActiveWorkflowEntry(snapshot: CompletionStateSnapshot | undefined): boolean {
 	if (!snapshot) return false;
 	if (isWorkflowDone(snapshot)) return false;
-	return asString(snapshot.state?.workflow_entry_status) === "active" || isRecord(snapshot.startupBrief) || isRecord(snapshot.state?.advisory_startup_brief);
+	return asString(snapshot.state?.workflow_entry_status) === "active" || isRecord(canonicalStartupBrief(snapshot));
 }
 
 function hasCompletionRoutingActivation(snapshot: CompletionStateSnapshot | undefined): boolean {
@@ -232,6 +223,22 @@ function hasCompletionRoutingActivation(snapshot: CompletionStateSnapshot | unde
 function latestUserOrCustomTurnText(ctx: { sessionManager?: any }): string | undefined {
 	const messages = collectRecentSessionMessages(ctx as { sessionManager: any }, { isRecord, asString, asNumber, isStaleContextError }, 4);
 	return messages.find((entry) => entry.role === "user" || entry.role === "custom")?.text;
+}
+
+function hashDriverPrompt(prompt: string): string {
+	return createHash("sha256").update(prompt).digest("hex");
+}
+
+function queuedDriverPromptMetadata(snapshot: CompletionStateSnapshot | undefined): JsonRecord | undefined {
+	const promptPath = snapshot?.files.driverPromptPath;
+	if (!promptPath || !fs.existsSync(promptPath)) return undefined;
+	try {
+		const raw = fs.readFileSync(promptPath, "utf8");
+		const parsed = JSON.parse(raw);
+		return isRecord(parsed) ? parsed : undefined;
+	} catch {
+		return undefined;
+	}
 }
 
 function isCookCommandTurn(ctx: { sessionManager?: any }): boolean {
@@ -248,13 +255,20 @@ function extractWorkflowSessionIdFromPrompt(text: string): string | undefined {
 function isCompletionDriverPromptTurn(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
 	const latest = latestUserOrCustomTurnText(ctx);
 	if (!latest) return false;
+	const canonicalSessionId = asString(snapshot?.state?.workflow_session_id);
+	const promptSessionId = extractWorkflowSessionIdFromPrompt(latest);
+	if (canonicalSessionId && promptSessionId && canonicalSessionId !== promptSessionId) return false;
+	const queuedPrompt = queuedDriverPromptMetadata(snapshot);
+	const queuedPromptHash = asString(queuedPrompt?.prompt_hash);
+	if (queuedPromptHash && queuedPromptHash === hashDriverPrompt(latest)) {
+		const queuedSessionId = asString(queuedPrompt?.workflow_session_id);
+		if (canonicalSessionId && queuedSessionId && queuedSessionId !== canonicalSessionId) return false;
+		return true;
+	}
 	const isLegacySkillPrompt = /^\/skill:completion-protocol\b/.test(latest);
 	const isWorkflowDriverPrompt = /^COMPLETION WORKFLOW DRIVER\b/m.test(latest);
 	if (!isLegacySkillPrompt && !isWorkflowDriverPrompt) return false;
 	if (!/(?:Start or continue the completion workflow for this repo\.|Resume the completion workflow from canonical state\.)/.test(latest)) return false;
-	const canonicalSessionId = asString(snapshot?.state?.workflow_session_id);
-	const promptSessionId = extractWorkflowSessionIdFromPrompt(latest);
-	if (canonicalSessionId && promptSessionId && canonicalSessionId !== promptSessionId) return false;
 	return true;
 }
 
@@ -365,7 +379,7 @@ function maybeWriteActiveWorkflowRoutingSnapshot(assessment: ActiveWorkflowPropo
 				action: assessment.action,
 				reason: assessment.reason,
 				currentMissionAnchor: assessment.currentMissionAnchor,
-				blockedFailureMessage: assessment.blockedFailureMessage ?? null,
+				blockedFailureMessage: null,
 				proposedMissionAnchor: assessment.proposal?.mission ?? null,
 				proposalSource: assessment.proposal?.source ?? null,
 				possibleNoise: assessment.proposal?.analysis.possibleNoise ?? [],
@@ -457,10 +471,6 @@ async function promptContextProposalConfirmationAction(
 	});
 }
 
-function stripCookHandoffBlocks(text: string): string {
-	return text.replace(COOK_HANDOFF_BLOCK_REGEX, " ").replace(/\s+/g, " ").trim();
-}
-
 type CookProposalContext = {
 	cwd: string;
 	hasUI: boolean;
@@ -475,13 +485,8 @@ function cookInlinePromptFromContext(ctx: { cookInlinePrompt?: string }): string
 	return asString(ctx.cookInlinePrompt);
 }
 
-async function deriveCookStartupProposal(
-	ctx: CookProposalContext,
-	projectName: string,
-): Promise<CookContextProposalResult> {
-	if (cookInlinePromptFromContext(ctx)) return {};
-	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
-	const explicitHandoff = assessLatestCookHandoffProposal(recentMessages, projectName, {
+function cookProposalDeps(): CookProposalDeps {
+	return {
 		asString,
 		asStringArray,
 		assessMissionAnchor,
@@ -489,12 +494,7 @@ async function deriveCookStartupProposal(
 		isWeakMissionAnchor,
 		missionAnchorsStrictlyEquivalent,
 		stripCodeBlocks,
-	});
-	if (explicitHandoff.status === "startable") return { proposal: explicitHandoff.proposal };
-	if (explicitHandoff.status === "fresh_but_not_startable") {
-		return { blockedFailureMessage: explicitHandoff.message };
-	}
-	return {};
+	};
 }
 
 async function deriveCookContextProposal(
@@ -502,66 +502,41 @@ async function deriveCookContextProposal(
 	projectName: string,
 ): Promise<CookContextProposalResult> {
 	const inlinePrompt = cookInlinePromptFromContext(ctx);
-	const explicit: CookContextProposalResult = inlinePrompt ? {} : await deriveCookStartupProposal(ctx, projectName);
-	if (explicit.proposal) return explicit;
 	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
-	const recentEntries = [
-		...(inlinePrompt ? [{ role: "user" as const, text: inlinePrompt }] : []),
-		...recentMessages
-			.filter((entry) => !entry.isCommand && (entry.role === "user" || entry.role === "assistant" || entry.role === "custom" || entry.role === "summary"))
-			.slice(0, 12)
-			.map((entry) => ({ role: entry.role, text: stripCookHandoffBlocks(entry.text) }))
-			.filter((entry) => entry.text.length > 0),
-	];
 	const snapshot = await loadCompletionSnapshot(getCtxCwd(ctx));
-	const workflowContextLines = snapshot
-		? [
-			`current mission anchor: ${asString(snapshot.state?.mission_anchor) ?? asString(snapshot.plan?.mission_anchor) ?? asString(snapshot.active?.mission_anchor) ?? "(none)"}`,
-			`continuation policy: ${asString(snapshot.state?.continuation_policy) ?? "(none)"}`,
-			`latest completed slice: ${asString(snapshot.state?.latest_completed_slice) ?? "(none)"}`,
-			`latest verified slice: ${asString(snapshot.state?.latest_verified_slice) ?? "(none)"}`,
-			`active slice goal: ${asString(snapshot.active?.goal) ?? "(none)"}`,
-			`active slice why_now: ${asString(snapshot.active?.why_now) ?? "(none)"}`,
-			`verification goal: ${asString(snapshot.verificationEvidence?.goal) ?? "(none)"}`,
-			`verification summary: ${asString(snapshot.verificationEvidence?.summary) ?? "(none)"}`,
-		]
-		: [];
-	if (inlinePrompt) {
-		workflowContextLines.push(`inline /cook startup intent: ${inlinePrompt}`);
-		workflowContextLines.push("Treat the inline /cook prompt as the highest-priority explicit startup intent for this workflow entry.");
-	}
-	if (explicit.blockedFailureMessage) {
-		workflowContextLines.push(`fresh explicit handoff required tightening before startup: ${explicit.blockedFailureMessage}`);
-		workflowContextLines.push("Treat the user's /cook as implementation intent. Tighten the first slice and verification details from recent discussion instead of failing closed solely because the latest explicit handoff capsule was under-specified.");
-	}
-	const raw = await generateCookHandoffWithAgent({
-		ctx,
+	return await deriveCookContextProposalWithSynthesis({
+		inlinePrompt,
+		recentMessages,
+		snapshot,
 		projectName,
-		recentEntries,
-		workflowContextLines,
-		liveRoleActivityByRoot,
-		completionStatusKey: COMPLETION_STATUS_KEY,
-		safeUiCall,
-		getCtxCwd,
-		getCtxHasUI,
-		getCtxUi,
+		deps: cookProposalDeps(),
+		generateCookHandoff: async ({ recentEntries, workflowContextLines }) =>
+			generateCookHandoffWithAgent({
+				ctx,
+				projectName,
+				recentEntries,
+				workflowContextLines,
+				liveRoleActivityByRoot,
+				completionStatusKey: COMPLETION_STATUS_KEY,
+				safeUiCall,
+				getCtxCwd,
+				getCtxHasUI,
+				getCtxUi,
+			}),
+		analyzeContextProposal: async ({ recentEntries, workflowContextLines }) =>
+			analyzeContextProposalWithAgent({
+				ctx,
+				projectName,
+				recentEntries,
+				workflowContextLines,
+				liveRoleActivityByRoot,
+				completionStatusKey: COMPLETION_STATUS_KEY,
+				safeUiCall,
+				getCtxCwd,
+				getCtxHasUI,
+				getCtxUi,
+			}),
 	});
-	if (!raw) return {};
-	const generated = assessLatestCookHandoffProposal([
-		{ role: "assistant", text: raw, messageId: "generated-primary-agent-handoff", timestampMs: Date.now(), isCommand: false },
-	], projectName, {
-		asString,
-		asStringArray,
-		assessMissionAnchor,
-		normalizeMissionAnchorText,
-		isWeakMissionAnchor,
-		missionAnchorsStrictlyEquivalent,
-		stripCodeBlocks,
-	});
-	if (generated.status === "startable") return { proposal: generated.proposal };
-	if (generated.status === "fresh_but_not_startable") return { blockedFailureMessage: generated.message };
-	if (explicit.blockedFailureMessage) return { blockedFailureMessage: explicit.blockedFailureMessage };
-	return {};
 }
 
 async function confirmContextProposal(
@@ -1024,12 +999,12 @@ function completionKickoff(
 				? `Updated canonical mission anchor:\n${missionAnchor}\n\nWorkflow intent:\n- The user explicitly refocused the workflow before this kickoff.\n- Re-read canonical .agent/** state and continue from the refocused mission.\n\n`
 				: "";
 	const sessionBlock = workflowSessionId ? `Workflow session:\n- workflow_session_id: ${workflowSessionId}\n\n` : "";
-	return `COMPLETION WORKFLOW DRIVER\nStart or continue the completion workflow for this repo.\n\nBefore acting, read:\n- ${SKILL_PATH}\n- ${REFERENCE_PATH}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}User goal:\n${goal}\n\n${intentBlock}Driver instructions:\n- Canonical truth is in package defaults plus ignored .agent/** runtime state. Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting when they exist.\n- If tracked completion contract files are missing or onboarding is required, invoke completion_role with role completion-bootstrapper.\n- Otherwise follow the mandatory dispatch rules from completion-protocol.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Use completion_role for all completion-* role work. Do not directly implement tracked product changes yourself.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
+	return `COMPLETION WORKFLOW DRIVER\nStart or continue the completion workflow for this repo.\n\nBefore acting, read:\n- ${SKILL_PATH}\n- ${REFERENCE_PATH}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}User goal:\n${goal}\n\n${intentBlock}Driver instructions:\n- Canonical truth is in package defaults plus ignored .agent/** runtime state. Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting when they exist.\n- If tracked completion contract files are missing or onboarding is required, invoke completion_role with role completion-bootstrapper.\n- Otherwise follow the mandatory dispatch rules from completion-protocol.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional *_hint fields remain advisory until completion-regrounder authors canonical slices.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Use completion_role for all completion-* role work. Do not directly implement tracked product changes yourself.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
 }
 
 function completionResumePrompt(taskType: string, evaluationProfile: string, workflowSessionId?: string): string {
 	const sessionBlock = workflowSessionId ? `Workflow session:\n- workflow_session_id: ${workflowSessionId}\n\n` : "";
-	return `COMPLETION WORKFLOW DRIVER\nResume the completion workflow from canonical state.\n\nBefore acting, read:\n- ${SKILL_PATH}\n- ${REFERENCE_PATH}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}Resume instructions:\n- Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting.\n- If canonical state is missing, invalid, contradictory, stale, or ambiguous, route to completion-regrounder first.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Continue from next_mandatory_role and next_mandatory_action.\n- Use completion_role for all completion-* role work.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
+	return `COMPLETION WORKFLOW DRIVER\nResume the completion workflow from canonical state.\n\nBefore acting, read:\n- ${SKILL_PATH}\n- ${REFERENCE_PATH}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}Resume instructions:\n- Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting.\n- If canonical state is missing, invalid, contradictory, stale, or ambiguous, route to completion-regrounder first.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional *_hint fields remain advisory until completion-regrounder authors canonical slices.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Continue from next_mandatory_role and next_mandatory_action.\n- Use completion_role for all completion-* role work.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
 }
 
 export default function completionExtension(pi: ExtensionAPI) {
@@ -1058,7 +1033,6 @@ export default function completionExtension(pi: ExtensionAPI) {
 		completionTestWorkflowMissionOverride,
 		confirmContextProposal,
 		deriveCookContextProposal,
-		deriveCookStartupProposal,
 		emitCommandText,
 		finalizeContextProposalAnalysis,
 		getCtxCwd,

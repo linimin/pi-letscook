@@ -84,7 +84,7 @@ Optional preview capsule format:
   "source": "primary_agent",
   "captured_at": "<ISO-8601 timestamp>",
   "source_turn_id": "<current assistant turn id>",
-  "mission": "<startable implementation mission>",
+  "mission": "<workflow-startable implementation mission>",
   "scope": ["..."],
   "constraints": ["..."],
   "non_goals": ["..."],
@@ -92,11 +92,11 @@ Optional preview capsule format:
   "risks": ["..."],
   "notes": ["..."],
   "handoff_kind": "implementation_workflow_handoff",
-  "first_slice_goal": "<bounded first slice goal>",
+  "first_slice_goal": "<optional bounded first slice hint>",
   "first_slice_non_goals": ["..."],
   "implementation_surfaces": ["path/or/surface"],
   "verification_commands": ["npm test -- example"],
-  "why_this_slice_first": "<why this first slice should start the workflow>",
+  "why_this_slice_first": "<optional why this first slice should start the workflow>",
   "task_type": "completion-workflow",
   "evaluation_profile": "completion-rubric-v1",
   "why_cook_now": "<why the task is ready for /cook now>"
@@ -107,12 +107,12 @@ Optional preview capsule format:
 Notes:
 
 - `constraints` may be replaced or supplemented by `non_goals` when clearer.
-- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are required for an implementation-ready handoff.
+- `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are optional startup hints. Include them when they are clearly supported, but do not treat them as required before `/cook` can start workflow.
 - Any capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
 
 Suggested wording:
 
-> We can continue directly in ordinary chat if you want. If you prefer workflow mode, run `/cook` and it should use a primary-agent handoff for Start / Cancel confirmation rather than guessing from recent discussion.
+> We can continue directly in ordinary chat if you want. If you prefer workflow mode, run `/cook` and it should use a primary-agent startup brief for Start / Cancel confirmation rather than guessing from recent discussion. Any first-slice details are only hints until regrounding authors the canonical slices.
 
 ## Forbidden Behaviors
 

@@ -7,22 +7,7 @@ import type {
 	ContextProposalConfirmationActionItem,
 	ContextProposalConfirmationLayout,
 } from "./proposal";
-
-export type AdvisoryStartupBrief = {
-	kind: "startup_brief";
-	source: "recent_discussion" | "primary_agent_handoff" | "deferred_primary_agent_handoff";
-	confirmed: true;
-	captured_at: string;
-	goal_text: string;
-	mission: string;
-	scope: string[];
-	constraints: string[];
-	acceptance: string[];
-	risks: string[];
-	notes: string[];
-	task_type?: string;
-	evaluation_profile?: string;
-};
+import { startupHintsPresent } from "./startup-intent";
 
 export function buildCookHandoffBoundaryReminder(): string {
 	return [
@@ -77,42 +62,16 @@ export function buildContextProposalDisplayText(proposal: ContextProposal): stri
 		lines.push("", "Acceptance");
 		for (const item of proposal.acceptance) lines.push(`- ${item}`);
 	}
+	const startupHints = proposal.startupHints;
+	if (startupHintsPresent(startupHints)) {
+		lines.push("", "Initial slice hints (advisory)");
+		if (startupHints.firstSliceGoal) lines.push(`- First slice goal: ${startupHints.firstSliceGoal}`);
+		if (startupHints.firstSliceNonGoals.length > 0) lines.push(`- First slice non-goals: ${startupHints.firstSliceNonGoals.join(" | ")}`);
+		if (startupHints.implementationSurfaces.length > 0) lines.push(`- Implementation surfaces: ${startupHints.implementationSurfaces.join(" | ")}`);
+		if (startupHints.verificationCommands.length > 0) lines.push(`- Verification commands: ${startupHints.verificationCommands.join(" | ")}`);
+		if (startupHints.whyThisSliceFirst) lines.push(`- Why this slice first: ${startupHints.whyThisSliceFirst}`);
+	}
 	return lines.join("\n");
-}
-
-function buildAdvisoryStartupBriefNotes(analysis: ContextProposalAnalysis): string[] {
-	const notes = [
-		...analysis.critique,
-		...analysis.possibleNoise.map((item) => `Possible noise: ${item}`),
-	];
-	return notes.length > 0 ? notes : ["No additional operator notes were derived from recent discussion."];
-}
-
-export function buildAdvisoryStartupBrief(args: {
-	proposal: Pick<ContextProposal, "goalText" | "mission" | "scope" | "constraints" | "acceptance" | "source">;
-	analysis: ContextProposalAnalysis;
-	capturedAt?: string;
-}): AdvisoryStartupBrief {
-	return {
-		kind: "startup_brief",
-		source:
-			args.proposal.source === "handoff_capsule"
-				? "primary_agent_handoff"
-				: args.proposal.source === "deferred_primary_agent_handoff"
-					? "deferred_primary_agent_handoff"
-					: "recent_discussion",
-		confirmed: true,
-		captured_at: args.capturedAt ?? new Date().toISOString(),
-		goal_text: args.proposal.goalText,
-		mission: args.proposal.mission,
-		scope: [...args.proposal.scope],
-		constraints: [...args.proposal.constraints],
-		acceptance: [...args.proposal.acceptance],
-		risks: [...args.analysis.risks],
-		notes: buildAdvisoryStartupBriefNotes(args.analysis),
-		task_type: args.analysis.taskType,
-		evaluation_profile: args.analysis.evaluationProfile,
-	};
 }
 
 export function buildContextProposalCritiqueText(analysis: ContextProposalAnalysis): string {
@@ -216,7 +175,7 @@ export function buildContextProposalConfirmationLayout(args: {
 }): ContextProposalConfirmationLayout {
 	return {
 		title: args.title,
-		intro: "Review the startup brief (mission, scope, constraints, acceptance, and notes/risks) plus the routing details before /cook writes canonical workflow state. This gate is approval-only: either Start it as-is or Cancel, discuss changes in the main chat, and rerun /cook.",
+		intro: "Review the startup brief (mission, scope, constraints, acceptance, and notes/risks) plus any advisory initial-slice hints before /cook writes canonical workflow state. Starting here enters workflow mode and preserves startup intent; completion-regrounder will still reconcile repo truth and author the canonical slices afterwards. This gate is approval-only: either Start it as-is or Cancel, discuss changes in the main chat, and rerun /cook.",
 		proposalHeading: "Startup brief",
 		proposalBody: buildContextProposalDisplayText(args.proposal),
 		critiqueHeading: "Notes and risks",

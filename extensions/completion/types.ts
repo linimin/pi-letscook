@@ -23,6 +23,7 @@ export type CompletionFiles = {
 	startupBriefPath: string;
 	verificationEvidencePath: string;
 	compactionMarkerPath: string;
+	driverPromptPath: string;
 };
 
 export type CompletionStateSnapshot = {

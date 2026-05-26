@@ -50,6 +50,7 @@ export function resolveFiles(root: string) {
 		startupBriefPath: path.join(currentDir, "startup-brief.json"),
 		verificationEvidencePath: path.join(currentDir, "verification-evidence.json"),
 		compactionMarkerPath: path.join(tmpDir, "post-compaction-recovery.json"),
+		driverPromptPath: path.join(tmpDir, "driver-prompt.json"),
 	};
 }
 
@@ -138,7 +139,6 @@ async function hasCompleteRuntimeState(files: ReturnType<typeof resolveFiles>): 
 		files.statePath,
 		files.planPath,
 		files.activePath,
-		files.startupBriefPath,
 		files.verificationEvidencePath,
 		files.sliceHistoryPath,
 		files.stopHistoryPath,
@@ -154,6 +154,22 @@ export async function removeCompletionRuntimeState(target: string | ReturnType<t
 	await fsp.rm(files.currentDir, { recursive: true, force: true });
 }
 
+async function ensureCanonicalStartupBrief(root: string, files: ReturnType<typeof resolveFiles>, state: JsonRecord): Promise<JsonRecord | undefined> {
+	const existing = await readJson(files.startupBriefPath);
+	if (existing) return existing;
+	if (!isRecord(state.advisory_startup_brief)) return undefined;
+	const rebuilt = defaultStartupBrief(
+		asString(state.mission_anchor) ?? path.basename(root),
+		{
+			taskType: asString(state.task_type) ?? DEFAULT_TASK_TYPE,
+			evaluationProfile: asString(state.evaluation_profile) ?? DEFAULT_EVALUATION_PROFILE,
+		},
+		state.advisory_startup_brief,
+	);
+	await writeJsonFile(files.startupBriefPath, rebuilt);
+	return rebuilt;
+}
+
 export async function loadCompletionSnapshot(startCwd: string): Promise<CompletionStateSnapshot | undefined> {
 	const root = findCompletionRoot(startCwd);
 	if (!root) return undefined;
@@ -162,9 +178,10 @@ export async function loadCompletionSnapshot(startCwd: string): Promise<Completi
 	const state = await readJson(files.statePath);
 	const plan = await readJson(files.planPath);
 	const active = await readJson(files.activePath);
-	const startupBrief = await readJson(files.startupBriefPath);
 	const verificationEvidence = await readJson(files.verificationEvidencePath);
-	if (!state || !plan || !active || !startupBrief || !verificationEvidence) return undefined;
+	if (!state || !plan || !active || !verificationEvidence) return undefined;
+	const startupBrief = await ensureCanonicalStartupBrief(root, files, state);
+	if (!startupBrief) return undefined;
 	const workflow = buildWorkflowRecord();
 	const profile = buildProfileRecord({
 		projectName: path.basename(root),
@@ -193,6 +210,11 @@ export async function loadCompletionDataForReminder(startCwd: string) {
 	const sliceHistory = await readJsonl(snapshot.files.sliceHistoryPath);
 	const stopHistory = await readJsonl(snapshot.files.stopHistoryPath);
 	return { snapshot, sliceHistory, stopHistory };
+}
+
+export function canonicalStartupBrief(snapshot: CompletionStateSnapshot | undefined): JsonRecord | undefined {
+	if (!snapshot) return undefined;
+	return isRecord(snapshot.startupBrief) ? snapshot.startupBrief : undefined;
 }
 
 export async function pathExists(targetPath: string): Promise<boolean> {
@@ -302,7 +324,6 @@ export function defaultState(
 	return {
 		schema_version: 1,
 		mission_anchor: missionAnchor,
-		advisory_startup_brief: advisoryStartupBrief ?? null,
 		workflow_entry_status: "active",
 		workflow_entry_source: "/cook",
 		workflow_entry_confirmed_at: confirmedAt,
@@ -396,6 +417,11 @@ export function defaultStartupBrief(
 			asStringArray(advisoryStartupBrief?.notes).length > 0
 				? asStringArray(advisoryStartupBrief?.notes)
 				: ["No additional startup notes were preserved for this workflow entry."],
+		first_slice_goal_hint: asString(advisoryStartupBrief?.first_slice_goal_hint),
+		first_slice_non_goals_hint: asStringArray(advisoryStartupBrief?.first_slice_non_goals_hint),
+		implementation_surfaces_hint: asStringArray(advisoryStartupBrief?.implementation_surfaces_hint),
+		verification_commands_hint: asStringArray(advisoryStartupBrief?.verification_commands_hint),
+		why_this_slice_first_hint: asString(advisoryStartupBrief?.why_this_slice_first_hint),
 		task_type: asString(advisoryStartupBrief?.task_type) ?? routing?.taskType ?? DEFAULT_TASK_TYPE,
 		evaluation_profile: asString(advisoryStartupBrief?.evaluation_profile) ?? routing?.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
 	};

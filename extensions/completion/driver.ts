@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { promises as fsp } from "node:fs";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
@@ -10,54 +11,26 @@ import {
 	defaultStartupBrief,
 	defaultState,
 	defaultVerificationEvidence,
+	findCompletionRoot,
 	findRepoRoot,
 	loadCompletionSnapshot,
 	removeCompletionRuntimeState,
+	resolveFiles,
 	writeJsonFile,
 } from "./state-store";
-import { buildAdvisoryStartupBrief } from "./prompt-surfaces";
+import { buildAdvisoryStartupBrief } from "./startup-intent";
+import type { CookContextProposalResult } from "./startup-intent";
+import type {
+	ContextProposal,
+	ContextProposalAlternate,
+	ContextProposalAnalysis,
+	ContextProposalDecision,
+} from "./proposal";
 import type { CompletionStateSnapshot } from "./types";
-
-type ContextProposalAnalysis = {
-	taskType?: string;
-	evaluationProfile?: string;
-	critique: string[];
-	risks: string[];
-	possibleNoise: string[];
-	alternateMissions: string[];
-	suppressedCompletedTopics: string[];
-	suppressedNegatedTopics: string[];
-};
-
-type ContextProposalAlternate = {
-	mission: string;
-	scope: string[];
-	constraints: string[];
-	acceptance: string[];
-	analysis: ContextProposalAnalysis;
-	goalText: string;
-	basisPreview: string;
-	source: "session" | "analyst" | "handoff_capsule";
-};
-
-type ContextProposal = ContextProposalAlternate & {
-	alternateProposals: ContextProposalAlternate[];
-};
-
-type ContextProposalDecision = {
-	missionAnchor: string;
-	goalText: string;
-	analysis: ContextProposalAnalysis;
-};
 
 type ExistingWorkflowDecision =
 	| { action: "continue"; currentMissionAnchor: string }
 	| { action: "refocus"; currentMissionAnchor: string; missionAnchor: string; proposal: ContextProposal };
-
-type CookContextProposalResult = {
-	proposal?: ContextProposal;
-	blockedFailureMessage?: string;
-};
 
 function buildCookStartupBriefRequiredMessage(deps: CompletionDriverDeps, prefix?: string): string {
 	const requirement = deps.structuredDiscussionFailureDetail;
@@ -65,15 +38,10 @@ function buildCookStartupBriefRequiredMessage(deps: CompletionDriverDeps, prefix
 }
 
 type ActiveWorkflowProposalAssessment = {
-	action: "continue" | "refocus" | "blocked";
+	action: "continue" | "refocus";
 	currentMissionAnchor: string;
 	proposal?: ContextProposal;
-	blockedFailureMessage?: string;
-	reason:
-		| "matching_mission"
-		| "missing_explicit_handoff"
-		| "fresh_explicit_handoff"
-		| "fresh_explicit_handoff_not_startable";
+	reason: "matching_mission" | "missing_explicit_handoff" | "fresh_explicit_handoff";
 };
 
 type ExistingWorkflowChooserOptions = {
@@ -126,7 +94,6 @@ export type CompletionDriverDeps = {
 	) => string;
 	completionResumePrompt: (taskType: string, evaluationProfile: string, workflowSessionId?: string) => string;
 	deriveCookContextProposal: (ctx: DriverContext, projectName: string) => Promise<CookContextProposalResult>;
-	deriveCookStartupProposal: (ctx: DriverContext, projectName: string) => Promise<CookContextProposalResult>;
 	confirmContextProposal: (
 		ctx: { hasUI: boolean; ui: any },
 		proposal: ContextProposal,
@@ -171,11 +138,6 @@ function roleFromEnv(): string | undefined {
 function buildCookCancellationMessage(prefix: string, deps: CompletionDriverDeps): string {
 	return `${prefix}. ${deps.mainChatRerunGuidance}`;
 }
-
-function buildCookStructuredDiscussionFailureMessage(deps: CompletionDriverDeps, prefix?: string): string {
-	return prefix ? `${prefix} ${deps.structuredDiscussionFailureDetail}` : deps.structuredDiscussionFailureDetail;
-}
-
 
 export function completionContinuationFingerprint(snapshot: CompletionStateSnapshot): string | undefined {
 	if (asString(snapshot.state?.continuation_policy) !== "continue") return undefined;
@@ -230,6 +192,15 @@ function rememberParkedDriverContinuation(rootKey: string, fingerprint: string):
 	tracker.warned = true;
 }
 
+function hashDriverPrompt(prompt: string): string {
+	return createHash("sha256").update(prompt).digest("hex");
+}
+
+function extractWorkflowSessionIdFromDriverPrompt(prompt: string): string | undefined {
+	const match = prompt.match(/^- workflow_session_id:\s*(.+)$/m);
+	return match?.[1]?.trim() || undefined;
+}
+
 function summarizeProposalForChoice(proposal: ContextProposalAlternate): string {
 	const parts: string[] = [`Mission\n${proposal.mission}`];
 	if (proposal.scope.length > 0) parts.push(`Scope\n- ${proposal.scope.slice(0, 2).join("\n- ")}`);
@@ -251,6 +222,16 @@ async function queueCompletionDriverPrompt(
 	if (kind === "auto-resume" && tracker) {
 		noteQueuedDriverPrompt(tracker.rootKey, tracker.fingerprint);
 	}
+	const root = findCompletionRoot(deps.getCtxCwd(ctx)) ?? findRepoRoot(deps.getCtxCwd(ctx)) ?? deps.getCtxCwd(ctx);
+	const files = resolveFiles(root);
+	const promptMetadata = {
+		kind,
+		queued_at: new Date().toISOString(),
+		workflow_session_id: extractWorkflowSessionIdFromDriverPrompt(prompt) ?? null,
+		prompt_hash: hashDriverPrompt(prompt),
+	};
+	await fsp.mkdir(files.tmpDir, { recursive: true });
+	await writeJsonFile(files.driverPromptPath, promptMetadata);
 	if (deps.shouldSkipDriverKickoffForTests()) {
 		deps.emitCommandText(ctx, `Skipped completion workflow ${kind} prompt (test mode)`, "info");
 		return false;
@@ -306,16 +287,6 @@ async function assessActiveWorkflowProposalRouting(
 	const currentMission = currentMissionAnchor(snapshot);
 	const projectName = path.basename(snapshot.files.root);
 	const proposalResult = await deps.deriveCookContextProposal(ctx, projectName);
-	if (proposalResult.blockedFailureMessage) {
-		const assessment: ActiveWorkflowProposalAssessment = {
-			action: "blocked",
-			currentMissionAnchor: currentMission,
-			blockedFailureMessage: proposalResult.blockedFailureMessage,
-			reason: "fresh_explicit_handoff_not_startable",
-		};
-		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
-		return assessment;
-	}
 	const proposal = proposalResult.proposal;
 	if (!proposal) {
 		const assessment: ActiveWorkflowProposalAssessment = {
@@ -516,10 +487,6 @@ export async function runCookEntry(
 		const root = findRepoRoot(cwd) ?? cwd;
 		const projectName = path.basename(root);
 		const derived = await deps.deriveCookContextProposal(ctx, projectName);
-		if (derived.blockedFailureMessage) {
-			deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
-			return;
-		}
 		const proposal = derived.proposal;
 		if (!proposal) {
 			deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps), "info");
@@ -547,7 +514,7 @@ export async function runCookEntry(
 		});
 		deps.emitCommandText(
 			ctx,
-			`Initialized completion control plane in ${created.root}${created.created.length > 0 ? ` (${created.created.length} files created)` : ""}`,
+			`Started completion workflow for: ${kickoffMissionAnchor ?? projectName}. Saved canonical startup brief in ${created.root}/.agent/current/startup-brief.json; completion-regrounder will derive the initial slice plan from repo truth.${created.created.length > 0 ? ` (${created.created.length} files created)` : ""}`,
 			"info",
 		);
 		snapshot = await loadCompletionSnapshot(root);
@@ -561,10 +528,6 @@ export async function runCookEntry(
 		if (workflowDone) {
 			const projectName = path.basename(snapshot.files.root);
 			const derived = await deps.deriveCookContextProposal(ctx, projectName);
-			if (derived.blockedFailureMessage) {
-				deps.emitCommandText(ctx, derived.blockedFailureMessage, "info");
-				return;
-			}
 			const proposal = derived.proposal;
 			if (!proposal) {
 				deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps, "The previous completion workflow is already done."), "info");
@@ -589,13 +552,13 @@ export async function runCookEntry(
 				buildAdvisoryStartupBrief({ proposal, analysis: decision.analysis }),
 			);
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
-			deps.emitCommandText(ctx, `Started a new completion workflow round from explicit primary-agent handoff: ${decision.missionAnchor}`, "info");
+			deps.emitCommandText(
+				ctx,
+				`Started a new completion workflow round for: ${decision.missionAnchor}. Saved canonical startup brief; completion-regrounder will derive the next slices from repo truth.`,
+				"info",
+			);
 		} else {
 			const assessment = await assessActiveWorkflowProposalRouting(ctx, snapshot, deps);
-			if (assessment.action === "blocked") {
-				deps.emitCommandText(ctx, assessment.blockedFailureMessage ?? buildCookStructuredDiscussionFailureMessage(deps), "info");
-				return;
-			}
 			if (!assessment.proposal || assessment.action === "continue") {
 				await resumeActiveWorkflowFromCanonicalState(pi, ctx, snapshot, deps);
 				return;
@@ -648,9 +611,7 @@ export async function runCookEntry(
 			snapshot = (await loadCompletionSnapshot(snapshot.files.root)) ?? snapshot;
 			deps.emitCommandText(
 				ctx,
-				assessment.reason === "fresh_explicit_handoff"
-					? `Refocused completion mission from explicit primary-agent handoff to: ${proposalDecision.missionAnchor}`
-					: `Refocused completion mission to: ${proposalDecision.missionAnchor}`,
+				`Refocused completion workflow to: ${proposalDecision.missionAnchor}. Saved canonical startup brief; completion-regrounder will derive updated slices from repo truth.`,
 				"info",
 			);
 		}

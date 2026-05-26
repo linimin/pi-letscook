@@ -263,7 +263,8 @@ assert state['mission_anchor'] == 'Replace the active workflow from inline /cook
 assert plan['mission_anchor'] == state['mission_anchor'], 'refocused plan should match the inline-prompt mission anchor'
 assert active['mission_anchor'] == state['mission_anchor'], 'refocused active slice should match the inline-prompt mission anchor'
 assert before != after, 'active /cook inline prompt should rewrite canonical files after confirmation'
-assert 'Refocused completion mission from explicit primary-agent handoff to: Replace the active workflow from inline /cook prompt.' in output, 'active /cook inline prompt should report the refocused mission'
+assert 'Refocused completion workflow to: Replace the active workflow from inline /cook prompt.' in output, 'active /cook inline prompt should report the refocused mission'
+assert 'completion-regrounder will derive updated slices from repo truth' in output, 'active /cook inline prompt should explain that regrounder derives updated slices after refocus'
 PY
 
 SESSION_INITIAL_REFOCUS="$TMPDIR/session-initial-bare-refocus.jsonl"
@@ -335,7 +336,9 @@ active = json.loads(Path('.agent/current/active-slice.json').read_text())
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after refocus'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after refocus'
 assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after refocus'
-assert state['advisory_startup_brief']['mission'] == new_anchor, 'refocus should preserve the confirmed startup brief as advisory intake'
+startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
+assert startup_brief['mission'] == new_anchor, 'refocus should preserve the confirmed startup brief canonically'
+assert 'advisory_startup_brief' not in state or state['advisory_startup_brief'] is None, 'state.json should no longer carry advisory_startup_brief after refocus because startup-brief.json is canonical'
 assert plan['mission_anchor'] == new_anchor, 'plan.json mission_anchor mismatch after refocus'
 assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after refocus'
 assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after refocus'
@@ -538,7 +541,9 @@ assert routing['proposalSource'] == 'handoff_capsule', 'accepted bare refocus sh
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after bare refocus'
 assert state['task_type'] == expected_task_type, 'state.json task_type mismatch after bare refocus'
 assert state['evaluation_profile'] == expected_eval_profile, 'state.json evaluation_profile mismatch after bare refocus'
-assert state['advisory_startup_brief']['mission'] == new_anchor, 'bare refocus should preserve the confirmed startup brief as advisory intake'
+startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
+assert startup_brief['mission'] == new_anchor, 'bare refocus should preserve the confirmed startup brief canonically'
+assert 'advisory_startup_brief' not in state or state['advisory_startup_brief'] is None, 'state.json should no longer carry advisory_startup_brief after bare refocus because startup-brief.json is canonical'
 assert plan['mission_anchor'] == new_anchor, 'plan.json mission_anchor mismatch after bare refocus'
 assert plan['task_type'] == expected_task_type, 'plan.json task_type mismatch after bare refocus'
 assert plan['evaluation_profile'] == expected_eval_profile, 'plan.json evaluation_profile mismatch after bare refocus'

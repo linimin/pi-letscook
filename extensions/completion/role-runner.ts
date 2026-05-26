@@ -98,13 +98,16 @@ const ANALYST_HEARTBEAT_MS = 5_000;
 
 const PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT = [
 	"You are the primary agent preparing an explicit /cook handoff after the user already chose workflow mode.",
-	"Return either exactly one fenced ```cook_handoff JSON block or one brief plain sentence explaining why no concrete handoff can be prepared.",
+	"Return either exactly one fenced ```cook_handoff JSON block or one brief plain sentence explaining why no workflow startup handoff can be prepared.",
 	"If you can prepare a handoff, the JSON must use kind cook_handoff, source primary_agent, and handoff_kind implementation_workflow_handoff.",
+	"Capture the best mission-level startup brief you can from recent discussion and canonical workflow context so /cook can move directly into Start/Cancel confirmation.",
 	"When the user has clearly accepted a concrete assistant-proposed slice, carry that slice forward into the handoff instead of broadening or re-guessing the mission.",
 	"Do not make /cook infer or rediscover the mission from recent discussion later; author the handoff now from the primary-agent view of the task.",
+	"When recent discussion is meta-discussion about how to implement a change, recover the underlying repo-change mission instead of echoing planning-only wording.",
 	"Do not emit markdown commentary before or after the capsule.",
-	"If the task is not concrete enough for implementation workflow, do not invent the slice.",
-	"A valid implementation-ready handoff must include mission, scope, constraints or non_goals, acceptance, risks, notes, first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, and why_this_slice_first.",
+	"A valid workflow-startable handoff must include mission, scope, constraints or non_goals, acceptance, risks, and notes.",
+	"first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, and why_this_slice_first are optional startup hints. Include them when they are clearly supported, but do not refuse the handoff solely because the first slice is still under-specified.",
+	"If the first slice is not concrete enough yet, leave the slice-hint fields empty instead of refusing the startup handoff.",
 ].join(" ");
 const PRIMARY_AGENT_HANDOFF_ROLE = "cook-primary-agent-handoff";
 

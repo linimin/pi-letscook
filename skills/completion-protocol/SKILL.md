@@ -22,6 +22,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 
 - Current repo truth beats stale notes, stale summaries, and conversation memory.
 - `startup-brief.json` is the persistent machine-readable record of the confirmed `/cook` startup intent. It is canonical workflow intake, not the canonical slice plan.
+- `startup-brief.json` may include optional `*_hint` fields for an initial slice, but those fields are advisory startup hints only; `completion-regrounder` still owns canonical slice planning.
 - `plan.json` is the persistent machine-readable slice backlog. Rebuild it during every re-grounding wave and keep it truthful after every committed slice.
 - `state.json` is the persistent machine-readable workflow controller. Keep `current_phase`, `continuation_policy`, `continuation_reason`, `next_mandatory_role`, and `next_mandatory_action` truthful after every transition.
 - Every slice in `plan.json` must have non-empty `acceptance_criteria` — concrete, verifiable conditions that define done. A slice without acceptance criteria is invalid and must not be selected.
@@ -156,7 +157,7 @@ The workflow driver must invoke `completion-regrounder` before continuing whenev
 
 The exact implementer handoff now includes implementation-scope surfaces and expected verification commands in addition to the locked slice goal, acceptance, notes, and before-slice counters.
 
-At workflow start, treat `.agent/current/startup-brief.json` as the confirmed intent anchor that regrounding must reconcile against current repo truth before selecting slices.
+At workflow start, treat `.agent/current/startup-brief.json` as the confirmed intent anchor that regrounding must reconcile against current repo truth before selecting slices. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional `*_hint` fields are advisory first-slice hints, not a preselected active-slice contract.
 
 The workflow driver must not continue implementation, review, audit, or stop evaluation from compacted conversation memory alone.
 

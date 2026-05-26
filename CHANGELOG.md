@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.80
+
+### Changed
+
+- shifted `/cook` startup from an implementation-ready first-slice gate toward a workflow-startable startup brief so explicit workflow entry now preserves mission-level intent even when first-slice details remain advisory
+- turned weak fresh explicit `cook_handoff` capsules into startup input instead of automatic blockers by letting same-entry primary-agent synthesis tighten acceptance and initial-slice hints before workflow confirmation
+- started persisting structured startup hint fields (`first_slice_goal_hint`, `first_slice_non_goals_hint`, `implementation_surfaces_hint`, `verification_commands_hint`, `why_this_slice_first_hint`) in canonical startup intake while keeping `completion-regrounder` authoritative for canonical slice planning
+- updated startup confirmation copy, regrounder/protocol guidance, and regression coverage so startup hints are treated as advisory until regrounding authors the canonical slices
+- made `.agent/current/startup-brief.json` the canonical startup-intake source for new workflow state, kept legacy `state.json advisory_startup_brief` only as a migration input, and taught snapshot loading to rebuild missing startup-brief files from older runtime state
+- started recording queued driver-prompt metadata under `.agent/current/tmp/driver-prompt.json` so workflow attach and resume can lean on canonical prompt/session fingerprints instead of raw prompt-shape detection alone
+
 ## 0.1.79
 
 ### Fixed

@@ -2,6 +2,7 @@ import {
 	buildContextProposalAnalystPrompt,
 	buildContextProposalGoalText,
 } from "./prompt-surfaces";
+import type { StartupIntentHints } from "./startup-intent";
 
 const DEFAULT_TASK_TYPE = "completion-workflow";
 const DEFAULT_EVALUATION_PROFILE = "completion-rubric-v1";
@@ -19,6 +20,8 @@ export type ContextProposalAnalysis = {
 	suppressedNegatedTopics: string[];
 };
 
+export type ContextProposalStartupHints = StartupIntentHints;
+
 export type ContextProposalAlternate = {
 	mission: string;
 	scope: string[];
@@ -28,6 +31,7 @@ export type ContextProposalAlternate = {
 	goalText: string;
 	basisPreview: string;
 	source: "session" | "analyst" | "handoff_capsule" | "deferred_primary_agent_handoff";
+	startupHints?: ContextProposalStartupHints;
 };
 
 export type ContextProposal = ContextProposalAlternate & {
@@ -60,11 +64,11 @@ export type CookHandoffCapsule = {
 	risks: string[];
 	notes: string[];
 	handoff_kind: "implementation_workflow_handoff";
-	first_slice_goal: string;
+	first_slice_goal?: string;
 	first_slice_non_goals: string[];
 	implementation_surfaces: string[];
 	verification_commands: string[];
-	why_this_slice_first: string;
+	why_this_slice_first?: string;
 	task_type?: string;
 	evaluation_profile?: string;
 	why_cook_now?: string;
@@ -77,10 +81,6 @@ export type CookHandoffProposalAssessment =
 	| {
 		status: "startable";
 		proposal: ContextProposal;
-	  }
-	| {
-		status: "fresh_but_not_startable";
-		message: string;
 	  };
 
 export type ContextProposalDecision = {
@@ -1277,18 +1277,18 @@ function parseCookHandoffCapsulesFromText(
 		if (deps.asString(parsed.source) !== "primary_agent") continue;
 		if (deps.asString(parsed.handoff_kind) !== "implementation_workflow_handoff") continue;
 		const mission = deps.asString(parsed.mission);
-		const firstSliceGoal = deps.asString(parsed.first_slice_goal ?? parsed.firstSliceGoal);
-		const whyThisSliceFirst = deps.asString(parsed.why_this_slice_first ?? parsed.whyThisSliceFirst);
-		if (!mission || !firstSliceGoal || !whyThisSliceFirst) continue;
+		if (!mission) continue;
 		const scope = deps.asStringArray(parsed.scope);
 		const constraints = deps.asStringArray(parsed.constraints);
 		const nonGoals = deps.asStringArray(parsed.non_goals ?? parsed.nonGoals);
 		const acceptance = deps.asStringArray(parsed.acceptance);
 		const risks = deps.asStringArray(parsed.risks);
 		const notes = deps.asStringArray(parsed.notes);
+		const firstSliceGoal = deps.asString(parsed.first_slice_goal ?? parsed.firstSliceGoal);
 		const firstSliceNonGoals = deps.asStringArray(parsed.first_slice_non_goals ?? parsed.firstSliceNonGoals);
 		const implementationSurfaces = deps.asStringArray(parsed.implementation_surfaces ?? parsed.implementationSurfaces);
 		const verificationCommands = deps.asStringArray(parsed.verification_commands ?? parsed.verificationCommands);
+		const whyThisSliceFirst = deps.asString(parsed.why_this_slice_first ?? parsed.whyThisSliceFirst);
 		const capturedAt = deps.asString(parsed.captured_at) ?? (timestampMs ? new Date(timestampMs).toISOString() : undefined);
 		const sourceTurnId = deps.asString(parsed.source_turn_id) ?? messageId;
 		if (!capturedAt || !sourceTurnId) continue;
@@ -1319,18 +1319,12 @@ function parseCookHandoffCapsulesFromText(
 }
 
 function buildCookHandoffBasisPreview(capsule: CookHandoffCapsule): string {
-	const parts = [
-		capsule.mission,
-		...capsule.scope,
-		...capsule.constraints,
-		...capsule.non_goals,
-		...capsule.acceptance,
-		`first_slice_goal: ${capsule.first_slice_goal}`,
-		...capsule.first_slice_non_goals.map((item) => `first_slice_non_goals: ${item}`),
-		...capsule.implementation_surfaces.map((item) => `implementation_surfaces: ${item}`),
-		...capsule.verification_commands.map((item) => `verification_commands: ${item}`),
-		`why_this_slice_first: ${capsule.why_this_slice_first}`,
-	];
+	const parts = [capsule.mission, ...capsule.scope, ...capsule.constraints, ...capsule.non_goals, ...capsule.acceptance];
+	if (capsule.first_slice_goal) parts.push(`first_slice_goal: ${capsule.first_slice_goal}`);
+	parts.push(...capsule.first_slice_non_goals.map((item) => `first_slice_non_goals: ${item}`));
+	parts.push(...capsule.implementation_surfaces.map((item) => `implementation_surfaces: ${item}`));
+	parts.push(...capsule.verification_commands.map((item) => `verification_commands: ${item}`));
+	if (capsule.why_this_slice_first) parts.push(`why_this_slice_first: ${capsule.why_this_slice_first}`);
 	if (capsule.why_cook_now) parts.push(`why_cook_now: ${capsule.why_cook_now}`);
 	return parts.join("\n").trim();
 }
@@ -1350,43 +1344,23 @@ function cookHandoffAcceptanceIsRepoChangeOriented(capsule: CookHandoffCapsule):
 	return capsule.acceptance.some((item) => cookHandoffAcceptanceItemIsRepoChangeOrVerificationOriented(item));
 }
 
-function cookHandoffStartabilityFailures(
-	capsule: CookHandoffCapsule,
-	deps: Pick<ProposalParseDeps, "normalizeMissionAnchorText" | "isWeakMissionAnchor">,
-): string[] {
-	const failures: string[] = [];
-	const mission = deps.normalizeMissionAnchorText(capsule.mission);
-	if (!mission || deps.isWeakMissionAnchor(mission)) failures.push("mission is missing a concrete implementation anchor");
-	else if (COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(mission)) failures.push("mission is negative or workflow-suppression-only");
-	if (capsule.scope.length === 0) failures.push("scope is empty");
-	if (capsule.acceptance.length === 0) failures.push("acceptance is empty");
-	else if (!cookHandoffAcceptanceIsRepoChangeOriented(capsule)) {
-		failures.push("acceptance is not anchored to concrete repo changes or verification");
+function buildCookHandoffCritiqueLines(capsule: CookHandoffCapsule): string[] {
+	const critique = [...capsule.notes];
+	if (capsule.acceptance.length === 0) {
+		critique.push("Startup acceptance was not fully captured at /cook entry; completion-regrounder should reconcile concrete repo-change acceptance before selecting a slice.");
+	} else if (!cookHandoffAcceptanceIsRepoChangeOriented(capsule)) {
+		critique.push("Startup acceptance remained high-level at /cook entry; completion-regrounder should tighten it against concrete repo truth before selecting a slice.");
 	}
-	const firstSliceGoal = deps.normalizeMissionAnchorText(capsule.first_slice_goal);
-	if (!firstSliceGoal || deps.isWeakMissionAnchor(firstSliceGoal) || COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(firstSliceGoal)) {
-		failures.push("first_slice_goal is not a bounded implementation slice");
-	} else if (hasExplicitPlanningOnlyDeliverable([capsule.first_slice_goal]) || hasClearNoImplementationSignal([capsule.first_slice_goal])) {
-		failures.push("first_slice_goal is planning-only instead of a repo-change slice");
-	}
-	if (capsule.implementation_surfaces.length === 0) failures.push("implementation_surfaces is empty");
-	if (capsule.verification_commands.length === 0) failures.push("verification_commands is empty");
-	return failures;
-}
-
-function buildNonStartableCookHandoffMessage(failures: string[]): string {
-	return [
-		"/cook failed closed because a fresh explicit primary-agent handoff exists, but it is not concrete enough to start implementation workflow yet.",
-		"Tighten the handoff in the main chat so it names a bounded first implementation slice, repo-change-oriented acceptance, implementation_surfaces, and verification_commands, then rerun /cook.",
-		`Blocking details: ${failures.join("; ")}.`,
-	].join(" ");
-}
-
-function isStartableCookHandoffCapsule(
-	capsule: CookHandoffCapsule,
-	deps: Pick<ProposalParseDeps, "normalizeMissionAnchorText" | "isWeakMissionAnchor">,
-): boolean {
-	return cookHandoffStartabilityFailures(capsule, deps).length === 0;
+	if (capsule.first_slice_goal) critique.push(`First slice goal: ${capsule.first_slice_goal}`);
+	else critique.push("Initial slice was not fixed at /cook entry; completion-regrounder should derive it from repo truth.");
+	if (capsule.first_slice_non_goals.length > 0) critique.push(`First slice non-goals: ${capsule.first_slice_non_goals.join(" | ")}`);
+	if (capsule.implementation_surfaces.length > 0) critique.push(`Implementation surfaces: ${capsule.implementation_surfaces.join(" | ")}`);
+	else critique.push("Implementation surfaces were not fixed at /cook entry; completion-regrounder should derive them later.");
+	if (capsule.verification_commands.length > 0) critique.push(`Verification commands: ${capsule.verification_commands.join(" | ")}`);
+	else critique.push("Verification commands were not fixed at /cook entry; completion-regrounder should derive them later.");
+	if (capsule.why_this_slice_first) critique.push(`Why this slice first: ${capsule.why_this_slice_first}`);
+	if (capsule.why_cook_now) critique.push(`Primary-agent /cook handoff rationale: ${capsule.why_cook_now}`);
+	return uniqueProposalItems(critique);
 }
 
 function laterMessagesInvalidateCookHandoff(
@@ -1415,15 +1389,33 @@ function buildContextProposalFromCookHandoffCapsule(
 	projectName: string,
 	deps: ProposalParseDeps,
 ): ContextProposal | undefined {
-	if (!isStartableCookHandoffCapsule(capsule, deps)) return undefined;
 	const constraints = uniqueProposalItems([...capsule.constraints, ...capsule.non_goals]);
 	const mission = deps.assessMissionAnchor(capsule.mission, projectName).derived;
+	const normalizedMission = deps.normalizeMissionAnchorText(mission);
+	if (!normalizedMission || deps.isWeakMissionAnchor(normalizedMission) || COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(normalizedMission)) {
+		return undefined;
+	}
+	if (capsule.scope.length === 0 && constraints.length === 0 && capsule.acceptance.length === 0) return undefined;
 	const goalText = buildContextProposalGoalText({
 		mission,
 		scope: capsule.scope,
 		constraints,
 		acceptance: capsule.acceptance,
 	});
+	const startupHints: ContextProposalStartupHints | undefined =
+		capsule.first_slice_goal ||
+		capsule.first_slice_non_goals.length > 0 ||
+		capsule.implementation_surfaces.length > 0 ||
+		capsule.verification_commands.length > 0 ||
+		capsule.why_this_slice_first
+			? {
+				firstSliceGoal: capsule.first_slice_goal,
+				firstSliceNonGoals: [...capsule.first_slice_non_goals],
+				implementationSurfaces: [...capsule.implementation_surfaces],
+				verificationCommands: [...capsule.verification_commands],
+				whyThisSliceFirst: capsule.why_this_slice_first,
+			}
+			: undefined;
 	const proposal: ContextProposal = {
 		mission,
 		scope: [...capsule.scope],
@@ -1433,15 +1425,7 @@ function buildContextProposalFromCookHandoffCapsule(
 			{
 				taskType: capsule.task_type,
 				evaluationProfile: capsule.evaluation_profile,
-				critique: [
-					...capsule.notes,
-					`First slice goal: ${capsule.first_slice_goal}`,
-					...(capsule.first_slice_non_goals.length > 0 ? [`First slice non-goals: ${capsule.first_slice_non_goals.join(" | ")}`] : []),
-					...(capsule.implementation_surfaces.length > 0 ? [`Implementation surfaces: ${capsule.implementation_surfaces.join(" | ")}`] : []),
-					...(capsule.verification_commands.length > 0 ? [`Verification commands: ${capsule.verification_commands.join(" | ")}`] : []),
-					`Why this slice first: ${capsule.why_this_slice_first}`,
-					...(capsule.why_cook_now ? [`Primary-agent /cook handoff rationale: ${capsule.why_cook_now}`] : []),
-				],
+				critique: buildCookHandoffCritiqueLines(capsule),
 				risks: capsule.risks,
 				possibleNoise: [],
 				alternateMissions: [],
@@ -1455,16 +1439,17 @@ function buildContextProposalFromCookHandoffCapsule(
 				...capsule.scope,
 				...constraints,
 				...capsule.acceptance,
-				capsule.first_slice_goal,
+				capsule.first_slice_goal ?? "",
 				...capsule.first_slice_non_goals,
 				...capsule.implementation_surfaces,
 				...capsule.verification_commands,
-				capsule.why_this_slice_first,
+				capsule.why_this_slice_first ?? "",
 			],
 		),
 		goalText,
 		basisPreview: buildCookHandoffBasisPreview(capsule),
 		source: "handoff_capsule",
+		startupHints,
 		alternateProposals: [],
 	};
 	return finalizeContextProposal(proposal, projectName, deps);
@@ -1485,13 +1470,6 @@ export function assessLatestCookHandoffProposal(
 			const laterMessages = recentMessages.slice(0, index);
 			if (!cookHandoffIsFreshEnough(capsule, laterMessages)) continue;
 			if (laterMessagesInvalidateCookHandoff(laterMessages, deps)) continue;
-			const failures = cookHandoffStartabilityFailures(capsule, deps);
-			if (failures.length > 0) {
-				return {
-					status: "fresh_but_not_startable",
-					message: buildNonStartableCookHandoffMessage(failures),
-				};
-			}
 			const proposal = buildContextProposalFromCookHandoffCapsule(capsule, projectName, deps);
 			if (proposal) return { status: "startable", proposal };
 		}

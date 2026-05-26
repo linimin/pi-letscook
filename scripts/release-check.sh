@@ -64,7 +64,7 @@ checks = {
         '"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role."',
     ],
     "extensions/completion/index.ts": [
-        '"/cook failed closed because the primary-agent handoff step could not prepare a concrete startup handoff from the current task context. Clarify the mission, first slice, or verification intent in the main chat, then rerun /cook."',
+        '"/cook failed closed because the primary-agent startup step could not prepare a workflow startup brief from the current task context. Clarify the mission, repo-change intent, or key constraints in the main chat, then rerun /cook."',
         'description: "/cook workflow: start or replace workflow from a primary-agent startup brief (optionally seeded by an inline prompt), or resume the current workflow from canonical state"',
         '"Do not call completion_role from ordinary chat; it is reserved for active /cook workflow sessions."',
         '`COMPLETION WORKFLOW DRIVER\\nStart or continue the completion workflow for this repo.',
