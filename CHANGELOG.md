@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.80
+## 0.1.84
 
 ### Changed
 
