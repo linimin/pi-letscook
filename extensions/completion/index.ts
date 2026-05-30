@@ -73,7 +73,7 @@ import {
 	loadCompletionSnapshot,
 	pathExists,
 	readText,
-	removeCompletionRuntimeState,
+	removeCompletionAgentDir,
 	scaffoldCompletionFiles as scaffoldCompletionFilesOnDisk,
 } from "./state-store";
 import type { TranscriptionResult } from "./transcription";
@@ -350,21 +350,10 @@ function shouldCleanupClosedWorkflowRuntime(snapshot: CompletionStateSnapshot | 
 	return workflowEntryStatus === "cancelled" || workflowEntryStatus === "canceled" || workflowEntryStatus === "done";
 }
 
-function closedWorkflowCleanupMarkerPath(cwd: string): string {
-	const root = findCompletionRoot(cwd) ?? findRepoRoot(cwd) ?? cwd;
-	return path.join(root, ".agent", "closed-workflow-cleanup.json");
-}
-
 async function cleanupClosedWorkflowRuntimeIfNeeded(cwd: string): Promise<boolean> {
 	const snapshot = await loadCompletionSnapshot(cwd);
 	if (!shouldCleanupClosedWorkflowRuntime(snapshot)) return false;
-	await removeCompletionRuntimeState(snapshot.files);
-	await fsp.mkdir(path.join(snapshot.files.root, ".agent"), { recursive: true });
-	await fsp.writeFile(
-		closedWorkflowCleanupMarkerPath(snapshot.files.root),
-		`${JSON.stringify({ cleaned_at: new Date().toISOString(), mission_anchor: asString(snapshot.state?.mission_anchor) ?? null }, null, 2)}\n`,
-		"utf8",
-	);
+	await removeCompletionAgentDir(snapshot.files);
 	return true;
 }
 
@@ -1110,7 +1099,6 @@ export default function completionExtension(pi: ExtensionAPI) {
 			};
 		}
 		if (!shouldInjectCookHandoffBoundary(event, ctx, loaded?.snapshot)) return;
-		if (await pathExists(closedWorkflowCleanupMarkerPath(agentCwd))) return;
 		const handoffReminder = buildCookHandoffBoundaryReminder();
 		maybeWriteTestSnapshot(completionTestCookHandoffReminderPath(), handoffReminder);
 		return {

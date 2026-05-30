@@ -154,6 +154,11 @@ export async function removeCompletionRuntimeState(target: string | ReturnType<t
 	await fsp.rm(files.currentDir, { recursive: true, force: true });
 }
 
+export async function removeCompletionAgentDir(target: string | ReturnType<typeof resolveFiles>): Promise<void> {
+	const files = typeof target === "string" ? resolveFiles(target) : target;
+	await fsp.rm(files.agentDir, { recursive: true, force: true });
+}
+
 async function ensureCanonicalStartupBrief(root: string, files: ReturnType<typeof resolveFiles>, state: JsonRecord): Promise<JsonRecord | undefined> {
 	const existing = await readJson(files.startupBriefPath);
 	if (existing) return existing;

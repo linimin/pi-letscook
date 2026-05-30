@@ -456,7 +456,8 @@ capsule = {
 print('```cook_handoff\n' + json.dumps(capsule, ensure_ascii=False, indent=2) + '\n```')
 PY
 )"
-rm -rf .agent/current
+rm -rf .agent
+mkdir -p .agent
 python3 - <<'PY'
 import json
 from pathlib import Path
@@ -493,6 +494,7 @@ startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text()
 assert state['mission_anchor'] == 'Strengthen smoke-test coverage for fresh /cook startup after cleanup.', state
 assert state['workflow_session_id'] != 'stale-root-session', state
 assert startup_brief['mission'] == 'Strengthen smoke-test coverage for fresh /cook startup after cleanup.', startup_brief
+assert not Path('.agent/closed-workflow-cleanup.json').exists(), 'fresh startup after cleanup should not depend on a closed-workflow cleanup marker'
 assert json.loads(Path('.agent/state.json').read_text())['mission_anchor'] == 'STALE ROOT RUNTIME SHOULD NOT RECOVER', 'stale root file should remain distinct from canonical runtime state'
 PY
 verify_control_plane >/dev/null

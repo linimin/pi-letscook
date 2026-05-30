@@ -475,8 +475,6 @@ export async function runCookEntry(
 	let goal: string | undefined;
 	const inlinePrompt = asString(ctx.cookInlinePrompt);
 	const cwd = deps.getCtxCwd(ctx);
-	const markerRoot = findRepoRoot(cwd) ?? cwd;
-	await fsp.rm(path.join(markerRoot, ".agent", "closed-workflow-cleanup.json"), { force: true });
 	let snapshot = await loadCompletionSnapshot(cwd);
 	const workflowDone = isWorkflowDone(snapshot);
 	let kickoffIntent: "auto" | "continue" | "refocus" = "auto";

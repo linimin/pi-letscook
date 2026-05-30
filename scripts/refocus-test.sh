@@ -673,8 +673,8 @@ from pathlib import Path
 
 reminder = Path(sys.argv[1])
 handoff = Path(sys.argv[2])
-assert not Path('.agent/current').exists(), 'completed workflow should delete .agent/current before the next ordinary turn'
-assert not reminder.exists(), 'completed workflow cleanup should suppress the old closed-workflow reminder once .agent/current is deleted'
+assert not Path('.agent').exists(), 'completed workflow should delete .agent/ before the next ordinary turn'
+assert not reminder.exists(), 'completed workflow cleanup should suppress the old closed-workflow reminder once .agent/ is deleted'
 assert not handoff.exists(), 'completed workflow cleanup should leave ordinary chat outside workflow routing until /cook is run again'
 PY
 
