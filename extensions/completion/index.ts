@@ -314,6 +314,7 @@ function shouldInjectCookHandoffBoundary(
 	snapshot?: CompletionStateSnapshot,
 ): boolean {
 	if (roleFromEnv()) return false;
+	if (!snapshot || isWorkflowDone(snapshot)) return false;
 	if (isCompletionWorkflowSessionTurn(snapshot, ctx)) return false;
 	const prompt = typeof event.prompt === "string" ? event.prompt.trim() : "";
 	if (!prompt) return false;
