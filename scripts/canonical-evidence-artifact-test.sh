@@ -179,8 +179,8 @@ path.write_text(json.dumps(evidence, indent=2) + '\n')
 PY
 
   if [[ "$CURRENT_EVIDENCE_SUBJECT_TYPE" == "selected_slice" ]]; then
-    if bash ./scripts/release-check.sh >/dev/null 2>&1; then
-      echo "expected release-check to fail when current repo verification-evidence.json is stale" >&2
+    if PI_COMPLETION_SKIP_CANONICAL_EVIDENCE_ARTIFACT_TEST=1 bash ./scripts/release-check.sh >/dev/null 2>&1; then
+      echo "expected release-check to fail when current repo verification-evidence.json is stale even when canonical-evidence self-test recursion is disabled" >&2
       exit 1
     fi
 

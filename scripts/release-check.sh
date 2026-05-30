@@ -123,7 +123,9 @@ npm run smoke-test
 npm run refocus-test
 npm run context-proposal-test
 bash ./scripts/role-runner-contract-test.sh
-bash ./scripts/canonical-evidence-artifact-test.sh
+if [[ "${PI_COMPLETION_SKIP_CANONICAL_EVIDENCE_ARTIFACT_TEST:-}" != "1" ]]; then
+  bash ./scripts/canonical-evidence-artifact-test.sh
+fi
 bash ./scripts/active-slice-contract-test.sh
 npm run observability-status-test
 npm run completion-role-gating-test
