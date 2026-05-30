@@ -1056,6 +1056,9 @@ DONE_INLINE_PROMPT_PROPOSAL="$TMPDIR/context-proposal-done-inline-prompt-proposa
 DONE_INLINE_PROMPT_CHOOSER="$TMPDIR/context-proposal-done-inline-prompt-chooser.json"
 DONE_INLINE_PROMPT_BASELINE="$TMPDIR/context-proposal-done-inline-before.json"
 printf 'stale done sentinel\n' > .agent/current/stale-runtime.txt
+printf 'stale cleanup marker\n' > .agent/closed-workflow-cleanup.json
+printf 'stale stop helper\n' > .agent/verify_completion_stop.sh
+printf 'stale control helper\n' > .agent/verify_completion_control_plane.sh
 DONE_INLINE_PROMPT_HANDOFF="$(python3 - <<'PY'
 import json
 capsule = {
@@ -1147,6 +1150,9 @@ assert plan['mission_anchor'] == state['mission_anchor'], 'done inline prompt sh
 assert active['mission_anchor'] == state['mission_anchor'], 'done inline prompt should rewrite the active-slice mission anchor'
 assert before != after, 'done inline prompt should rewrite canonical files after confirmation'
 assert not Path('.agent/current/stale-runtime.txt').exists(), 'done inline prompt should delete stale .agent/current runtime files before starting the next round'
+assert not Path('.agent/closed-workflow-cleanup.json').exists(), 'done inline prompt should discard any stale closed-workflow cleanup marker before starting the next round'
+assert 'stale stop helper' not in Path('.agent/verify_completion_stop.sh').read_text(), 'done inline prompt should recreate the stop helper instead of reusing stale helper contents'
+assert 'stale control helper' not in Path('.agent/verify_completion_control_plane.sh').read_text(), 'done inline prompt should recreate the control-plane helper instead of reusing stale helper contents'
 assert 'Started a new completion workflow round for: Start the next workflow round from inline /cook prompt.' in output, 'done inline prompt should report the next-round startup'
 assert 'completion-regrounder will derive the next slices from repo truth' in output, 'done inline prompt should explain that regrounder derives the next slices'
 PY

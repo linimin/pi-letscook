@@ -534,8 +534,8 @@ export async function scaffoldCompletionFiles(
 	const files = resolveFiles(root);
 	const created: string[] = [];
 	const updated: string[] = [];
+	await removeCompletionAgentDir(files);
 	await fsp.mkdir(files.agentDir, { recursive: true });
-	await removeCompletionRuntimeState(files);
 	await fsp.mkdir(files.currentDir, { recursive: true });
 	await fsp.mkdir(files.tmpDir, { recursive: true });
 	const verifierCommand = await detectVerifierCommand(root);

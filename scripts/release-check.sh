@@ -3,7 +3,16 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-bash ./scripts/ensure-local-completion-forwarders.sh
+AGENT_PRESENT_BEFORE=0
+if [[ -e .agent ]]; then
+  AGENT_PRESENT_BEFORE=1
+fi
+cleanup_release_check_agent_dir() {
+  if [[ "$AGENT_PRESENT_BEFORE" -eq 0 && -d .agent && ! -e .agent/current ]]; then
+    rm -rf .agent
+  fi
+}
+trap cleanup_release_check_agent_dir EXIT
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
 echo "[release-check] running control-plane validation, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"

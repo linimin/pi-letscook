@@ -435,7 +435,7 @@ capsule = {
     ],
     'notes': [
         'Keep the cleanup restart smoke fixture aligned with the shipped fresh-startup contract.',
-        'Stale root .agent/state.json, plan.json, active-slice.json, and verification-evidence.json should remain ignored after cleanup.'
+        'Fresh startup after cleanup should discard stale root .agent runtime files and any leftover cleanup marker before recreating canonical state.'
     ],
     'handoff_kind': 'implementation_workflow_handoff',
     'first_slice_goal': 'Scaffold canonical completion files after cleanup and verify the packaged fresh-startup contract.',
@@ -479,6 +479,9 @@ Path('.agent/verification-evidence.json').write_text(json.dumps({
     'slice_id': 'stale-root-slice',
     'head_sha': 'stale-root-head'
 }, indent=2) + '\n')
+Path('.agent/closed-workflow-cleanup.json').write_text('stale cleanup marker\n')
+Path('.agent/verify_completion_stop.sh').write_text('stale stop helper\n')
+Path('.agent/verify_completion_control_plane.sh').write_text('stale control helper\n')
 PY
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
@@ -494,8 +497,13 @@ startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text()
 assert state['mission_anchor'] == 'Strengthen smoke-test coverage for fresh /cook startup after cleanup.', state
 assert state['workflow_session_id'] != 'stale-root-session', state
 assert startup_brief['mission'] == 'Strengthen smoke-test coverage for fresh /cook startup after cleanup.', startup_brief
-assert not Path('.agent/closed-workflow-cleanup.json').exists(), 'fresh startup after cleanup should not depend on a closed-workflow cleanup marker'
-assert json.loads(Path('.agent/state.json').read_text())['mission_anchor'] == 'STALE ROOT RUNTIME SHOULD NOT RECOVER', 'stale root file should remain distinct from canonical runtime state'
+assert not Path('.agent/closed-workflow-cleanup.json').exists(), 'fresh startup after cleanup should discard any closed-workflow cleanup marker'
+assert not Path('.agent/state.json').exists(), 'fresh startup after cleanup should discard stale root state.json before recreating canonical runtime state'
+assert not Path('.agent/plan.json').exists(), 'fresh startup after cleanup should discard stale root plan.json before recreating canonical runtime state'
+assert not Path('.agent/active-slice.json').exists(), 'fresh startup after cleanup should discard stale root active-slice.json before recreating canonical runtime state'
+assert not Path('.agent/verification-evidence.json').exists(), 'fresh startup after cleanup should discard stale root verification-evidence.json before recreating canonical runtime state'
+assert 'stale stop helper' not in Path('.agent/verify_completion_stop.sh').read_text(), 'fresh startup after cleanup should recreate the stop helper instead of reusing stale helper contents'
+assert 'stale control helper' not in Path('.agent/verify_completion_control_plane.sh').read_text(), 'fresh startup after cleanup should recreate the control-plane helper instead of reusing stale helper contents'
 PY
 verify_control_plane >/dev/null
 

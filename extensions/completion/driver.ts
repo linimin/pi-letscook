@@ -424,6 +424,13 @@ async function confirmExistingWorkflowProposal(
 	return { action: "continue", currentMissionAnchor: currentMission };
 }
 
+function shouldRebuildCompletionAgentDir(snapshot: CompletionStateSnapshot): boolean {
+	if (asString(snapshot.state?.continuation_policy) === "done") return true;
+	if (asString(snapshot.state?.current_phase) === "done") return true;
+	const workflowEntryStatus = asString(snapshot.state?.workflow_entry_status)?.toLowerCase();
+	return workflowEntryStatus === "cancelled" || workflowEntryStatus === "canceled" || workflowEntryStatus === "done";
+}
+
 async function refocusCompletionMission(
 	snapshot: CompletionStateSnapshot,
 	missionAnchor: string,
@@ -435,11 +442,12 @@ async function refocusCompletionMission(
 	const requiredStopJudges = asNumber(snapshot.profile?.required_stop_judges) ?? 2;
 	const root = snapshot.files.root;
 	const routing = deps.finalizeContextProposalAnalysis(analysis, [rawGoal, missionAnchor]);
+	const continuationReason = deps.buildContextProposalContinuationReason("User refocused workflow via /cook:", rawGoal, routing);
 	const nextState = {
 		...defaultState(missionAnchor, {
 			taskType: routing.taskType,
 			evaluationProfile: routing.evaluationProfile,
-			continuationReason: deps.buildContextProposalContinuationReason("User refocused workflow via /cook:", rawGoal, routing),
+			continuationReason,
 		}, advisoryStartupBrief, { requiredStopJudges }),
 		remaining_stop_judges: requiredStopJudges,
 		next_mandatory_action: "Reconcile canonical state from current repo truth for the refocused mission",
@@ -449,9 +457,17 @@ async function refocusCompletionMission(
 		plan_basis: "user_refocus",
 	};
 	const nextActive = defaultActiveSlice(missionAnchor, { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile });
-	await removeCompletionRuntimeState(snapshot.files);
-	await fsp.mkdir(snapshot.files.currentDir, { recursive: true });
-	await fsp.mkdir(snapshot.files.tmpDir, { recursive: true });
+	if (shouldRebuildCompletionAgentDir(snapshot)) {
+		await deps.scaffoldCompletionFiles(root, missionAnchor, {
+			analysis: routing,
+			continuationReason,
+			advisoryStartupBrief,
+		});
+	} else {
+		await removeCompletionRuntimeState(snapshot.files);
+		await fsp.mkdir(snapshot.files.currentDir, { recursive: true });
+		await fsp.mkdir(snapshot.files.tmpDir, { recursive: true });
+	}
 	await Promise.all([
 		writeJsonFile(snapshot.files.statePath, nextState),
 		writeJsonFile(snapshot.files.startupBriefPath, defaultStartupBrief(missionAnchor, { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile }, advisoryStartupBrief)),
