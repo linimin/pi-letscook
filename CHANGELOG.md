@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.85
+
+### Fixed
+
+- changed completed-workflow cleanup to remove the entire `.agent/` directory instead of leaving root helper scripts, tombstones, or other closed-workflow artifacts behind
+- preserved fresh `/cook` restart and ordinary post-close routing after full `.agent/` removal, including normal non-role verification paths
+- hardened release verification so full `.agent/` cleanup coverage, stale-evidence fail-closed checks, and release-check recursion handling stay terminating and truthful
+
 ## 0.1.84
 
 ### Changed
