@@ -71,6 +71,7 @@ import {
 	canonicalStartupBrief,
 	loadCompletionDataForReminder,
 	loadCompletionSnapshot,
+	loadCompletionStateProbe,
 	pathExists,
 	readText,
 	removeCompletionAgentDir,
@@ -341,20 +342,10 @@ function buildDoneWorkflowBoundaryReminder(snapshot: CompletionStateSnapshot): s
 	].join(" ");
 }
 
-function shouldCleanupClosedWorkflowRuntime(snapshot: CompletionStateSnapshot | undefined): boolean {
-	if (!snapshot) return false;
-	const continuationPolicy = asString(snapshot.state?.continuation_policy);
-	if (continuationPolicy === "done") return true;
-	const currentPhase = asString(snapshot.state?.current_phase);
-	if (currentPhase === "done") return true;
-	const workflowEntryStatus = asString(snapshot.state?.workflow_entry_status)?.toLowerCase();
-	return workflowEntryStatus === "cancelled" || workflowEntryStatus === "canceled" || workflowEntryStatus === "done";
-}
-
 async function cleanupClosedWorkflowRuntimeIfNeeded(cwd: string): Promise<boolean> {
-	const snapshot = await loadCompletionSnapshot(cwd);
-	if (!shouldCleanupClosedWorkflowRuntime(snapshot)) return false;
-	await removeCompletionAgentDir(snapshot.files);
+	const probe = await loadCompletionStateProbe(cwd);
+	if (!probe?.isClosed) return false;
+	await removeCompletionAgentDir(probe.files);
 	return true;
 }
 
@@ -1242,6 +1233,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 				nowMs,
 				heartbeatMs: LIVE_ROLE_HEARTBEAT_MS,
 			});
+			await cleanupClosedWorkflowRuntimeIfNeeded(runCwd);
 
 			liveRoleActivityByRoot.set(rootKey, cloneLiveRoleActivity(result.activity, { status: result.ok ? "ok" : "error" }));
 			await refreshCompletionStatus({ ctx: ctx as { cwd: string; hasUI: boolean; ui: any }, ...statusSurfaceArgs });

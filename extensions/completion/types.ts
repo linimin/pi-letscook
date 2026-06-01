@@ -38,6 +38,12 @@ export type CompletionStateSnapshot = {
 	activeSlice?: JsonRecord;
 };
 
+export type CompletionWorkflowStateProbe = {
+	files: CompletionFiles;
+	state: JsonRecord;
+	isClosed: boolean;
+};
+
 export type AgentDefinition = {
 	name: string;
 	description?: string;

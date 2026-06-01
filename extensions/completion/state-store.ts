@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import { promises as fsp } from "node:fs";
 import * as path from "node:path";
-import type { CompletionStateSnapshot, JsonRecord } from "./types";
+import type { CompletionStateSnapshot, CompletionWorkflowStateProbe, JsonRecord } from "./types";
 
 const PROTOCOL_ID = "completion";
 const DEFAULT_TASK_TYPE = "completion-workflow";
@@ -147,6 +147,28 @@ async function hasCompleteRuntimeState(files: ReturnType<typeof resolveFiles>): 
 		if (!(await pathExists(targetPath))) return false;
 	}
 	return true;
+}
+
+function isClosedWorkflowState(state: JsonRecord | undefined): boolean {
+	const continuationPolicy = asString(state?.continuation_policy);
+	if (continuationPolicy === "done") return true;
+	const currentPhase = asString(state?.current_phase);
+	if (currentPhase === "done") return true;
+	const workflowEntryStatus = asString(state?.workflow_entry_status)?.toLowerCase();
+	return workflowEntryStatus === "cancelled" || workflowEntryStatus === "canceled" || workflowEntryStatus === "done";
+}
+
+export async function loadCompletionStateProbe(startCwd: string): Promise<CompletionWorkflowStateProbe | undefined> {
+	const root = findCompletionRoot(startCwd);
+	if (!root) return undefined;
+	const files = resolveFiles(root);
+	const state = await readJson(files.statePath);
+	if (!state) return undefined;
+	return {
+		files,
+		state,
+		isClosed: isClosedWorkflowState(state),
+	};
 }
 
 export async function removeCompletionRuntimeState(target: string | ReturnType<typeof resolveFiles>): Promise<void> {
