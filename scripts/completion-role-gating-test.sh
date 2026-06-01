@@ -44,11 +44,21 @@ const dispatchContextIndex = indexText.indexOf('function isCompletionWorkflowDis
 const stickyReturnIndex = indexText.indexOf('return isCompletionWorkflowSessionTurn(snapshot, ctx) || hasStickyWorkflowContinuation(snapshot);');
 const agentEndSelfHealIndex = indexText.indexOf('hasStickyWorkflowContinuation(snapshot) && hasRecentlyCompletedCompletionRole(rootKey)');
 const toolGateIndex = indexText.indexOf('const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowDispatchContext(snapshot, ctx);');
+const roleExecutionIndex = indexText.indexOf('const result = await runCompletionRole({');
+const postRoleCleanupIndex = indexText.indexOf('await cleanupClosedWorkflowRuntimeIfNeeded(runCwd);');
+const liveRoleStatusIndex = indexText.indexOf('liveRoleActivityByRoot.set(rootKey, cloneLiveRoleActivity(result.activity, { status: result.ok ? "ok" : "error" }));');
+const postRoleStatusRefreshIndex = indexText.indexOf('await refreshCompletionStatus({ ctx: ctx as { cwd: string; hasUI: boolean; ui: any }, ...statusSurfaceArgs });', postRoleCleanupIndex);
 if (stickyContinuationIndex === -1 || completedRoleIndex === -1 || continuationIntentIndex === -1 || sessionTurnIndex === -1 || dispatchContextIndex === -1 || stickyReturnIndex === -1 || agentEndSelfHealIndex === -1 || toolGateIndex === -1) {
   throw new Error('extensions/completion/index.ts must self-heal active continuation sessions before dispatching completion_role.');
 }
 if (!(stickyContinuationIndex < continuationIntentIndex && continuationIntentIndex < sessionTurnIndex && sessionTurnIndex < dispatchContextIndex && dispatchContextIndex < stickyReturnIndex && stickyReturnIndex < agentEndSelfHealIndex && agentEndSelfHealIndex < toolGateIndex && stickyContinuationIndex < completedRoleIndex && completedRoleIndex < toolGateIndex)) {
   throw new Error('extensions/completion/index.ts should define sticky continuation detection before reusing it for completion_role dispatch.');
+}
+if (roleExecutionIndex === -1 || postRoleCleanupIndex === -1 || liveRoleStatusIndex === -1 || postRoleStatusRefreshIndex === -1) {
+  throw new Error('extensions/completion/index.ts must keep immediate post-completion_role cleanup assertions in place.');
+}
+if (!(roleExecutionIndex < postRoleCleanupIndex && postRoleCleanupIndex < liveRoleStatusIndex && liveRoleStatusIndex < postRoleStatusRefreshIndex)) {
+  throw new Error('extensions/completion/index.ts should clean closed workflow residue immediately after completion_role returns and before status refresh.');
 }
 NODE
 

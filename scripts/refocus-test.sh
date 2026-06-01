@@ -637,6 +637,7 @@ PY
 
 DONE_CLEANUP_REMINDER="$TMPDIR/done-cleanup-reminder.txt"
 DONE_CLEANUP_HANDOFF="$TMPDIR/done-cleanup-handoff.txt"
+DONE_CLEANUP_AUTO_RESUME="$TMPDIR/done-cleanup-auto-resume-prompt.txt"
 python3 - <<'PY'
 import json
 from pathlib import Path
@@ -659,23 +660,28 @@ state.update({
 })
 state_path.write_text(json.dumps(state, indent=2) + '\n')
 PY
+rm -f .agent/current/plan.json .agent/current/active-slice.json
+printf '{"broken":\n' > .agent/current/verification-evidence.json
 printf 'stale done cleanup sentinel\n' > .agent/current/stale-runtime.txt
-rm -f "$DONE_CLEANUP_REMINDER" "$DONE_CLEANUP_HANDOFF"
+rm -f "$DONE_CLEANUP_REMINDER" "$DONE_CLEANUP_HANDOFF" "$DONE_CLEANUP_AUTO_RESUME"
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 PI_COMPLETION_TEST_SYSTEM_REMINDER_PATH="$DONE_CLEANUP_REMINDER" \
 PI_COMPLETION_TEST_COOK_HANDOFF_REMINDER_PATH="$DONE_CLEANUP_HANDOFF" \
+PI_COMPLETION_TEST_AUTO_CONTINUE_PROMPT_PATH="$DONE_CLEANUP_AUTO_RESUME" \
 pi -e "$PKG_ROOT" -p "Summarize the repo briefly after workflow completion." \
   >"$TMPDIR/pi-completion-done-cleanup.out" 2>"$TMPDIR/pi-completion-done-cleanup.err"
 
-python3 - "$DONE_CLEANUP_REMINDER" "$DONE_CLEANUP_HANDOFF" <<'PY'
+python3 - "$DONE_CLEANUP_REMINDER" "$DONE_CLEANUP_HANDOFF" "$DONE_CLEANUP_AUTO_RESUME" <<'PY'
 import sys
 from pathlib import Path
 
 reminder = Path(sys.argv[1])
 handoff = Path(sys.argv[2])
-assert not Path('.agent').exists(), 'completed workflow should delete .agent/ before the next ordinary turn'
+auto_resume = Path(sys.argv[3])
+assert not Path('.agent').exists(), 'completed workflow should delete .agent/ before the next ordinary turn even when the full snapshot is incomplete'
 assert not reminder.exists(), 'completed workflow cleanup should suppress the old closed-workflow reminder once .agent/ is deleted'
 assert not handoff.exists(), 'completed workflow cleanup should leave ordinary chat outside workflow routing until /cook is run again'
+assert not auto_resume.exists(), 'completed workflow cleanup should prevent ordinary chat from queueing workflow auto-resume after closure'
 PY
 
 echo "refocus test passed: $TMPDIR"
