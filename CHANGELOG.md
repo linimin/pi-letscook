@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.86
+
+### Fixed
+
+- made closed-workflow cleanup probe-first by reading `.agent/current/state.json` directly for explicit terminal `done`/`cancelled` signals instead of requiring a full `loadCompletionSnapshot()` success before deleting `.agent/`
+- ran immediate closed-workflow cleanup after `completion_role` returns and before ordinary-chat workflow-context injection so finished workflows stop leaving residue that can prompt stray continuation attempts
+- added regression coverage for incomplete-snapshot closed cleanup, post-close ordinary-chat boundary suppression, and immediate post-role cleanup ordering so the reported stale-regrounder residue path stays fixed
+
 ## 0.1.85
 
 ### Fixed
