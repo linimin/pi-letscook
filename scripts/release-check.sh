@@ -15,7 +15,7 @@ cleanup_release_check_agent_dir() {
 trap cleanup_release_check_agent_dir EXIT
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
-echo "[release-check] running control-plane validation, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
+echo "[release-check] running control-plane validation, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context regressions, agent_end auto-resume delivery coverage, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
 npm run verify-completion-control-plane
 
 python3 - <<'PY'
@@ -120,6 +120,7 @@ for path, needles in forbidden.items():
 PY
 
 npm run smoke-test
+npm run agent-end-auto-resume-test
 npm run refocus-test
 npm run context-proposal-test
 bash ./scripts/role-runner-contract-test.sh

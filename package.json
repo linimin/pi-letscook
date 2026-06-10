@@ -35,6 +35,7 @@
     "verify-completion-control-plane": "node ./scripts/verify-completion-control-plane.js",
     "verify-completion-stop": "bash ./scripts/verify-completion-stop.sh",
     "smoke-test": "bash ./scripts/smoke-test.sh",
+    "agent-end-auto-resume-test": "bash ./scripts/agent-end-auto-resume-test.sh",
     "refocus-test": "bash ./scripts/refocus-test.sh",
     "context-proposal-test": "bash ./scripts/context-proposal-test.sh",
     "observability-status-test": "bash ./scripts/observability-status-test.sh",

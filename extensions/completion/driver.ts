@@ -236,7 +236,7 @@ async function queueCompletionDriverPrompt(
 		deps.emitCommandText(ctx, `Skipped completion workflow ${kind} prompt (test mode)`, "info");
 		return false;
 	}
-	pi.sendUserMessage(prompt);
+	pi.sendUserMessage(prompt, { deliverAs: "followUp" });
 	deps.emitCommandText(ctx, `Queued completion workflow ${kind}`, "info");
 	return true;
 }

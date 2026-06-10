@@ -684,13 +684,13 @@ python3 - "$PKG_ROOT" <<'PY'
 import sys
 from pathlib import Path
 
-text = Path(sys.argv[1], 'extensions/completion', 'index.ts').read_text()
-assert 'Active slice priority: ${activePriority}' in text, 'system reminder source should expose active-slice priority'
-assert 'Active slice why_now: ${activeWhyNow}' in text, 'system reminder source should expose active-slice why_now'
-assert 'Active implementation surfaces: ${implementationSurfaces.join(", ")}' in text, 'system reminder source should expose implementation_surfaces'
-assert 'Active verification commands: ${verificationCommands.join(" | ")}' in text, 'system reminder source should expose verification_commands'
-assert '`- implementation_surfaces: ${implementationSurfaces.join(" | ")}`' in text, 'resume capsule source should expose implementation_surfaces'
-assert '`- verification_commands: ${verificationCommands.join(" | ")}`' in text, 'resume capsule source should expose verification_commands'
+index_text = Path(sys.argv[1], 'extensions/completion', 'index.ts').read_text()
+assert 'Active slice priority: ${activePriority}' in index_text, 'system reminder source should expose active-slice priority'
+assert 'Active slice why_now: ${activeWhyNow}' in index_text, 'system reminder source should expose active-slice why_now'
+assert 'Active implementation surfaces: ${implementationSurfaces.join(", ")}' in index_text, 'system reminder source should expose implementation_surfaces'
+assert 'Active verification commands: ${verificationCommands.join(" | ")}' in index_text, 'system reminder source should expose verification_commands'
+assert '`- implementation_surfaces: ${implementationSurfaces.join(" | ")}`' in index_text, 'resume capsule source should expose implementation_surfaces'
+assert '`- verification_commands: ${verificationCommands.join(" | ")}`' in index_text, 'resume capsule source should expose verification_commands'
 PY
 
 echo "smoke test passed: $ROOT"
