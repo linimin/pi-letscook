@@ -54,11 +54,13 @@ export function resolveFiles(root: string) {
 	};
 }
 
-function walkUpForDir(startCwd: string, segments: string[]): string | undefined {
+function walkUpForDir(startCwd: string, segments: string[], stopAt?: string): string | undefined {
 	let current = path.resolve(startCwd);
+	const boundary = stopAt ? path.resolve(stopAt) : undefined;
 	while (true) {
 		const candidate = path.join(current, ...segments);
 		if (fs.existsSync(candidate)) return candidate;
+		if (boundary && current === boundary) return undefined;
 		const parent = path.dirname(current);
 		if (parent === current) return undefined;
 		current = parent;
@@ -69,9 +71,15 @@ function completionSearchRoots(startCwd: string): string[] {
 	return [...new Set([path.resolve(startCwd), path.resolve(process.cwd())])];
 }
 
+function findNearestRepoRoot(startCwd: string): string | undefined {
+	const gitPath = walkUpForDir(startCwd, [".git"]);
+	return gitPath ? path.dirname(gitPath) : undefined;
+}
+
 export function findCompletionRoot(startCwd: string): string | undefined {
 	for (const candidateRoot of completionSearchRoots(startCwd)) {
-		const statePath = walkUpForDir(candidateRoot, [AGENT_DIRNAME, CURRENT_DIRNAME, "state.json"]);
+		const repoRoot = findNearestRepoRoot(candidateRoot);
+		const statePath = walkUpForDir(candidateRoot, [AGENT_DIRNAME, CURRENT_DIRNAME, "state.json"], repoRoot);
 		if (statePath) return path.dirname(path.dirname(path.dirname(statePath)));
 	}
 	return undefined;
@@ -79,8 +87,8 @@ export function findCompletionRoot(startCwd: string): string | undefined {
 
 export function findRepoRoot(startCwd: string): string | undefined {
 	for (const candidateRoot of completionSearchRoots(startCwd)) {
-		const gitPath = walkUpForDir(candidateRoot, [".git"]);
-		if (gitPath) return path.dirname(gitPath);
+		const repoRoot = findNearestRepoRoot(candidateRoot);
+		if (repoRoot) return repoRoot;
 	}
 	return undefined;
 }

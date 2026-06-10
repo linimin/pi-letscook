@@ -122,6 +122,7 @@ PY
 npm run smoke-test
 npm run refocus-test
 npm run context-proposal-test
+npm run worktree-root-boundary-test
 bash ./scripts/role-runner-contract-test.sh
 if [[ "${PI_COMPLETION_SKIP_CANONICAL_EVIDENCE_ARTIFACT_TEST:-}" != "1" ]]; then
   bash ./scripts/canonical-evidence-artifact-test.sh
