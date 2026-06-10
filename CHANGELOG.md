@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.87
+
+### Fixed
+
+- queued completion-driver prompts with `deliverAs: "followUp"` so `agent_end` auto-resume no longer throws Pi's `Agent is already processing` runtime error when the workflow driver requeues itself during session teardown
+- added a dedicated `agent-end-auto-resume-test` regression that exercises the real `agent_end -> autoContinueWorkflowIfNeeded()` path and asserts the extension-injected resume prompt arrives with `streamingBehavior: followUp`
+- wired the new regression into `npm run release-check` so future driver changes cannot silently drop safe auto-resume queueing again
+
 ## 0.1.86
 
 ### Fixed
