@@ -45,7 +45,8 @@
     "evaluator-calibration-test": "bash ./scripts/evaluator-calibration-test.sh",
     "rubric-contract-test": "bash ./scripts/rubric-contract-test.sh",
     "report-repair-test": "bash ./scripts/report-repair-test.sh",
-    "release-check": "bash ./scripts/release-check.sh"
+    "release-check": "bash ./scripts/release-check.sh",
+    "worktree-root-boundary-test": "bash ./scripts/worktree-root-boundary-test.sh"
   },
   "engines": {
     "node": ">=20"

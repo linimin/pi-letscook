@@ -148,7 +148,7 @@ for _ in $(seq 1 60); do
   fi
   sleep 1
 done
-if [[ ! ! -f .agent/current/state.json || ! -f .agent/current/plan.json || ! -f .agent/current/active-slice.json ]]; then
+if [[ ! -f .agent/current/state.json || ! -f .agent/current/plan.json || ! -f .agent/current/active-slice.json ]]; then
   echo "completion bootstrap did not materialize canonical files in time" >&2
   cat "$TMPDIR/pi-completion-refocus-bootstrap.err" >&2 || true
   kill "$PI_PID" >/dev/null 2>&1 || true

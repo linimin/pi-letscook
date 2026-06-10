@@ -4,7 +4,7 @@ set -euo pipefail
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bash "$PKG_ROOT/scripts/ensure-local-completion-forwarders.sh"
 pi() {
-  env -u PI_COMPLETION_ROLE command pi --no-extensions "$@"
+  env -u PI_COMPLETION_ROLE pi --no-extensions "$@"
 }
 verify_control_plane() {
   node "$PKG_ROOT/scripts/verify-completion-control-plane.js" "$@"
