@@ -47,7 +47,8 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - `continuation_policy == blocked` means the workflow root must report the blocker and stop.
 - `continuation_policy == paused` means the user explicitly paused the workflow.
 - `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
-- Use `completion-bootstrapper` only for first-time setup or missing tracked contract-file repair.
+- After canonical state reaches a closed `done` or `cancelled` posture, the extension may delete repo-local `.agent/` before control returns. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly. Do not recreate local helper files merely to narrate final status.
+- Use `completion-bootstrapper` only for first-time setup or missing local helper / canonical-state repair.
 - Use `completion-regrounder` for canonical re-grounding, slice selection, post-review or post-audit reconciliation, and final stop reconciliation.
 - Default scratch space for temporary files is repo-local `.agent/current/tmp/`.
 - Do not write scratch artifacts to `/tmp` or `/private/tmp` by default.
@@ -79,7 +80,7 @@ If the workflow driver detects that the next mandatory action belongs to a compl
 
 ## Mandatory Dispatch Table
 
-1. If tracked protocol contract files are missing or first-time onboarding is required, invoke `completion-bootstrapper`.
+1. If repo-local `.agent/**` helper surfaces or canonical execution-state scaffolding are missing and truthful onboarding or repair is required, invoke `completion-bootstrapper`.
 2. If canonical `.agent` execution state is missing, invalid, contradictory, stale, or ambiguous after compaction or recovery, invoke `completion-regrounder`.
 3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/current/plan.json` and return the next exact handoff payload.
 4. If a slice is `selected` or `in_progress` and no new slice commit exists yet, invoke `completion-implementer`.
@@ -97,6 +98,8 @@ Local helper files:
 
 - `.agent/verify_completion_stop.sh`
 - `.agent/verify_completion_control_plane.sh`
+
+These helper files are generated local convenience entrypoints, not tracked repo-contract files. After a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.
 
 Ignored canonical execution-state files:
 

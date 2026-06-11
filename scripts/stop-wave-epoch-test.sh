@@ -68,7 +68,7 @@ SH
 chmod +x .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh scripts/verify-completion-stop.sh scripts/release-check.sh
 
 git add .agent/verify_completion_control_plane.sh .agent/verify_completion_stop.sh scripts/verify-completion-control-plane.js scripts/verify-completion-stop.sh scripts/release-check.sh
-git commit -q -m "scaffold tracked completion contract files"
+git commit -q -m "scaffold local completion helper files"
 HEAD_SHA="$(git rev-parse HEAD)"
 
 HEAD_SHA="$HEAD_SHA" python3 - <<'PY'

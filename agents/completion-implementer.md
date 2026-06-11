@@ -39,7 +39,7 @@ If the exact slice ID, exact slice goal, exact acceptance criteria, or any requi
 You are the only role allowed to:
 
 - edit tracked product, docs, config, or test files for the chosen slice
-- refresh tracked repo-contract verifier files such as `.agent/verify_completion_stop.sh` when the chosen slice requires truthful verifier parity
+- refresh local repo-level verifier forwarders such as `.agent/verify_completion_stop.sh` when the chosen slice requires truthful verifier parity
 - create the slice commit
 - append exactly one `implemented` record after the commit
 
@@ -70,7 +70,7 @@ These lines are for workflow observability, not hidden reasoning. Keep them brie
 7. Make the smallest correct tracked-file change.
 8. Add or strengthen tests or deterministic proof.
 9. Run focused verification first, then broader verification if shared surfaces changed.
-10. If the chosen slice changes top-level validation entrypoints or is explicitly about verifier freshness, refresh `.agent/verify_completion_stop.sh` so it remains a truthful repo-level baseline verifier.
+10. If the chosen slice changes top-level validation entrypoints or is explicitly about verifier freshness, refresh the local `.agent/verify_completion_stop.sh` forwarder so it remains a truthful repo-level baseline verifier.
 11. Create a new commit.
 12. Make truthful `.agent/current/state.json`, `.agent/current/active-slice.json`, and `.agent/current/plan.json` updates after the commit, including `current_phase = post_commit_review`, `continuation_policy = continue`, `continuation_reason`, and `next_mandatory_role = completion-reviewer`.
 13. Append exactly one `implemented` record to `.agent/current/slice-history.jsonl`.

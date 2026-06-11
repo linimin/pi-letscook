@@ -7,6 +7,8 @@
 - `.agent/verify_completion_stop.sh`
 - `.agent/verify_completion_control_plane.sh`
 
+These helper files are generated local convenience entrypoints, not tracked repo-contract files.
+
 ## Ignored Canonical Execution State
 
 - `.agent/current/state.json`
@@ -126,6 +128,8 @@ Rules:
 3. `continuation_policy == blocked` means the workflow root must report the blocker and stop.
 4. `continuation_policy == paused` means the user explicitly paused the workflow.
 5. `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
+
+After a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory before control returns. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly, and do not recreate local helper files merely to narrate final status.
 
 `plan.json` carries the ordered persistent slice backlog.
 
@@ -327,7 +331,7 @@ The workflow topology is mandatory and flat:
 
 1. The main pi session stays the workflow root.
 2. The main pi session invokes at most one completion role at a time.
-3. `completion-bootstrapper` is used only for first-time setup or missing tracked contract-file repair.
+3. `completion-bootstrapper` is used only for first-time setup or missing local helper / canonical-state repair.
 4. `completion-regrounder` is the mandatory role for canonical `.agent` reconciliation, slice selection, post-review or post-audit reconciliation, and final stop reconciliation.
 5. `completion-implementer`, `completion-reviewer`, `completion-auditor`, and `completion-stop-judge` are sibling roles invoked directly by the workflow root.
 6. No completion role may invoke another completion role during the normal workflow.
@@ -351,7 +355,7 @@ It must not, while a slice is selected or in progress:
 
 ## Mandatory Dispatch Table
 
-1. If tracked protocol contract files are missing or first-time onboarding is required, invoke `completion-bootstrapper`.
+1. If repo-local `.agent/**` helper surfaces or canonical execution-state scaffolding are missing and truthful onboarding or repair is required, invoke `completion-bootstrapper`.
 2. If canonical `.agent` execution state is missing, stale, invalid, contradictory, or ambiguous after compaction or recovery, invoke `completion-regrounder` first.
 3. If no slice is selected, invoke `completion-regrounder` to reconcile `.agent/current/plan.json` and return the next exact handoff payload.
 4. If a slice is `selected` or `in_progress` and no new commit exists for it yet, invoke `completion-implementer`.

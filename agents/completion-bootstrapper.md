@@ -1,6 +1,6 @@
 ---
 name: completion-bootstrapper
-description: Bootstrap or repair tracked completion control-plane files, then hand off to completion-regrounder.
+description: Bootstrap or repair local completion helper files and canonical execution state, then hand off to completion-regrounder.
 tools: read,grep,find,ls,bash,write,edit
 ---
 
@@ -48,7 +48,7 @@ Return exactly this fixed report format:
 - `MISSION ANCHOR: ...`
 - `Remaining contract IDs: ...`
 - `Bootstrap applied: yes/no - ...`
-- `Tracked contract files repaired: ...`
+- `Local helper files repaired: ...`
 - `Execution-state files initialized: ...`
 - `Gitignore updated: yes/no - ...`
 - `Next role to invoke: completion-regrounder`

@@ -62,6 +62,7 @@ checks = {
         "If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context or inline `/cook` prompt, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.",
         "Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent handoff in the same entry when needed.",
         "`/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation",
+        "When a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.",
     ],
     "CHANGELOG.md": [
         "preserved the confirmed `/cook` startup intent in canonical `.agent/current/startup-brief.json` so workflow entry is durable before regrounding authors canonical slices",
@@ -79,6 +80,9 @@ checks = {
         '`COMPLETION WORKFLOW DRIVER\\nStart or continue the completion workflow for this repo.',
         'function isLikelyWorkflowContinuationTurn(',
         'return isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx) || isLikelyWorkflowContinuationTurn(snapshot, ctx);',
+        'If local .agent helper forwarders or canonical execution-state scaffolding are missing and truthful onboarding or repair is required',
+        'If canonical closeout cleanup removes repo-local .agent/ after the workflow reaches done or cancelled',
+        'WORKFLOW DRIVER NOTE: Canonical workflow state closed and the extension removed repo-local .agent/ as expected cleanup.',
     ],
     "extensions/completion/policy-guards.ts": [
         'return "completion_role may only be used from an active /cook workflow session.";',
@@ -90,6 +94,22 @@ checks = {
     "skills/completion-protocol/SKILL.md": [
         'Load this skill only after the user explicitly enters `/cook` and you are operating inside the `completion` workflow as the workflow driver or a completion role.',
         'Do not load or follow this skill from ordinary chat.',
+        'After canonical state reaches a closed `done` or `cancelled` posture, the extension may delete repo-local `.agent/` before control returns.',
+        'These helper files are generated local convenience entrypoints, not tracked repo-contract files.',
+        'Use `completion-bootstrapper` only for first-time setup or missing local helper / canonical-state repair.',
+    ],
+    "skills/completion-protocol/references/completion.md": [
+        'After a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory before control returns.',
+        'These helper files are generated local convenience entrypoints, not tracked repo-contract files.',
+        '`completion-bootstrapper` is used only for first-time setup or missing local helper / canonical-state repair.',
+    ],
+    "agents/completion-bootstrapper.md": [
+        'description: Bootstrap or repair local completion helper files and canonical execution state, then hand off to completion-regrounder.',
+        '- `Local helper files repaired: ...`',
+    ],
+    "agents/completion-implementer.md": [
+        'refresh local repo-level verifier forwarders such as `.agent/verify_completion_stop.sh`',
+        'refresh the local `.agent/verify_completion_stop.sh` forwarder so it remains a truthful repo-level baseline verifier.',
     ],
 }
 
@@ -103,6 +123,22 @@ forbidden = {
     ],
     "extensions/completion/index.ts": [
         '"/cook failed closed because starting workflow now requires a fresh explicit primary-agent handoff. Ask the primary agent in the main chat to emit a fresh ```cook_handoff``` capsule, then rerun /cook."',
+        'If tracked completion contract files are missing or onboarding is required',
+    ],
+    "skills/completion-protocol/SKILL.md": [
+        'Use `completion-bootstrapper` only for first-time setup or missing tracked contract-file repair.',
+        'If tracked protocol contract files are missing or first-time onboarding is required, invoke `completion-bootstrapper`.',
+    ],
+    "skills/completion-protocol/references/completion.md": [
+        '`completion-bootstrapper` is used only for first-time setup or missing tracked contract-file repair.',
+        'If tracked protocol contract files are missing or first-time onboarding is required, invoke `completion-bootstrapper`.',
+    ],
+    "agents/completion-bootstrapper.md": [
+        'description: Bootstrap or repair tracked completion control-plane files, then hand off to completion-regrounder.',
+        '- `Tracked contract files repaired: ...`',
+    ],
+    "agents/completion-implementer.md": [
+        'refresh tracked repo-contract verifier files such as `.agent/verify_completion_stop.sh`',
     ],
 }
 

@@ -232,7 +232,7 @@ Tracked repo-contract files:
 
 - none — workflow policy comes from package defaults and workflow runtime stays local under `.agent/**`
 
-The canonical storage contract is package-owned defaults plus ignored `.agent/**` runtime state. Runtime-generated `.agent/verify_completion_*.sh` forwarders are local convenience entrypoints only and are not tracked.
+The canonical storage contract is package-owned defaults plus ignored `.agent/**` runtime state. Runtime-generated `.agent/verify_completion_*.sh` forwarders are local convenience entrypoints only and are not tracked. When a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.
 
 Ignored execution-state files:
 
