@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.88
+
+### Fixed
+
+- clarified across the workflow driver prompt, completion protocol docs, and role prompts that repo-local `.agent/verify_completion_*.sh` forwarders are local helper entrypoints rather than tracked repo-contract files
+- taught the workflow driver to treat `.agent/` removal after canonical `done` or `cancelled` closeout as expected cleanup instead of narrating it as a control-plane anomaly or recreating helper forwarders just to summarize completion
+- added release-check parity coverage for the new closeout-cleanup wording so stale `tracked contract file` language and false anomaly framing fail closed
+
 ## 0.1.87
 
 ### Fixed
