@@ -39,6 +39,7 @@ import {
 	buildEvaluationRoleContextLines as buildExtractedEvaluationRoleContextLines,
 	buildEvaluationRoleReminderText as buildExtractedEvaluationRoleReminderText,
 	buildResumeCapsule as buildExtractedResumeCapsule,
+	buildStoppedWorkflowBoundaryReminder as buildExtractedStoppedWorkflowBoundaryReminder,
 	buildSystemReminder as buildExtractedSystemReminder,
 	maybeWriteContextProposalConfirmationSnapshot,
 	maybeWriteContextProposalSnapshot,
@@ -68,7 +69,6 @@ import {
 	findCompletionRoot,
 	findRepoRoot,
 	isRecord,
-	canonicalStartupBrief,
 	loadCompletionDataForReminder,
 	loadCompletionSnapshot,
 	loadCompletionStateProbe,
@@ -205,14 +205,25 @@ function isWorkflowDone(snapshot: CompletionStateSnapshot | undefined): boolean 
 	return asString(snapshot?.state?.continuation_policy) === "done";
 }
 
+function hasWorkflowRecord(snapshot: CompletionStateSnapshot | undefined): boolean {
+	return Boolean(snapshot) && !isWorkflowDone(snapshot);
+}
+
+function workflowEntryStatus(snapshot: CompletionStateSnapshot | undefined): string | undefined {
+	if (!hasWorkflowRecord(snapshot)) return undefined;
+	return asString(snapshot?.state?.workflow_entry_status)?.toLowerCase() ?? "active";
+}
+
 function activateCompletionRoutingForRoot(_root: string | undefined): void {
 	// Workflow-entry legitimacy is derived from canonical .agent state rather than in-memory routing activation.
 }
 
 function hasActiveWorkflowEntry(snapshot: CompletionStateSnapshot | undefined): boolean {
-	if (!snapshot) return false;
-	if (isWorkflowDone(snapshot)) return false;
-	return asString(snapshot.state?.workflow_entry_status) === "active" || isRecord(canonicalStartupBrief(snapshot));
+	return workflowEntryStatus(snapshot) === "active";
+}
+
+function workflowHardLockActive(snapshot: CompletionStateSnapshot | undefined): boolean {
+	return hasActiveWorkflowEntry(snapshot);
 }
 
 function hasCompletionRoutingActivation(snapshot: CompletionStateSnapshot | undefined): boolean {
@@ -297,8 +308,10 @@ function isLikelyWorkflowContinuationTurn(
 
 function isCompletionWorkflowSessionTurn(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
 	if (hasCompletionRoutingActivation(snapshot)) return true;
+	if (!hasWorkflowRecord(snapshot)) return false;
+	if (isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx)) return true;
 	if (!hasActiveWorkflowEntry(snapshot)) return false;
-	return isCookCommandTurn(ctx) || isCompletionDriverPromptTurn(snapshot, ctx) || isLikelyWorkflowContinuationTurn(snapshot, ctx);
+	return isLikelyWorkflowContinuationTurn(snapshot, ctx);
 }
 
 function isCompletionWorkflowDispatchContext(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
@@ -307,6 +320,26 @@ function isCompletionWorkflowDispatchContext(snapshot: CompletionStateSnapshot |
 
 function shouldInjectCompletionWorkflowContext(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
 	return isCompletionWorkflowSessionTurn(snapshot, ctx);
+}
+
+function isStoppedWorkflowPolicy(snapshot: CompletionStateSnapshot | undefined): boolean {
+	const continuationPolicy = asString(snapshot?.state?.continuation_policy);
+	return continuationPolicy === "await_user_input" || continuationPolicy === "blocked" || continuationPolicy === "paused";
+}
+
+function shouldInjectStoppedWorkflowBoundary(
+	event: { prompt?: string },
+	ctx: { sessionManager?: any },
+	snapshot?: CompletionStateSnapshot,
+): boolean {
+	if (roleFromEnv()) return false;
+	if (!snapshot || isWorkflowDone(snapshot)) return false;
+	if (!workflowHardLockActive(snapshot) || !isStoppedWorkflowPolicy(snapshot)) return false;
+	if (isCompletionWorkflowSessionTurn(snapshot, ctx)) return false;
+	const prompt = typeof event.prompt === "string" ? event.prompt.trim() : "";
+	if (!prompt) return false;
+	if (prompt.startsWith("/") || /^COMPLETION WORKFLOW DRIVER\b/m.test(prompt)) return false;
+	return true;
 }
 
 function shouldInjectCookHandoffBoundary(
@@ -325,6 +358,14 @@ function shouldInjectCookHandoffBoundary(
 
 function buildCookHandoffBoundaryReminder(): string {
 	return buildExtractedCookHandoffBoundaryReminder();
+}
+
+function buildStoppedWorkflowBoundaryReminder(snapshot: CompletionStateSnapshot): string {
+	return buildExtractedStoppedWorkflowBoundaryReminder({
+		missionAnchor: asString(snapshot.state?.mission_anchor) ?? asString(snapshot.plan?.mission_anchor),
+		continuationPolicy: asString(snapshot.state?.continuation_policy),
+		continuationReason: asString(snapshot.state?.continuation_reason),
+	});
 }
 
 function buildDoneWorkflowBoundaryReminder(snapshot: CompletionStateSnapshot): string {
@@ -985,7 +1026,7 @@ function completionKickoff(
 
 function completionResumePrompt(taskType: string, evaluationProfile: string, workflowSessionId?: string): string {
 	const sessionBlock = workflowSessionId ? `Workflow session:\n- workflow_session_id: ${workflowSessionId}\n\n` : "";
-	return `COMPLETION WORKFLOW DRIVER\nResume the completion workflow from canonical state.\n\nBefore acting, read:\n- ${SKILL_PATH}\n- ${REFERENCE_PATH}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}Resume instructions:\n- Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting.\n- If canonical state is missing, invalid, contradictory, stale, or ambiguous, route to completion-regrounder first.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional *_hint fields remain advisory until completion-regrounder authors canonical slices.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Continue from next_mandatory_role and next_mandatory_action.\n- Use completion_role for all completion-* role work.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- If canonical closeout cleanup removes repo-local .agent/ after the workflow reaches done or cancelled, treat that disappearance as expected final cleanup rather than as a missing tracked-file anomaly, and do not recreate local helper forwarders merely to narrate completion.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
+	return `COMPLETION WORKFLOW DRIVER\nResume the completion workflow from canonical state.\n\nBefore acting, read:\n- ${SKILL_PATH}\n- ${REFERENCE_PATH}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}Resume instructions:\n- Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting.\n- If canonical state is missing, invalid, contradictory, stale, or ambiguous, route to completion-regrounder first.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional *_hint fields remain advisory until completion-regrounder authors canonical slices.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Continue from next_mandatory_role and next_mandatory_action.\n- When canonical state is stopped (await_user_input, blocked, or paused), rerun /cook or /cook resume to continue, /cook park to record a parked paused posture for ordinary direct edits after canonical state is updated, or /cook cancel to close the workflow.\n- Use completion_role for all completion-* role work.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- If canonical closeout cleanup removes repo-local .agent/ after the workflow reaches done or cancelled, treat that disappearance as expected final cleanup rather than as a missing tracked-file anomaly, and do not recreate local helper forwarders merely to narrate completion.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
 }
 
 export default function completionExtension(pi: ExtensionAPI) {
@@ -1001,7 +1042,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: start or replace workflow from a primary-agent startup brief (optionally seeded by an inline prompt), or resume the current workflow from canonical state",
+			description: "/cook workflow: start or replace workflow from a primary-agent startup brief (optionally seeded by an inline prompt), resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,
@@ -1090,6 +1131,13 @@ export default function completionExtension(pi: ExtensionAPI) {
 				systemPrompt: `${systemPrompt}\n\n${additions.join("\n\n")}`,
 			};
 		}
+		if (loaded && shouldInjectStoppedWorkflowBoundary(event, ctx, loaded.snapshot)) {
+			const stoppedWorkflowReminder = buildStoppedWorkflowBoundaryReminder(loaded.snapshot);
+			maybeWriteTestSnapshot(completionTestCookHandoffReminderPath(), stoppedWorkflowReminder);
+			return {
+				systemPrompt: `${systemPrompt}\n\n${stoppedWorkflowReminder}`,
+			};
+		}
 		if (!shouldInjectCookHandoffBoundary(event, ctx, loaded?.snapshot)) return;
 		const handoffReminder = buildCookHandoffBoundaryReminder();
 		maybeWriteTestSnapshot(completionTestCookHandoffReminderPath(), handoffReminder);
@@ -1131,14 +1179,14 @@ export default function completionExtension(pi: ExtensionAPI) {
 		const role = roleFromEnv();
 		const cwd = getCtxCwd(ctx);
 		const snapshot = await loadCompletionSnapshot(cwd);
-		const completionActive = Boolean(snapshot) && asString(snapshot?.state?.continuation_policy) !== "done";
+		const workflowHardLockActiveNow = workflowHardLockActive(snapshot);
 		const root = snapshot?.files.root ?? findRepoRoot(cwd) ?? cwd;
 		const completionRoleDispatchAllowed = Boolean(role) || isCompletionWorkflowDispatchContext(snapshot, ctx);
 		const reason = toolCallBlockReason({
 			toolName: event.toolName,
 			input: isRecord(event.input) ? event.input : undefined,
 			role,
-			completionActive,
+			workflowHardLockActive: workflowHardLockActiveNow,
 			completionRoleDispatchAllowed,
 			root,
 		});

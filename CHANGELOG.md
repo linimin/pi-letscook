@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- added explicit stopped-workflow `/cook resume`, `/cook park`, and `/cook cancel` controls so blocked, await-user-input, and paused workflows no longer strand the primary agent in a same-repo dead zone
+- split completion-workflow hard locks from mere workflow presence so stopped workflows stay locked until Park or Cancel is recorded canonically, while `continuation_policy == continue` keeps the existing hard-lock and auto-resume behavior
+- made `/cook park` clear stale active-slice handoff state, reset canonical selected-slice verification evidence, and force `requires_reground = true` before any later parked-workflow continuation
+- made `/cook cancel` close stopped workflows cleanly so stale hard locks and auto-resume do not survive ordinary-chat continuation in the repo
+
 ## 0.1.88
 
 ### Fixed

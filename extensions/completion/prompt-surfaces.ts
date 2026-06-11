@@ -26,6 +26,22 @@ export function buildCookHandoffBoundaryReminder(): string {
 	].join(" ");
 }
 
+export function buildStoppedWorkflowBoundaryReminder(args: {
+	missionAnchor?: string;
+	continuationPolicy?: string;
+	continuationReason?: string;
+}): string {
+	return [
+		"A completion workflow is currently stopped but still canonically active for this repo.",
+		`Mission anchor: ${args.missionAnchor ?? "(unknown)"}`,
+		`Continuation policy: ${args.continuationPolicy ?? "unknown"}`,
+		`Continuation reason: ${args.continuationReason ?? "(unknown)"}`,
+		"Do not tell the user to hand-edit .agent state or open a new chat just to escape this stopped workflow.",
+		"Supported same-repo controls are: rerun /cook or /cook resume to continue from canonical state; run /cook park to record a parked paused posture that unlocks ordinary direct edits and forces canonical reground before workflow continuation; run /cook cancel to close the workflow and disable stale hard locks or auto-resume.",
+		"Until Park or Cancel is recorded canonically, ordinary tracked-file edits remain hard-locked for this repo.",
+	].join(" ");
+}
+
 export function buildContextProposalGoalText(proposal: {
 	mission: string;
 	scope: string[];
@@ -463,6 +479,7 @@ export function buildSystemReminder(args: {
 		"Re-read canonical .agent state after compaction or recovery instead of relying on conversation memory.",
 		"If continuation_policy == continue, do not stop after a slice or ask whether to continue; dispatch the next mandatory role directly.",
 		"Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.",
+		"When canonical state is stopped (await_user_input, blocked, or paused), rerun /cook or /cook resume to continue, /cook park to park for ordinary direct edits after canonical state is updated, or /cook cancel to close the workflow.",
 		"If canonical state is stale, invalid, ambiguous, or missing, route to completion-regrounder.",
 		"When recovering from compaction, prefer a deterministic restart from canonical files over conversational inference.",
 	];
@@ -602,6 +619,7 @@ export function buildResumeCapsule(args: {
 		"- Invoke completion-regrounder before continuing when active_slice_matches_plan is no, active_slice_contract_drift_fields is not none, or implementer_handoff_snapshot is missing_or_unclear.",
 		"- If continuation_policy is continue, do not stop after a slice or ask whether to continue. Dispatch the next mandatory role directly.",
 		"- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.",
+		"- When canonical state is stopped (await_user_input, blocked, or paused), rerun /cook or /cook resume to continue, /cook park to record a parked paused posture for ordinary direct edits, or /cook cancel to close the workflow.",
 		"- If you are completion-implementer after compaction, resume from the canonical active-slice implementation contract instead of asking the user to resend the original caller payload.",
 		"- Do not replace canonical .agent state with summary inference.",
 		"</completion-state>",

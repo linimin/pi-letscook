@@ -47,6 +47,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - `continuation_policy == blocked` means the workflow root must report the blocker and stop.
 - `continuation_policy == paused` means the user explicitly paused the workflow.
 - `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
+- When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, use `/cook park` to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.
 - After canonical state reaches a closed `done` or `cancelled` posture, the extension may delete repo-local `.agent/` before control returns. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly. Do not recreate local helper files merely to narrate final status.
 - Use `completion-bootstrapper` only for first-time setup or missing local helper / canonical-state repair.
 - Use `completion-regrounder` for canonical re-grounding, slice selection, post-review or post-audit reconciliation, and final stop reconciliation.

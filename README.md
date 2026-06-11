@@ -35,7 +35,7 @@ Then run `/reload` in Pi.
 3. In the main chat, either implement directly with the agent or refine the concrete repo change you want.
 4. When you want workflow mode, run `/cook` or `/cook <prompt>`.
 5. Review the startup brief and choose **Start** or **Cancel**.
-6. Later, run `/cook` again to resume from canonical state or confirm a replacement or next-round handoff.
+6. Later, run `/cook` or `/cook resume` to continue from canonical state, `/cook park` to park a stopped workflow for ordinary direct edits, or `/cook cancel` to close a stopped workflow.
 
 ```text
 /cook
@@ -48,7 +48,9 @@ Then run `/reload` in Pi.
 |---|---|
 | Implement directly without workflow | Ask in ordinary chat and let the agent modify the repo directly |
 | Start a tracked workflow | Discuss the concrete repo change in ordinary chat, then run `/cook` when you want workflow mode, or run `/cook <prompt>` when you want to provide explicit startup intent inline |
-| Continue the current workflow | Run `/cook` |
+| Continue the current workflow | Run `/cook` or `/cook resume` |
+| Park a stopped workflow for ordinary direct edits | Run `/cook park` when canonical state is already stopped (`await_user_input`, `blocked`, or `paused`) |
+| Cancel a stopped workflow | Run `/cook cancel` when canonical state is already stopped or parked |
 | Refocus or start the next round | Discuss the new concrete repo change in ordinary chat, then run `/cook` when you want workflow mode |
 
 ## What `/cook` expects
@@ -83,6 +85,7 @@ Important behavior:
 - `/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation
 - startup and next-round entry stay confirm-first, using explicit primary-agent handoff data when present and otherwise running the primary-agent handoff synthesis step in the same `/cook` entry
 - active workflows resume from canonical `.agent/**` state unless a concrete replacement handoff is available or synthesized in the same `/cook` entry
+- stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow
 - explicit slash commands other than `/cook` continue normally in the main chat
 - ordinary main-chat discussion may clarify, propose, or directly implement repo changes without entering workflow mode
 
@@ -109,7 +112,7 @@ Start a new workflow directly from explicit inline startup intent:
 | Repo state | What you'll see |
 |---|---|
 | No workflow yet | `/cook` consumes a fresh explicit primary-agent handoff when one already exists, or synthesizes one from the primary-agent view in the same entry, then asks you to choose **Start** or **Cancel**. If a fresh explicit handoff is weak, `/cook` first tries to tighten mission, acceptance, or advisory slice hints through same-entry startup synthesis before failing closed. |
-| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If a concrete replacement handoff exists already or is synthesized in the same `/cook` entry and points to a different mission, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous or missing replacement handoff stays conservative. |
+| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerunning `/cook` or `/cook resume` resumes from canonical state, `/cook park` records a parked paused posture so ordinary chat may edit directly until a later reground, and `/cook cancel` closes the workflow. If a concrete replacement handoff exists already or is synthesized in the same `/cook` entry and points to a different mission, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous or missing replacement handoff stays conservative. |
 | Previous workflow is `done` | `/cook` can start the next implementation round from a fresh explicit primary-agent handoff or from the same-entry primary-agent handoff synthesis step behind **Start** or **Cancel**. Startup hints may still be advisory; `completion-regrounder` derives the canonical next slices after Start. |
 
 ## Confirmation and fail-closed behavior

@@ -26,11 +26,13 @@ import type {
 	ContextProposalAnalysis,
 	ContextProposalDecision,
 } from "./proposal";
-import type { CompletionStateSnapshot } from "./types";
+import type { CompletionStateSnapshot, JsonRecord } from "./types";
 
 type ExistingWorkflowDecision =
 	| { action: "continue"; currentMissionAnchor: string }
 	| { action: "refocus"; currentMissionAnchor: string; missionAnchor: string; proposal: ContextProposal };
+
+type CookWorkflowControlAction = "resume" | "park" | "cancel";
 
 function buildCookStartupBriefRequiredMessage(deps: CompletionDriverDeps, prefix?: string): string {
 	const requirement = deps.structuredDiscussionFailureDetail;
@@ -137,6 +139,125 @@ function roleFromEnv(): string | undefined {
 
 function buildCookCancellationMessage(prefix: string, deps: CompletionDriverDeps): string {
 	return `${prefix}. ${deps.mainChatRerunGuidance}`;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function workflowEntryStatus(snapshot: CompletionStateSnapshot | undefined): string | undefined {
+	if (!snapshot || isWorkflowDone(snapshot)) return undefined;
+	return asString(snapshot.state?.workflow_entry_status)?.toLowerCase() ?? "active";
+}
+
+function isWorkflowParked(snapshot: CompletionStateSnapshot | undefined): boolean {
+	return workflowEntryStatus(snapshot) === "parked";
+}
+
+function isStoppedWorkflow(snapshot: CompletionStateSnapshot | undefined): boolean {
+	const continuationPolicy = asString(snapshot?.state?.continuation_policy);
+	return continuationPolicy === "await_user_input" || continuationPolicy === "blocked" || continuationPolicy === "paused";
+}
+
+function parseCookWorkflowControlAction(value: string | undefined): CookWorkflowControlAction | undefined {
+	const normalized = asString(value)?.toLowerCase();
+	return normalized === "resume" || normalized === "park" || normalized === "cancel" ? normalized : undefined;
+}
+
+function candidateSlices(plan: JsonRecord | undefined): JsonRecord[] {
+	const slices = plan?.candidate_slices;
+	return Array.isArray(slices) ? slices.filter(isRecord) : [];
+}
+
+function parkedPlanSnapshot(plan: JsonRecord | undefined): JsonRecord | undefined {
+	if (!plan) return undefined;
+	return {
+		...plan,
+		candidate_slices: candidateSlices(plan).map((slice) => {
+			const status = asString(slice.status);
+			if (status === "selected" || status === "in_progress") {
+				return { ...slice, status: "planned" };
+			}
+			return slice;
+		}),
+	};
+}
+
+async function parkStoppedWorkflow(snapshot: CompletionStateSnapshot): Promise<CompletionStateSnapshot | undefined> {
+	const missionAnchor = currentMissionAnchor(snapshot);
+	const taskType = currentTaskType(snapshot);
+	const evaluationProfile = currentEvaluationProfile(snapshot);
+	const nextState = {
+		...(snapshot.state ?? {}),
+		workflow_entry_status: "parked",
+		current_phase: "awaiting_user",
+		continuation_policy: "paused",
+		continuation_reason:
+			"Workflow parked via /cook park. Ordinary chat may edit directly; rerun /cook or /cook resume to re-enter completion after canonical reground.",
+		requires_reground: true,
+		next_mandatory_role: "completion-regrounder",
+		next_mandatory_action: "Reconcile canonical state from current repo truth before resuming the parked workflow.",
+		contract_status: "parked_pending_reground",
+	};
+	const nextPlan = parkedPlanSnapshot(isRecord(snapshot.plan) ? snapshot.plan : undefined)
+		?? defaultPlan(missionAnchor, { taskType, evaluationProfile });
+	const nextActive = defaultActiveSlice(missionAnchor, { taskType, evaluationProfile });
+	const nextEvidence = {
+		...defaultVerificationEvidence(),
+		summary: "Workflow parked via /cook park; stale selected-slice verification evidence was cleared until canonical reground selects the next slice.",
+	};
+	await Promise.all([
+		writeJsonFile(snapshot.files.statePath, nextState),
+		writeJsonFile(snapshot.files.planPath, nextPlan),
+		writeJsonFile(snapshot.files.activePath, nextActive),
+		writeJsonFile(snapshot.files.verificationEvidencePath, nextEvidence),
+	]);
+	return await loadCompletionSnapshot(snapshot.files.root);
+}
+
+async function reactivateParkedWorkflow(snapshot: CompletionStateSnapshot): Promise<CompletionStateSnapshot | undefined> {
+	const nextState = {
+		...(snapshot.state ?? {}),
+		workflow_entry_status: "active",
+		current_phase: "reground",
+		continuation_policy: "continue",
+		continuation_reason:
+			"Workflow resumed via /cook from parked state. Canonical reground is required before selecting or continuing work.",
+		requires_reground: true,
+		next_mandatory_role: "completion-regrounder",
+		next_mandatory_action: "Reconcile canonical state from current repo truth before continuing the resumed workflow.",
+		contract_status: "parked_workflow_resumed_pending_reground",
+	};
+	await writeJsonFile(snapshot.files.statePath, nextState);
+	return await loadCompletionSnapshot(snapshot.files.root);
+}
+
+async function cancelStoppedWorkflow(snapshot: CompletionStateSnapshot): Promise<void> {
+	const missionAnchor = currentMissionAnchor(snapshot);
+	const taskType = currentTaskType(snapshot);
+	const evaluationProfile = currentEvaluationProfile(snapshot);
+	const nextState = {
+		...(snapshot.state ?? {}),
+		workflow_entry_status: "cancelled",
+		current_phase: "done",
+		continuation_policy: "done",
+		continuation_reason: "Workflow cancelled via /cook cancel. Ordinary chat may proceed without workflow hard locks or auto-resume.",
+		requires_reground: false,
+		next_mandatory_role: null,
+		next_mandatory_action: null,
+		remaining_stop_judges: 0,
+		contract_status: "cancelled",
+	};
+	const nextActive = defaultActiveSlice(missionAnchor, { taskType, evaluationProfile });
+	const nextEvidence = {
+		...defaultVerificationEvidence(),
+		summary: "Workflow cancelled via /cook cancel; canonical verification evidence was reset before closeout cleanup.",
+	};
+	await Promise.all([
+		writeJsonFile(snapshot.files.statePath, nextState),
+		writeJsonFile(snapshot.files.activePath, nextActive),
+		writeJsonFile(snapshot.files.verificationEvidencePath, nextEvidence),
+	]);
 }
 
 export function completionContinuationFingerprint(snapshot: CompletionStateSnapshot): string | undefined {
@@ -490,12 +611,68 @@ export async function runCookEntry(
 ): Promise<void> {
 	let goal: string | undefined;
 	const inlinePrompt = asString(ctx.cookInlinePrompt);
+	const cookControlAction = parseCookWorkflowControlAction(inlinePrompt);
 	const cwd = deps.getCtxCwd(ctx);
 	let snapshot = await loadCompletionSnapshot(cwd);
 	const workflowDone = isWorkflowDone(snapshot);
 	let kickoffIntent: "auto" | "continue" | "refocus" = "auto";
 	let kickoffMissionAnchor = snapshot ? currentMissionAnchor(snapshot) : undefined;
 	let kickoffAnalysis: ContextProposalAnalysis | undefined;
+
+	if (snapshot && !workflowDone && cookControlAction === "resume") {
+		if (isWorkflowParked(snapshot)) {
+			snapshot = (await reactivateParkedWorkflow(snapshot)) ?? snapshot;
+			deps.emitCommandText(
+				ctx,
+				"Resumed parked completion workflow. Canonical reground is required before workflow work continues.",
+				"info",
+			);
+		}
+		await resumeActiveWorkflowFromCanonicalState(pi, ctx, snapshot, deps);
+		return;
+	}
+	if (snapshot && !workflowDone && cookControlAction === "park") {
+		if (isWorkflowParked(snapshot)) {
+			deps.emitCommandText(
+				ctx,
+				"Completion workflow is already parked. Ordinary chat may edit directly; rerun /cook or /cook resume to continue, or /cook cancel to close it.",
+				"info",
+			);
+			return;
+		}
+		if (!isStoppedWorkflow(snapshot)) {
+			deps.emitCommandText(
+				ctx,
+				"/cook park is only available when the current workflow is already stopped (await_user_input, blocked, or paused). Plain /cook continues the active workflow.",
+				"warning",
+			);
+			return;
+		}
+		snapshot = (await parkStoppedWorkflow(snapshot)) ?? snapshot;
+		deps.emitCommandText(
+			ctx,
+			"Parked completion workflow. Ordinary chat may edit directly; rerun /cook or /cook resume to reground and continue later.",
+			"info",
+		);
+		return;
+	}
+	if (snapshot && !workflowDone && cookControlAction === "cancel") {
+		if (!isStoppedWorkflow(snapshot) && !isWorkflowParked(snapshot)) {
+			deps.emitCommandText(
+				ctx,
+				"/cook cancel is only available when the current workflow is already stopped (await_user_input, blocked, or paused) or parked. Plain /cook continues the active workflow.",
+				"warning",
+			);
+			return;
+		}
+		await cancelStoppedWorkflow(snapshot);
+		deps.emitCommandText(
+			ctx,
+			"Cancelled completion workflow. Canonical closeout is recorded and ordinary chat is no longer hard-locked.",
+			"info",
+		);
+		return;
+	}
 
 	if (!snapshot) {
 		const root = findRepoRoot(cwd) ?? cwd;
@@ -539,6 +716,14 @@ export async function runCookEntry(
 	}
 	deps.activateCompletionRoutingForRoot(snapshot.files.root);
 	if (!goal) {
+		if (!workflowDone && isWorkflowParked(snapshot)) {
+			snapshot = (await reactivateParkedWorkflow(snapshot)) ?? snapshot;
+			deps.emitCommandText(
+				ctx,
+				"Resumed parked completion workflow from canonical state; completion-regrounder must re-ground before work continues.",
+				"info",
+			);
+		}
 		if (workflowDone) {
 			const projectName = path.basename(snapshot.files.root);
 			const derived = await deps.deriveCookContextProposal(ctx, projectName);

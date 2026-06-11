@@ -61,11 +61,11 @@ export function toolCallBlockReason(args: {
 	toolName: string;
 	input?: JsonRecord;
 	role?: string;
-	completionActive: boolean;
+	workflowHardLockActive: boolean;
 	completionRoleDispatchAllowed: boolean;
 	root: string;
 }): string | undefined {
-	const { toolName, input, role, completionActive, completionRoleDispatchAllowed, root } = args;
+	const { toolName, input, role, workflowHardLockActive, completionRoleDispatchAllowed, root } = args;
 
 	if (toolName === "completion_role" && role) {
 		return `Nested completion role dispatch is forbidden for ${role}.`;
@@ -87,8 +87,8 @@ export function toolCallBlockReason(args: {
 			return `${role} may only edit .agent/** or .gitignore.`;
 		}
 
-		if (!role && completionActive && !isAllowedControlPlanePath(root, rawPath)) {
-			return "The workflow driver may not edit tracked product files directly during completion.";
+		if (!role && workflowHardLockActive && !isAllowedControlPlanePath(root, rawPath)) {
+			return "The workflow driver may not edit tracked product files directly while the completion workflow is hard-locked.";
 		}
 
 		return undefined;
@@ -107,8 +107,8 @@ export function toolCallBlockReason(args: {
 		return `${role} may not create commits.`;
 	}
 
-	if (!role && completionActive && startsWithAny(normalized, ["git add", "git commit"])) {
-		return "The workflow driver may not create commits directly during completion.";
+	if (!role && workflowHardLockActive && startsWithAny(normalized, ["git add", "git commit"])) {
+		return "The workflow driver may not create commits directly while the completion workflow is hard-locked.";
 	}
 
 	return undefined;
