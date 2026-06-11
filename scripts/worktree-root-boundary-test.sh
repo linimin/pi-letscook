@@ -126,29 +126,66 @@ write_json('verification-evidence.json', evidence)
 PY
 }
 
-PARENT="$TMPDIR/lobster"
-CHILD="$PARENT/.worktrees/cdn-onboarding"
-PARENT_MISSION='Ancestor workflow that must not leak into nested worktree.'
-CHILD_MISSION='Start isolated workflow inside nested worktree.'
-mkdir -p "$PARENT" "$CHILD"
-git -C "$PARENT" init -q
-git -C "$CHILD" init -q
-write_minimal_completion_state "$PARENT" "$PARENT_MISSION"
-
-HANDOFF="$(python3 - <<'PY'
+write_session() {
+  local session_path="$1"
+  local cwd="$2"
+  local text="$3"
+  python3 - "$session_path" "$cwd" "$text" <<'PY'
 import json
+import sys
+from pathlib import Path
+
+session_path = Path(sys.argv[1])
+cwd = sys.argv[2]
+text = sys.argv[3]
+session_path.parent.mkdir(parents=True, exist_ok=True)
+entries = [
+    {
+        "type": "session",
+        "version": 3,
+        "id": "11111111-1111-4111-8111-111111111111",
+        "timestamp": "2026-01-01T00:00:00.000Z",
+        "cwd": cwd,
+    },
+    {
+        "type": "message",
+        "id": "a1b2c3d4",
+        "parentId": None,
+        "timestamp": "2026-01-01T00:00:01.000Z",
+        "message": {
+            "role": "user",
+            "content": text,
+            "timestamp": 1767225601000,
+        },
+    },
+]
+with session_path.open('w', encoding='utf-8') as fh:
+    for entry in entries:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+PY
+}
+
+build_handoff() {
+  local mission="$1"
+  local verification_command="$2"
+  python3 - "$mission" "$verification_command" <<'PY'
+import json
+import sys
+
+mission = sys.argv[1]
+verification_command = sys.argv[2]
 capsule = {
     'kind': 'cook_handoff',
     'source': 'primary_agent',
     'captured_at': '2026-01-01T00:00:01.000Z',
     'source_turn_id': 'worktree-root-boundary-test',
-    'mission': 'Start isolated workflow inside nested worktree.',
+    'mission': mission,
     'scope': [
         'Create canonical completion workflow state under the current nested worktree root.',
         'Do not read or mutate completion workflow state from an ancestor checkout.'
     ],
     'constraints': [
-        'Bound completion state discovery to the current Git worktree root.'
+        'Bound completion state discovery to the current Git worktree root even when process.cwd() points elsewhere.'
     ],
     'acceptance': [
         'Running /cook inside a nested Git worktree creates .agent/current/state.json in that worktree.',
@@ -167,7 +204,7 @@ capsule = {
         'extensions/completion/state-store.ts'
     ],
     'verification_commands': [
-        'npm run worktree-root-boundary-test'
+        verification_command
     ],
     'why_this_slice_first': 'The root boundary must be correct before /cook can safely run in nested worktrees.',
     'task_type': 'completion-workflow',
@@ -176,23 +213,34 @@ capsule = {
 }
 print('```cook_handoff\n' + json.dumps(capsule, ensure_ascii=False, indent=2) + '\n```')
 PY
-)"
+}
 
-cd "$CHILD"
-if ! PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PARENT="$TMPDIR/lobster"
+CHILD_DIRECT="$PARENT/.worktrees/cdn-onboarding-direct"
+CHILD_SESSION="$PARENT/.worktrees/cdn-onboarding-session"
+PARENT_MISSION='Ancestor workflow that must not leak into nested worktree.'
+CHILD_DIRECT_MISSION='Start isolated workflow inside nested worktree (direct cwd).'
+CHILD_SESSION_MISSION='Start isolated workflow inside nested worktree (session cwd).'
+mkdir -p "$PARENT" "$CHILD_DIRECT" "$CHILD_SESSION"
+
+git -C "$PARENT" init -q
+git -C "$CHILD_DIRECT" init -q
+git -C "$CHILD_SESSION" init -q
+write_minimal_completion_state "$PARENT" "$PARENT_MISSION"
+
+HANDOFF_DIRECT="$(build_handoff "$CHILD_DIRECT_MISSION" "npm run worktree-root-boundary-test")"
+DIRECT_OUT="$TMPDIR/pi-completion-worktree-root-boundary-direct.out"
+DIRECT_ERR="$TMPDIR/pi-completion-worktree-root-boundary-direct.err"
+(
+  cd "$CHILD_DIRECT"
+  PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
   PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
-  PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$HANDOFF" \
+  PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$HANDOFF_DIRECT" \
   PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
-  pi -e "$PKG_ROOT" -p "/cook start an isolated nested worktree workflow" \
-    >"$TMPDIR/pi-completion-worktree-root-boundary.out" \
-    2>"$TMPDIR/pi-completion-worktree-root-boundary.err"; then
-  echo "pi /cook command failed" >&2
-  cat "$TMPDIR/pi-completion-worktree-root-boundary.out" >&2 || true
-  cat "$TMPDIR/pi-completion-worktree-root-boundary.err" >&2 || true
-  exit 1
-fi
+  pi -e "$PKG_ROOT" -p "/cook start an isolated nested worktree workflow"
+) >"$DIRECT_OUT" 2>"$DIRECT_ERR"
 
-python3 - "$PARENT" "$CHILD" "$PARENT_MISSION" "$CHILD_MISSION" "$TMPDIR/pi-completion-worktree-root-boundary.out" "$TMPDIR/pi-completion-worktree-root-boundary.err" <<'PY'
+python3 - "$PARENT" "$CHILD_DIRECT" "$PARENT_MISSION" "$CHILD_DIRECT_MISSION" "$DIRECT_OUT" "$DIRECT_ERR" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -205,14 +253,51 @@ output = Path(sys.argv[5]).read_text(encoding='utf-8') + Path(sys.argv[6]).read_
 
 parent_state_path = parent / '.agent' / 'current' / 'state.json'
 child_state_path = child / '.agent' / 'current' / 'state.json'
-assert child_state_path.exists(), 'nested worktree /cook should create .agent/current/state.json under the nested worktree root'
+assert child_state_path.exists(), 'nested worktree /cook should create .agent/current/state.json under the direct child worktree root'
 parent_state = json.loads(parent_state_path.read_text(encoding='utf-8'))
 child_state = json.loads(child_state_path.read_text(encoding='utf-8'))
-assert parent_state['mission_anchor'] == parent_mission, 'nested worktree /cook must not refocus or mutate the ancestor workflow state'
-assert child_state['mission_anchor'] == child_mission, 'nested worktree /cook should use the child startup handoff mission'
-assert child_state['workflow_session_id'] != parent_state['workflow_session_id'], 'nested worktree /cook should create an independent workflow session'
-assert (child / '.agent' / 'current' / 'startup-brief.json').exists(), 'nested worktree /cook should persist a local startup brief'
-assert 'Started completion workflow for: Start isolated workflow inside nested worktree.' in output, 'nested worktree /cook should report a fresh local workflow start'
+assert parent_state['mission_anchor'] == parent_mission, 'direct nested worktree /cook must not refocus or mutate the ancestor workflow state'
+assert child_state['mission_anchor'] == child_mission, 'direct nested worktree /cook should use the child startup handoff mission'
+assert child_state['workflow_session_id'] != parent_state['workflow_session_id'], 'direct nested worktree /cook should create an independent workflow session'
+assert (child / '.agent' / 'current' / 'startup-brief.json').exists(), 'direct nested worktree /cook should persist a local startup brief'
+assert 'Started completion workflow for: Start isolated workflow inside nested worktree (direct cwd).' in output, 'direct nested worktree /cook should report a fresh local workflow start'
 PY
 
-echo "worktree root boundary test passed: $CHILD"
+SESSION_PATH="$TMPDIR/worktree-root-boundary-session.jsonl"
+write_session "$SESSION_PATH" "$CHILD_SESSION" "Use the child nested worktree cwd for this session."
+HANDOFF_SESSION="$(build_handoff "$CHILD_SESSION_MISSION" "npm run worktree-root-boundary-test")"
+SESSION_OUT="$TMPDIR/pi-completion-worktree-root-boundary-session.out"
+SESSION_ERR="$TMPDIR/pi-completion-worktree-root-boundary-session.err"
+(
+  cd "$PARENT"
+  PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+  PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+  PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$HANDOFF_SESSION" \
+  PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+  pi --session "$SESSION_PATH" -e "$PKG_ROOT" -p "/cook start an isolated nested worktree workflow from a parent process cwd"
+) >"$SESSION_OUT" 2>"$SESSION_ERR"
+
+python3 - "$PARENT" "$CHILD_SESSION" "$PARENT_MISSION" "$CHILD_SESSION_MISSION" "$SESSION_OUT" "$SESSION_ERR" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+parent = Path(sys.argv[1])
+child = Path(sys.argv[2])
+parent_mission = sys.argv[3]
+child_mission = sys.argv[4]
+output = Path(sys.argv[5]).read_text(encoding='utf-8') + Path(sys.argv[6]).read_text(encoding='utf-8')
+
+parent_state_path = parent / '.agent' / 'current' / 'state.json'
+child_state_path = child / '.agent' / 'current' / 'state.json'
+assert child_state_path.exists(), 'session-bound nested worktree /cook should create .agent/current/state.json under the child worktree root even when process.cwd() is the ancestor repo'
+parent_state = json.loads(parent_state_path.read_text(encoding='utf-8'))
+child_state = json.loads(child_state_path.read_text(encoding='utf-8'))
+assert parent_state['mission_anchor'] == parent_mission, 'session-bound nested worktree /cook must not resume or mutate the ancestor workflow state'
+assert child_state['mission_anchor'] == child_mission, 'session-bound nested worktree /cook should use the child startup handoff mission'
+assert child_state['workflow_session_id'] != parent_state['workflow_session_id'], 'session-bound nested worktree /cook should create an independent workflow session'
+assert (child / '.agent' / 'current' / 'startup-brief.json').exists(), 'session-bound nested worktree /cook should persist a local startup brief'
+assert 'Started completion workflow for: Start isolated workflow inside nested worktree (session cwd).' in output, 'session-bound nested worktree /cook should report a fresh local workflow start'
+PY
+
+echo "worktree root boundary test passed: $CHILD_DIRECT and $CHILD_SESSION"

@@ -68,7 +68,18 @@ function walkUpForDir(startCwd: string, segments: string[], stopAt?: string): st
 }
 
 function completionSearchRoots(startCwd: string): string[] {
-	return [...new Set([path.resolve(startCwd), path.resolve(process.cwd())])];
+	const startRoot = path.resolve(startCwd);
+	const processRoot = path.resolve(process.cwd());
+	if (processRoot === startRoot) return [startRoot];
+	const startRepoRoot = findNearestRepoRoot(startRoot);
+	const processRepoRoot = findNearestRepoRoot(processRoot);
+	// Only consult process.cwd() as a fallback when both paths belong to the same
+	// Git checkout. Otherwise a parent repo process cwd can leak ancestor .agent
+	// state into a nested child worktree whose session cwd already points elsewhere.
+	if (startRepoRoot && processRepoRoot && startRepoRoot === processRepoRoot) {
+		return [startRoot, processRoot];
+	}
+	return [startRoot];
 }
 
 function findNearestRepoRoot(startCwd: string): string | undefined {
