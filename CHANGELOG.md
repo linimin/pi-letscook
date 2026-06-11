@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.89
 
 ### Fixed
 
@@ -8,6 +8,9 @@
 - split completion-workflow hard locks from mere workflow presence so stopped workflows stay locked until Park or Cancel is recorded canonically, while `continuation_policy == continue` keeps the existing hard-lock and auto-resume behavior
 - made `/cook park` clear stale active-slice handoff state, reset canonical selected-slice verification evidence, and force `requires_reground = true` before any later parked-workflow continuation
 - made `/cook cancel` close stopped workflows cleanly so stale hard locks and auto-resume do not survive ordinary-chat continuation in the repo
+- bounded completion-state discovery to the current Git worktree root so nested worktrees no longer inherit an ancestor checkout's `.agent/current/state.json`
+- tightened the `process.cwd()` fallback so completion-state discovery only consults it within the same Git checkout, preventing parent-process cwd from leaking ancestor `.agent` state into child worktree sessions
+- added a worktree-root-boundary regression and wired it into `npm run release-check`, while also fixing the affected local test harness wrappers and the refocus bootstrap readiness typo uncovered during validation
 
 ## 0.1.88
 
