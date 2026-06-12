@@ -1,8 +1,6 @@
 import {
 	assessLatestCookHandoffProposal,
 	deriveCookContextProposalFromRecentDiscussion,
-	hasRecentDiscussionImplementationIntent,
-	hasStructuredContextProposalSignal,
 } from "./proposal";
 import type {
 	ContextProposal,
@@ -20,6 +18,7 @@ export type CookProposalDeps = {
 	normalizeMissionAnchorText: (text: string) => string;
 	isWeakMissionAnchor: (text: string) => boolean;
 	missionAnchorsStrictlyEquivalent: (left: string, right: string) => boolean;
+	missionAnchorsLikelyEquivalent: (left: string, right: string) => boolean;
 	stripCodeBlocks: (text: string) => string;
 };
 
@@ -77,6 +76,7 @@ function stripCookHandoffBlocks(text: string): string {
 
 function buildAdvisoryStartupBriefNotes(analysis: ContextProposalAnalysis): string[] {
 	const notes = [
+		...analysis.diagnostics.map((item) => `Diagnostic: ${item}`),
 		...analysis.critique,
 		...analysis.possibleNoise.map((item) => `Possible noise: ${item}`),
 	];
@@ -151,12 +151,29 @@ export function buildCookRecentEntries(args: {
 	];
 }
 
-export function shouldAnalyzeCookRecentDiscussion(recentEntries: RecentDiscussionEntry[], stripCodeBlocks: (text: string) => string): boolean {
-	return recentEntries.some(
-		(entry) =>
-			hasStructuredContextProposalSignal(entry.text, stripCodeBlocks) ||
-			hasRecentDiscussionImplementationIntent(entry.text, stripCodeBlocks),
-	);
+export function shouldAnalyzeCookRecentDiscussion(recentEntries: RecentDiscussionEntry[]): boolean {
+	return recentEntries.some((entry) => entry.text.trim().length > 0);
+}
+
+function sharedNormalizedPrefixLength(left: string, right: string): number {
+	const max = Math.min(left.length, right.length);
+	let index = 0;
+	while (index < max && left[index] === right[index]) index += 1;
+	return index;
+}
+
+function synthesizedMissionTightensExplicitMission(
+	explicitMission: string,
+	candidateMission: string,
+	deps: Pick<CookProposalDeps, "missionAnchorsLikelyEquivalent" | "normalizeMissionAnchorText">,
+): boolean {
+	if (deps.missionAnchorsLikelyEquivalent(explicitMission, candidateMission)) return true;
+	const normalizedExplicit = deps.normalizeMissionAnchorText(explicitMission).toLowerCase();
+	const normalizedCandidate = deps.normalizeMissionAnchorText(candidateMission).toLowerCase();
+	if (!normalizedExplicit || !normalizedCandidate) return false;
+	if (normalizedExplicit.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedExplicit)) return true;
+	const sharedPrefixLength = sharedNormalizedPrefixLength(normalizedExplicit, normalizedCandidate);
+	return sharedPrefixLength >= 24 && sharedPrefixLength / Math.min(normalizedExplicit.length, normalizedCandidate.length) >= 0.5;
 }
 
 export function buildCookSynthesisContext(args: {
@@ -181,7 +198,7 @@ export function buildCookSynthesisContext(args: {
 		workflowContextLines.push("A fresh explicit primary-agent handoff is available. Use it as startup input, but tighten weak acceptance or initial-slice hints from recent discussion when possible.");
 		workflowContextLines.push(`Explicit handoff summary:\n${args.explicit.proposal.basisPreview}`);
 	}
-	const shouldAnalyzeRecentDiscussion = shouldAnalyzeCookRecentDiscussion(recentEntries, args.stripCodeBlocks);
+	const shouldAnalyzeRecentDiscussion = shouldAnalyzeCookRecentDiscussion(recentEntries);
 	return {
 		recentEntries,
 		workflowContext,
@@ -221,8 +238,9 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 		projectName: args.projectName,
 		deps: args.deps,
 	});
-	const shouldTightenExplicitProposal = explicit.proposal ? proposalNeedsCookStartupTightening(explicit.proposal) : false;
-	if (explicit.proposal && !shouldTightenExplicitProposal) return explicit;
+	const explicitProposal = explicit.proposal;
+	const shouldTightenExplicitProposal = explicitProposal ? proposalNeedsCookStartupTightening(explicitProposal) : false;
+	if (explicitProposal && !shouldTightenExplicitProposal) return explicit;
 	const synthesisContext = buildCookSynthesisContext({
 		inlinePrompt: args.inlinePrompt,
 		recentMessages: args.recentMessages,
@@ -238,9 +256,15 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 			args.projectName,
 			args.deps,
 		);
-		if (generated.status === "startable") return { proposal: generated.proposal };
+		if (generated.status === "startable") {
+			if (!explicitProposal) return { proposal: generated.proposal };
+			if (synthesizedMissionTightensExplicitMission(explicitProposal.mission, generated.proposal.mission, args.deps)) {
+				return { proposal: generated.proposal };
+			}
+			return explicit;
+		}
 	}
-	if (synthesisContext.shouldAnalyzeRecentDiscussion) {
+	if (!explicitProposal && synthesisContext.shouldAnalyzeRecentDiscussion) {
 		const derivedFromRecentDiscussion = await deriveCookContextProposalFromRecentDiscussion(args.projectName, recentEntries, {
 			...args.deps,
 			analyzeContextProposal: args.analyzeContextProposal
@@ -250,7 +274,7 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 		});
 		if (derivedFromRecentDiscussion) return { proposal: derivedFromRecentDiscussion };
 	}
-	if (explicit.proposal) return explicit;
+	if (explicitProposal) return explicit;
 	return {};
 }
 

@@ -6,11 +6,13 @@ import * as path from "node:path";
 import { DynamicBorder, parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import { Container, Text } from "@mariozechner/pi-tui";
 import {
-	buildContextProposalAnalystPromptFromEntries,
-	parseContextProposalAnalystOutput,
 	type ContextProposal,
 	type RecentDiscussionEntry,
 } from "./proposal";
+import {
+	buildStartupAnalysisPromptFromEntries,
+	parseStartupAnalysisOutput,
+} from "./startup-analysis";
 import { contextProposalAnalystProgressLines, primaryAgentHandoffProgressLines } from "./prompt-surfaces";
 import {
 	applyLiveRoleEvent,
@@ -77,21 +79,26 @@ const PACKAGE_AGENTS_DIR = PACKAGE_ROOT ? path.join(PACKAGE_ROOT, "agents") : un
 const CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT = [
 	"You analyze recent /cook startup discussion and return a strict JSON object.",
 	"Do not emit markdown, code fences, or commentary.",
-	"Return exactly one JSON object with keys: mission, scope, constraints, acceptance, critique, risks, task_type, evaluation_profile, confidence, possible_noise.",
+	"Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise, task_type, evaluation_profile.",
 	"You may additionally include optional keys alternate_missions, completed_topics, and negated_topics when they are clearly supported by the discussion and canonical workflow context.",
-	"mission must be a concise implementation mission anchor sentence.",
+	"Use verdict values: startable, needs_clarification, planning_only, not_repo_change, or unsafe.",
+	"Use workflow_relation values: new_workflow, continue_current_workflow, replace_current_workflow, or unclear.",
+	"Use confidence values: high, medium, or low.",
+	"mission must be a concise implementation mission anchor sentence when verdict is startable; do not invent a generic mission when the discussion is weak or ambiguous.",
 	"Prefer the latest clear user implementation intent over older background context when they differ.",
+	"Treat /cook itself as the workflow-entry signal; do not require English implementation-intent keywords before analyzing recent discussion.",
 	"Use recent user/custom discussion plus canonical workflow context only; do not infer startup intent from slash-command arguments or let planning-only artifacts bypass approval-only confirmation.",
 	"Do not reopen work that the canonical workflow context says is done, completed, historical, or already covered unless the latest discussion clearly asks to revisit it.",
 	"Treat stale, weakly related, or explicitly negated topics as noise instead of mission scope.",
-	"scope must contain only work items that directly support the mission.",
-	"constraints must contain guardrails or non-goals explicitly stated or strongly implied by the discussion.",
-	"acceptance must contain verifiable outcomes explicitly stated or strongly implied by the discussion.",
+	"scope must contain only work items that directly support the mission when verdict is startable.",
+	"constraints must contain guardrails or non-goals explicitly stated or strongly implied by the discussion when verdict is startable.",
+	"acceptance must contain verifiable outcomes explicitly stated or strongly implied by the discussion when verdict is startable.",
+	"diagnostics must explain why the verdict, workflow_relation, and confidence were chosen.",
 	"critique must contain operator-facing cautions, concerns, or reminders that should be shown separately from mission and scope later.",
 	"risks must contain concrete failure modes or regressions that the later workflow should keep in view.",
-	"task_type and evaluation_profile should be candidate routing hints only; reuse the existing completion vocabulary when it clearly fits instead of inventing new schema names.",
+	"task_type and evaluation_profile should be candidate routing hints only; reuse completion-workflow and completion-rubric-v1 unless the structured startup intent clearly requires another explicit value.",
 	"possible_noise should list discussion points that look stale, weakly related, unsafe to promote into scope, or already completed elsewhere.",
-	"When discussion is insufficient, prefer empty arrays and a low confidence value over invention.",
+	"When discussion is insufficient, contradictory, planning-only, or low-confidence, prefer a non-startable verdict with diagnostics over invention.",
 ].join(" ");
 const STARTUP_ANALYST_ROLE = "cook-proposal-analyst";
 const ANALYST_HEARTBEAT_MS = 5_000;
@@ -198,7 +205,7 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 	const cwd = params.getCtxCwd(ctx);
 	const runCwd = findCompletionRoot(cwd) ?? findRepoRoot(cwd) ?? cwd;
 	const rootKey = completionRootKey(undefined, cwd);
-	const prompt = buildContextProposalAnalystPromptFromEntries(projectName, recentEntries, params.workflowContextLines);
+	const prompt = buildStartupAnalysisPromptFromEntries(projectName, recentEntries, params.workflowContextLines);
 	const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-proposal-analyst-", CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT);
 	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath, "--model", modelArg, prompt];
 	const invocation = getPiInvocation(args);
@@ -529,12 +536,12 @@ export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWi
 export async function analyzeContextProposalWithAgent(params: AnalyzeContextProposalWithAgentParams): Promise<ContextProposal | undefined> {
 	if (process.env.PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST === "1") return undefined;
 	const testOutput = asString(process.env.PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT);
-	if (testOutput) return parseContextProposalAnalystOutput(testOutput, params.projectName);
+	if (testOutput) return parseStartupAnalysisOutput(testOutput, params.projectName);
 	if (params.recentEntries.length === 0) return undefined;
 	try {
 		const raw = await runContextProposalAnalystSubprocess(params);
 		if (!raw) return undefined;
-		return parseContextProposalAnalystOutput(raw, params.projectName);
+		return parseStartupAnalysisOutput(raw, params.projectName);
 	} catch (error) {
 		console.warn("[completion] context proposal analyst failed", error);
 		return undefined;
@@ -565,15 +572,19 @@ export async function loadAgentDefinition(cwd: string, role: CompletionRole): Pr
 }
 
 export async function writeTempFile(root: string, prefix: string, content: string): Promise<{ dir: string; filePath: string }> {
-	const agentTmpRoot = path.join(root, ".agent", "tmp");
+	const canonicalCurrentDir = path.join(root, ".agent", "current");
+	const canonicalTmpRoot = path.join(canonicalCurrentDir, "tmp");
+	const scopedOsTmpRoot = path.join(os.tmpdir(), "pi-completion", path.basename(root) || "repo");
 	try {
-		await fsp.mkdir(agentTmpRoot, { recursive: true });
-		const dir = await fsp.mkdtemp(path.join(agentTmpRoot, prefix));
+		if (!fs.existsSync(canonicalCurrentDir)) throw new Error("canonical completion runtime is not initialized yet");
+		await fsp.mkdir(canonicalTmpRoot, { recursive: true });
+		const dir = await fsp.mkdtemp(path.join(canonicalTmpRoot, prefix));
 		const filePath = path.join(dir, "prompt.md");
 		await fsp.writeFile(filePath, content, { encoding: "utf8", mode: 0o600 });
 		return { dir, filePath };
 	} catch {
-		const dir = await fsp.mkdtemp(path.join(os.tmpdir(), prefix));
+		await fsp.mkdir(scopedOsTmpRoot, { recursive: true });
+		const dir = await fsp.mkdtemp(path.join(scopedOsTmpRoot, prefix));
 		const filePath = path.join(dir, "prompt.md");
 		await fsp.writeFile(filePath, content, { encoding: "utf8", mode: 0o600 });
 		return { dir, filePath };

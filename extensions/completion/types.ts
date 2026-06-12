@@ -10,6 +10,35 @@ export const ROLE_NAMES = [
 export type CompletionRole = (typeof ROLE_NAMES)[number];
 export type JsonRecord = Record<string, unknown>;
 
+export const STARTUP_ANALYSIS_VERDICTS = ["startable", "needs_clarification", "planning_only", "not_repo_change", "unsafe"] as const;
+export type StartupAnalysisVerdict = (typeof STARTUP_ANALYSIS_VERDICTS)[number];
+
+export const STARTUP_WORKFLOW_RELATIONS = ["new_workflow", "continue_current_workflow", "replace_current_workflow", "unclear"] as const;
+export type StartupWorkflowRelation = (typeof STARTUP_WORKFLOW_RELATIONS)[number];
+
+export const STARTUP_ANALYSIS_CONFIDENCE_LEVELS = ["high", "medium", "low"] as const;
+export type StartupAnalysisConfidence = (typeof STARTUP_ANALYSIS_CONFIDENCE_LEVELS)[number];
+
+export type ValidatedStartupAnalysis = {
+	verdict: StartupAnalysisVerdict;
+	workflowRelation: StartupWorkflowRelation;
+	confidence: StartupAnalysisConfidence;
+	mission: string;
+	scope: string[];
+	constraints: string[];
+	acceptance: string[];
+	diagnostics: string[];
+	critique: string[];
+	risks: string[];
+	possibleNoise: string[];
+	alternateMissions: string[];
+	suppressedCompletedTopics: string[];
+	suppressedNegatedTopics: string[];
+	taskType?: string;
+	evaluationProfile?: string;
+	basisPreview: string;
+};
+
 export type CompletionFiles = {
 	root: string;
 	agentDir: string;

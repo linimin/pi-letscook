@@ -515,6 +515,7 @@ function cookProposalDeps(): CookProposalDeps {
 		normalizeMissionAnchorText,
 		isWeakMissionAnchor,
 		missionAnchorsStrictlyEquivalent,
+		missionAnchorsLikelyEquivalent,
 		stripCodeBlocks,
 	};
 }

@@ -23,6 +23,7 @@ const assertNotIncludes = (file, snippet) => {
 
 assertIncludes('extensions/completion/role-runner.ts', 'import { completionRootKey, findCompletionRoot, findRepoRoot } from "./state-store";');
 assertIncludes('extensions/completion/role-runner.ts', 'import { buildRoleReportRepairPrompt, parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";');
+assertIncludes('extensions/completion/role-runner.ts', 'import {\n\tbuildStartupAnalysisPromptFromEntries,\n\tparseStartupAnalysisOutput,\n} from "./startup-analysis";');
 assertIncludes('extensions/completion/role-runner.ts', 'const agent = await loadAgentDefinition(params.root, params.role);');
 assertIncludes('extensions/completion/role-runner.ts', 'const systemPromptTemp = await writeTempFile(params.root, "pi-completion-role-", agent.systemPrompt);');
 assertIncludes('extensions/completion/role-runner.ts', 'const reportFields = parseReportFields(output);');
@@ -30,14 +31,21 @@ assertIncludes('extensions/completion/role-runner.ts', 'const transcription = ex
 assertIncludes('extensions/completion/role-runner.ts', 'Structured report repair mode:');
 assertIncludes('extensions/completion/role-runner.ts', 'Retrying ${params.role} once to repair structured report consistency.');
 assertIncludes('extensions/completion/role-runner.ts', 'env: { ...process.env, PI_COMPLETION_ROLE: params.role },');
+assertIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise, task_type, evaluation_profile.');
+assertIncludes('extensions/completion/role-runner.ts', 'Use workflow_relation values: new_workflow, continue_current_workflow, replace_current_workflow, or unclear.');
+assertIncludes('extensions/completion/role-runner.ts', 'Treat /cook itself as the workflow-entry signal; do not require English implementation-intent keywords before analyzing recent discussion.');
 assertIncludes('extensions/completion/role-runner.ts', 'async function runContextProposalAnalystSubprocess(');
 assertIncludes('extensions/completion/role-runner.ts', 'export async function analyzeContextProposalWithAgent(');
 assertIncludes('extensions/completion/role-runner.ts', 'class CookStartupOverlay extends Container');
 assertIncludes('extensions/completion/role-runner.ts', 'overlay = new CookStartupOverlay(theme, {');
+assertIncludes('extensions/completion/startup-analysis.ts', 'export function buildStartupAnalysisPromptFromEntries(');
+assertIncludes('extensions/completion/startup-analysis.ts', 'export function parseStartupAnalysisOutput(');
+assertIncludes('extensions/completion/startup-validation.ts', 'export function validateStartupAnalysisRecord(');
 assertIncludes('extensions/completion/index.ts', 'import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";');
 assertIncludes('extensions/completion/index.ts', 'const result = await runCompletionRole({');
 assertIncludes('extensions/completion/index.ts', 'generateCookHandoff: async ({ recentEntries, workflowContextLines }) =>');
 assertIncludes('extensions/completion/index.ts', 'generateCookHandoffWithAgent({');
+assertNotIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: mission, scope, constraints, acceptance, critique, risks, task_type, evaluation_profile, confidence, possible_noise.');
 assertNotIncludes('extensions/completion/index.ts', 'const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-proposal-analyst-", CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT);');
 assertNotIncludes('extensions/completion/index.ts', 'const invocation = getPiInvocation(args);');
 assertNotIncludes('extensions/completion/index.ts', 'async function loadAgentDefinition(');

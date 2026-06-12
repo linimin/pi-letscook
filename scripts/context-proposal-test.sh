@@ -1163,7 +1163,7 @@ mark_done
 
 SESSION_FIVE="$TMPDIR/session-five.jsonl"
 DISCUSSION_FIVE=$'I do not want to rewrite the parser. The safer path is to let /cook analyze the discussion first, keep the discussion-derived mission anchored once it is clear, and ignore stale scope that drifted in from earlier turns. We should still prove it with a regression test before writing canonical state.'
-ANALYST_OUTPUT_FIVE='{"mission":"Use a proposal analyst to summarize natural discussion before /cook writes canonical state.","scope":["Keep the discussion-derived mission anchored once it is clear.","Drop stale scope from earlier turns."],"constraints":["Do not rewrite the parser."],"acceptance":["Add a regression test."],"confidence":0.91,"possible_noise":["old unrelated scope"]}'
+ANALYST_OUTPUT_FIVE='{"verdict":"startable","workflow_relation":"new_workflow","confidence":"high","mission":"Use a proposal analyst to summarize natural discussion before /cook writes canonical state.","scope":["Keep the discussion-derived mission anchored once it is clear.","Drop stale scope from earlier turns."],"constraints":["Do not rewrite the parser."],"acceptance":["Add a regression test."],"diagnostics":["The discussion is concrete enough to start a repo-change workflow round."],"critique":["Keep the startup proposal anchored to the latest parser follow-up."],"risks":["Stale scope from earlier turns could drift back in if the startup brief is not bounded."],"possible_noise":["old unrelated scope"]}'
 DISCUSSION_SNAPSHOT_FIVE="$TMPDIR/context-proposal-analyst-restart-rejected.json"
 write_session "$SESSION_FIVE" "$ROOT" "$DISCUSSION_FIVE"
 
@@ -1213,6 +1213,75 @@ if snapshot.exists():
 assert state['continuation_policy'] == 'continue', 'done-workflow analyst-backed primary-agent handoff should reopen the workflow'
 assert 'Started a new completion workflow round for:' in output, 'done-workflow analyst-backed startup should report next-round startup'
 assert 'completion-regrounder will derive the next slices from repo truth' in output, 'done-workflow analyst-backed startup should explain that regrounder derives the next slices'
+PY
+
+# Inline /cook prompt: validated startup analysis should handle multilingual startup without lexical gating
+# when same-entry primary-agent handoff synthesis is unavailable.
+INLINE_ANALYST_ROOT="$TMPDIR/inline-analyst-root"
+mkdir -p "$INLINE_ANALYST_ROOT"
+cd "$INLINE_ANALYST_ROOT"
+git init -q
+
+INLINE_ANALYST_SNAPSHOT="$TMPDIR/context-proposal-inline-analyst.json"
+INLINE_ANALYST_OUTPUT='{"verdict":"startable","workflow_relation":"new_workflow","confidence":"high","mission":"支援中文 /cook 啟動分析並保留失敗關閉保護。","scope":["讓中文 inline /cook 提示也會先進入啟動分析。","保留不確定時的失敗關閉保護。"],"constraints":["不要重新引入英文字彙門檻。"],"acceptance":["新增回歸測試覆蓋中文 inline /cook 啟動。"],"diagnostics":["The inline prompt supplied enough repo-change intent even without English implementation keywords."],"critique":["Keep the startup flow language-agnostic."],"risks":["A weak analysis must still fail closed instead of guessing the mission."],"possible_noise":["older startup heuristics"]}'
+
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
+PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$INLINE_ANALYST_OUTPUT" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$INLINE_ANALYST_SNAPSHOT" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi -e "$PKG_ROOT" -p "/cook 我想讓這個流程在中文描述下也會先做啟動分析，遇到不確定時直接失敗關閉" >"$TMPDIR/pi-completion-inline-analyst.out" 2>"$TMPDIR/pi-completion-inline-analyst.err"
+
+python3 - "$TMPDIR/pi-completion-inline-analyst.out" "$TMPDIR/pi-completion-inline-analyst.err" "$INLINE_ANALYST_SNAPSHOT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
+proposal = json.loads(Path(sys.argv[3]).read_text())
+state = json.loads(Path('.agent/current/state.json').read_text())
+startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
+
+assert proposal['source'] == 'analyst', 'multilingual inline prompt should fall through to validated startup analysis when synthesis is unavailable'
+assert proposal['mission'] == '支援中文 /cook 啟動分析並保留失敗關閉保護.', 'validated startup analysis should preserve the multilingual mission anchor'
+assert proposal['analysis']['workflowRelation'] == 'new_workflow', 'validated startup analysis should preserve workflow_relation in the proposal snapshot'
+assert proposal['analysis']['confidence'] == 'high', 'validated startup analysis should preserve confidence in the proposal snapshot'
+assert proposal['analysis']['diagnostics'] == ['The inline prompt supplied enough repo-change intent even without English implementation keywords.'], 'validated startup analysis should preserve diagnostics in the proposal snapshot'
+assert state['mission_anchor'] == proposal['mission'], 'multilingual inline prompt should start workflow from the analyzed mission'
+assert state['task_type'] == 'completion-workflow', 'startup analysis should fall back to canonical task_type when the structured startup output omits it'
+assert state['evaluation_profile'] == 'completion-rubric-v1', 'startup analysis should fall back to canonical evaluation_profile when the structured startup output omits it'
+assert startup_brief['source'] == 'recent_discussion', 'analyzed startup briefs should still persist as recent_discussion intake'
+assert any(note.startswith('Diagnostic: The inline prompt supplied enough repo-change intent even without English implementation keywords.') for note in startup_brief['notes']), 'startup brief notes should preserve startup-analysis diagnostics canonically'
+assert not state['mission_anchor'].startswith('Drive '), 'startup analysis must not synthesize the generic mission anchor for multilingual startup'
+assert 'Started completion workflow for:' in output, 'multilingual inline prompt should report workflow start after validated startup analysis'
+PY
+
+# Low-confidence startup analysis: /cook should fail closed instead of inventing a generic mission.
+LOW_CONFIDENCE_ROOT="$TMPDIR/low-confidence-root"
+mkdir -p "$LOW_CONFIDENCE_ROOT"
+cd "$LOW_CONFIDENCE_ROOT"
+git init -q
+
+LOW_CONFIDENCE_SNAPSHOT="$TMPDIR/context-proposal-low-confidence.json"
+LOW_CONFIDENCE_ANALYST_OUTPUT='{"verdict":"needs_clarification","workflow_relation":"unclear","confidence":"low","mission":"釐清 /cook 啟動意圖。","scope":[],"constraints":[],"acceptance":[],"diagnostics":["The inline prompt is too ambiguous to start workflow safely."],"critique":["Ask for a concrete repo-change mission instead of guessing."],"risks":["Guessing could rewrite canonical workflow state incorrectly."],"possible_noise":["just make it better"]}'
+
+PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
+PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$LOW_CONFIDENCE_ANALYST_OUTPUT" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$LOW_CONFIDENCE_SNAPSHOT" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi -e "$PKG_ROOT" -p "/cook 先幫我看看這個是不是該做點什麼" >"$TMPDIR/pi-completion-low-confidence.out" 2>"$TMPDIR/pi-completion-low-confidence.err"
+
+python3 - "$TMPDIR/pi-completion-low-confidence.out" "$TMPDIR/pi-completion-low-confidence.err" "$LOW_CONFIDENCE_SNAPSHOT" <<'PY'
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
+snapshot = Path(sys.argv[3])
+
+assert not Path('.agent').exists(), 'low-confidence startup analysis should fail closed without writing canonical state'
+assert not snapshot.exists(), 'low-confidence startup analysis should not emit a startup proposal snapshot'
+assert '/cook failed closed' in output, 'low-confidence startup analysis should fail closed instead of guessing a startup brief'
+assert 'Drive ' not in output, 'low-confidence startup analysis should not fall back to the generic mission anchor'
 PY
 
 # Custom confirmation UI: start should render proposal content separately from approval-only Start/Cancel actions.
@@ -2003,6 +2072,9 @@ PY
 grep -q 'export async function deriveCookContextProposalFromRecentDiscussion' "$PKG_ROOT/extensions/completion/proposal.ts"
 grep -q 'export function extractLatestCookHandoffProposal' "$PKG_ROOT/extensions/completion/proposal.ts"
 grep -q 'export function parseContextProposalAnalystOutput' "$PKG_ROOT/extensions/completion/proposal.ts"
+grep -q 'export function buildStartupAnalysisPromptFromEntries' "$PKG_ROOT/extensions/completion/startup-analysis.ts"
+grep -q 'export function parseStartupAnalysisOutput' "$PKG_ROOT/extensions/completion/startup-analysis.ts"
+grep -q 'export function validateStartupAnalysisRecord' "$PKG_ROOT/extensions/completion/startup-validation.ts"
 grep -q 'export function buildContextProposalConfirmationLayout' "$PKG_ROOT/extensions/completion/prompt-surfaces.ts"
 grep -q 'export function buildEvaluationRoleContextLines' "$PKG_ROOT/extensions/completion/prompt-surfaces.ts"
 

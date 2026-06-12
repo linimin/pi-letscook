@@ -3,6 +3,7 @@ import {
 	buildContextProposalGoalText,
 } from "./prompt-surfaces";
 import type { StartupIntentHints } from "./startup-intent";
+import type { StartupAnalysisConfidence, StartupAnalysisVerdict, StartupWorkflowRelation } from "./types";
 
 const DEFAULT_TASK_TYPE = "completion-workflow";
 const DEFAULT_EVALUATION_PROFILE = "completion-rubric-v1";
@@ -12,6 +13,10 @@ type JsonRecord = Record<string, unknown>;
 export type ContextProposalAnalysis = {
 	taskType?: string;
 	evaluationProfile?: string;
+	startupVerdict?: StartupAnalysisVerdict;
+	workflowRelation?: StartupWorkflowRelation;
+	confidence?: StartupAnalysisConfidence;
+	diagnostics: string[];
 	critique: string[];
 	risks: string[];
 	possibleNoise: string[];
@@ -567,6 +572,10 @@ function inferContextProposalEvaluationProfile(texts: string[], taskType?: strin
 export function buildContextProposalAnalysis(args: {
 	taskType?: unknown;
 	evaluationProfile?: unknown;
+	startupVerdict?: StartupAnalysisVerdict;
+	workflowRelation?: StartupWorkflowRelation;
+	confidence?: StartupAnalysisConfidence;
+	diagnostics?: string[];
 	critique?: string[];
 	risks?: string[];
 	possibleNoise?: string[];
@@ -575,6 +584,7 @@ export function buildContextProposalAnalysis(args: {
 	suppressedNegatedTopics?: string[];
 	hintTexts?: string[];
 }, deps: Pick<ProposalCommonDeps, "asString">): ContextProposalAnalysis {
+	const diagnostics = uniqueProposalItems(args.diagnostics ?? []);
 	const critique = uniqueProposalItems(args.critique ?? []);
 	const risks = uniqueProposalItems(args.risks ?? []);
 	const possibleNoise = uniqueProposalItems(args.possibleNoise ?? []);
@@ -583,6 +593,7 @@ export function buildContextProposalAnalysis(args: {
 	const suppressedNegatedTopics = uniqueProposalItems(args.suppressedNegatedTopics ?? []);
 	const hintTexts = [
 		...(args.hintTexts ?? []),
+		...diagnostics,
 		...critique,
 		...risks,
 		...possibleNoise,
@@ -597,6 +608,10 @@ export function buildContextProposalAnalysis(args: {
 	return {
 		taskType,
 		evaluationProfile,
+		startupVerdict: args.startupVerdict,
+		workflowRelation: args.workflowRelation,
+		confidence: args.confidence,
+		diagnostics,
 		critique,
 		risks,
 		possibleNoise,
@@ -610,6 +625,7 @@ function mergeContextProposalAnalysis(
 	sources: Array<ContextProposalAnalysis | undefined>,
 	hintTexts: string[] = [],
 ): ContextProposalAnalysis {
+	const diagnostics = uniqueProposalItems(sources.flatMap((source) => source?.diagnostics ?? []));
 	const critique = uniqueProposalItems(sources.flatMap((source) => source?.critique ?? []));
 	const risks = uniqueProposalItems(sources.flatMap((source) => source?.risks ?? []));
 	const possibleNoise = uniqueProposalItems(sources.flatMap((source) => source?.possibleNoise ?? []));
@@ -618,6 +634,7 @@ function mergeContextProposalAnalysis(
 	const suppressedNegatedTopics = uniqueProposalItems(sources.flatMap((source) => source?.suppressedNegatedTopics ?? []));
 	const mergedHints = [
 		...hintTexts,
+		...diagnostics,
 		...critique,
 		...risks,
 		...possibleNoise,
@@ -634,6 +651,10 @@ function mergeContextProposalAnalysis(
 	return {
 		taskType,
 		evaluationProfile,
+		startupVerdict: sources.map((source) => source?.startupVerdict).find((value): value is StartupAnalysisVerdict => Boolean(value)),
+		workflowRelation: sources.map((source) => source?.workflowRelation).find((value): value is StartupWorkflowRelation => Boolean(value)),
+		confidence: sources.map((source) => source?.confidence).find((value): value is StartupAnalysisConfidence => Boolean(value)),
+		diagnostics,
 		critique,
 		risks,
 		possibleNoise,
@@ -651,6 +672,10 @@ export function finalizeContextProposalAnalysis(
 	return {
 		taskType: merged.taskType ?? DEFAULT_TASK_TYPE,
 		evaluationProfile: merged.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
+		startupVerdict: merged.startupVerdict,
+		workflowRelation: merged.workflowRelation,
+		confidence: merged.confidence,
+		diagnostics: merged.diagnostics,
 		critique: merged.critique,
 		risks: merged.risks,
 		possibleNoise: merged.possibleNoise,
@@ -911,6 +936,7 @@ export function parseContextProposalAnalystOutput(
 		{
 			taskType: parsed.task_type ?? parsed.taskType,
 			evaluationProfile: parsed.evaluation_profile ?? parsed.evaluationProfile,
+			diagnostics: deps.asStringArray(parsed.diagnostics),
 			critique: deps.asStringArray(parsed.critique),
 			risks: deps.asStringArray(parsed.risks ?? parsed.risk),
 			possibleNoise: deps.asStringArray(parsed.possible_noise ?? parsed.possibleNoise),
@@ -1390,6 +1416,14 @@ function buildContextProposalFromCookHandoffCapsule(
 	deps: ProposalParseDeps,
 ): ContextProposal | undefined {
 	const constraints = uniqueProposalItems([...capsule.constraints, ...capsule.non_goals]);
+	const normalizedMissionSource = deps.normalizeMissionAnchorText(capsule.mission);
+	if (
+		!normalizedMissionSource ||
+		deps.isWeakMissionAnchor(normalizedMissionSource) ||
+		COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(normalizedMissionSource)
+	) {
+		return undefined;
+	}
 	const mission = deps.assessMissionAnchor(capsule.mission, projectName).derived;
 	const normalizedMission = deps.normalizeMissionAnchorText(mission);
 	if (!normalizedMission || deps.isWeakMissionAnchor(normalizedMission) || COOK_HANDOFF_NEGATIVE_MISSION_REGEX.test(normalizedMission)) {
@@ -1425,6 +1459,7 @@ function buildContextProposalFromCookHandoffCapsule(
 			{
 				taskType: capsule.task_type,
 				evaluationProfile: capsule.evaluation_profile,
+				diagnostics: [],
 				critique: buildCookHandoffCritiqueLines(capsule),
 				risks: capsule.risks,
 				possibleNoise: [],

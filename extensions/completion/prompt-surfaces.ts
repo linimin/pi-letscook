@@ -92,7 +92,12 @@ export function buildContextProposalDisplayText(proposal: ContextProposal): stri
 
 export function buildContextProposalCritiqueText(analysis: ContextProposalAnalysis): string {
 	const lines: string[] = [];
+	if (analysis.diagnostics.length > 0) {
+		lines.push("Diagnostics");
+		for (const item of analysis.diagnostics) lines.push(`- ${item}`);
+	}
 	if (analysis.critique.length > 0) {
+		if (lines.length > 0) lines.push("");
 		lines.push("Critique");
 		for (const item of analysis.critique) lines.push(`- ${item}`);
 	}
@@ -131,9 +136,14 @@ export function buildContextProposalRoutingText(
 	analysis: ContextProposalAnalysis,
 	defaults: { taskType: string; evaluationProfile: string },
 ): string {
-	return [`- task_type: ${analysis.taskType ?? defaults.taskType}`, `- evaluation_profile: ${analysis.evaluationProfile ?? defaults.evaluationProfile}`].join(
-		"\n",
-	);
+	const lines = [
+		analysis.startupVerdict ? `- verdict: ${analysis.startupVerdict}` : undefined,
+		analysis.workflowRelation ? `- workflow_relation: ${analysis.workflowRelation}` : undefined,
+		analysis.confidence ? `- confidence: ${analysis.confidence}` : undefined,
+		`- task_type: ${analysis.taskType ?? defaults.taskType}`,
+		`- evaluation_profile: ${analysis.evaluationProfile ?? defaults.evaluationProfile}`,
+	].filter((line): line is string => Boolean(line));
+	return lines.join("\n");
 }
 
 function summarizeContextProposalAnalysisItems(
