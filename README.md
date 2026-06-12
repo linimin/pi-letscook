@@ -123,6 +123,7 @@ Start a new workflow directly from explicit inline startup intent:
 - actions are **Start** and **Cancel**
 - **Cancel** is side-effect free: discuss changes in the main chat and rerun `/cook`
 - weak, ambiguous, stale, invalid, assistant-produced, or planning-only intake does not start a workflow
+- `task_type` and `evaluation_profile` only come from explicit structured startup artifacts when those fields are present; otherwise `/cook` keeps the packaged `completion-workflow` / `completion-rubric-v1` defaults instead of inferring them from free-text discussion
 - when a concrete replacement mission suggests replacing an active workflow, `/cook` shows a chooser before any canonical state rewrite
 
 When you accept startup or refocus, `/cook` persists the chosen workflow state in canonical `.agent/**` files before the re-ground round begins.

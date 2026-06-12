@@ -64,17 +64,21 @@ checks = {
         "`/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation",
         "stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow",
         "When a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.",
+        "`task_type` and `evaluation_profile` only come from explicit structured startup artifacts when those fields are present; otherwise `/cook` keeps the packaged `completion-workflow` / `completion-rubric-v1` defaults instead of inferring them from free-text discussion",
     ],
     "CHANGELOG.md": [
         "added explicit stopped-workflow `/cook resume`, `/cook park`, and `/cook cancel` controls so blocked, await-user-input, and paused workflows no longer strand the primary agent in a same-repo dead zone",
         "preserved the confirmed `/cook` startup intent in canonical `.agent/current/startup-brief.json` so workflow entry is durable before regrounding authors canonical slices",
         "moved workflow-session legitimacy away from in-memory routing activation and legacy `/skill:completion-protocol` prompt dependence toward canonical workflow-session state plus explicit `/cook` entry turns",
+        "removed the remaining main-path `/cook` free-text `task_type` / `evaluation_profile` inference so startup and refocus now keep the packaged `completion-workflow` / `completion-rubric-v1` defaults unless an explicit structured artifact supplies routing fields",
+        "tightened same-entry explicit-handoff startup synthesis so only explicit handoffs that still need startup tightening can be replaced by synthesized structured output, removing generic semantic mission matching while preserving explicit-precedence for already-complete handoffs",
     ],
     "extensions/completion/prompt-surfaces.ts": [
         '"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context, show Start/Cancel confirmation, and persist the confirmed startup brief into .agent/** without making the user rerun /cook."',
         '"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should use explicit primary-agent handoff data, whether it already exists or is synthesized in the same /cook entry."',
         '"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role."',
         '"Supported same-repo controls are: rerun /cook or /cook resume to continue from canonical state; run /cook park to record a parked paused posture that unlocks ordinary direct edits and forces canonical reground before workflow continuation; run /cook cancel to close the workflow and disable stale hard locks or auto-resume."',
+        '"Do not invent task_type or evaluation_profile from free text. Omit those fields unless an explicit structured artifact already supplied them."',
     ],
     "extensions/completion/index.ts": [
         '"/cook failed closed because the primary-agent startup step could not prepare a workflow startup brief from the current task context. Clarify the mission, repo-change intent, or key constraints in the main chat, then rerun /cook."',
@@ -145,6 +149,15 @@ forbidden = {
     ],
     "agents/completion-implementer.md": [
         'refresh tracked repo-contract verifier files such as `.agent/verify_completion_stop.sh`',
+    ],
+    "extensions/completion/proposal.ts": [
+        'function inferContextProposalTaskType(',
+        'function inferContextProposalEvaluationProfile(',
+        'with tests and docs parity',
+        'with docs parity',
+    ],
+    "extensions/completion/startup-intent.ts": [
+        'missionAnchorsLikelyEquivalent',
     ],
 }
 

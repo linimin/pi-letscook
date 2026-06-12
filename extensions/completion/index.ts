@@ -17,7 +17,6 @@ import {
 	collectRecentSessionMessages,
 	finalizeContextProposalAnalysis,
 	isWeakMissionAnchor,
-	missionAnchorsLikelyEquivalent,
 	missionAnchorsStrictlyEquivalent,
 	normalizeMissionAnchorText,
 	resolveContextProposalConfirmationAction,
@@ -456,7 +455,7 @@ function buildContextProposalConfirmationLayout(
 	return buildExtractedContextProposalConfirmationLayout({
 		title,
 		proposal,
-		analysis: finalizeContextProposalAnalysis(proposal.analysis, [proposal.goalText, proposal.mission]),
+		analysis: finalizeContextProposalAnalysis(proposal.analysis),
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		defaultTaskType: DEFAULT_TASK_TYPE,
 		defaultEvaluationProfile: DEFAULT_EVALUATION_PROFILE,
@@ -538,7 +537,6 @@ function cookProposalDeps(): CookProposalDeps {
 		normalizeMissionAnchorText,
 		isWeakMissionAnchor,
 		missionAnchorsStrictlyEquivalent,
-		missionAnchorsLikelyEquivalent,
 		stripCodeBlocks,
 	};
 }
@@ -621,7 +619,7 @@ async function scaffoldCompletionFiles(
 	missionAnchor: string,
 	options?: { analysis?: ContextProposalAnalysis; continuationReason?: string; advisoryStartupBrief?: JsonRecord },
 ) {
-	const routing = finalizeContextProposalAnalysis(options?.analysis, [missionAnchor]);
+	const routing = finalizeContextProposalAnalysis(options?.analysis);
 	return await scaffoldCompletionFilesOnDisk(root, missionAnchor, {
 		analysis: { taskType: routing.taskType, evaluationProfile: routing.evaluationProfile },
 		continuationReason: options?.continuationReason,
@@ -1088,7 +1086,6 @@ export default function completionExtension(pi: ExtensionAPI) {
 		maybeWriteActiveWorkflowRoutingSnapshot,
 		activateCompletionRoutingForRoot,
 		maybeWriteTestSnapshot,
-		missionAnchorsLikelyEquivalent,
 		missionAnchorsStrictlyEquivalent,
 		scaffoldCompletionFiles,
 		shouldSkipDriverKickoffForTests,

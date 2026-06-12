@@ -256,6 +256,7 @@ export function buildContextProposalAnalystPrompt(projectName: string, discussio
 		"Prefer the latest clear user implementation intent over older background context.",
 		"Treat stale, completed, or explicitly negated topics as context to ignore unless the latest discussion clearly reopens them.",
 		"Use only recent user/custom discussion plus canonical workflow context; do not infer startup intent from slash-command arguments or planning-only artifacts.",
+		"Do not invent task_type or evaluation_profile from free text. Omit those fields unless an explicit structured artifact already supplied them.",
 	];
 	if (contextLines.length > 0) lines.push("", "Canonical workflow context:", ...contextLines);
 	lines.push("", "Recent discussion:", discussion || "(none)");

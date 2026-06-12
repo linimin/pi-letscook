@@ -120,7 +120,6 @@ export type CompletionDriverDeps = {
 		options?: { analysis?: ContextProposalAnalysis; continuationReason?: string; advisoryStartupBrief?: Record<string, unknown> },
 	) => Promise<{ root: string; created: string[] }>;
 	maybeWriteActiveWorkflowRoutingSnapshot: (assessment: ActiveWorkflowProposalAssessment) => void;
-	missionAnchorsLikelyEquivalent: (left: string, right: string) => boolean;
 	missionAnchorsStrictlyEquivalent: (left: string, right: string) => boolean;
 	activateCompletionRoutingForRoot: (root: string | undefined) => void;
 	maybeWriteTestSnapshot: (targetPath: string | undefined, content: string) => void;

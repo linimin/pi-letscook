@@ -286,6 +286,36 @@ assert not snapshot.exists(), 'invalid assistant handoff should not emit a start
 assert 'primary-agent startup step could not prepare a workflow startup brief' in output, 'invalid assistant handoff should fail closed when no valid handoff can be prepared'
 PY
 
+# No workflow yet: planning-only structured startup text must still fail closed instead of becoming workflow intent.
+PLANNING_ONLY_ROOT="$TMPDIR/planning-only-root"
+mkdir -p "$PLANNING_ONLY_ROOT"
+cd "$PLANNING_ONLY_ROOT"
+git init -q
+
+PLANNING_ONLY_SESSION="$TMPDIR/session-planning-only.jsonl"
+PLANNING_ONLY_SNAPSHOT="$TMPDIR/context-proposal-planning-only.json"
+PLANNING_ONLY_TEXT=$'Mission: Write a migration plan for the login redirect follow-up.\nScope:\n- Summarize the redirect options and sequencing.\nConstraints:\n- Do not implement code changes.\nAcceptance:\n- Deliver a plan document only.'
+write_session "$PLANNING_ONLY_SESSION" "$PLANNING_ONLY_ROOT" "$PLANNING_ONLY_TEXT"
+
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$PLANNING_ONLY_SNAPSHOT" \
+PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST=1 \
+PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$PLANNING_ONLY_SESSION" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-planning-only.out" 2>"$TMPDIR/pi-completion-planning-only.err"
+
+python3 - "$TMPDIR/pi-completion-planning-only.out" "$TMPDIR/pi-completion-planning-only.err" "$PLANNING_ONLY_SNAPSHOT" <<'PY'
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
+snapshot = Path(sys.argv[3])
+assert not Path('.agent').exists(), 'planning-only structured startup text should fail closed without writing canonical state'
+assert not snapshot.exists(), 'planning-only structured startup text should not emit a startup proposal snapshot'
+assert 'primary-agent startup step could not prepare a workflow startup brief' in output, 'planning-only structured startup text should fail closed instead of creating workflow intent'
+PY
+
+cd "$ROOT"
+
 # No workflow yet: a fresh explicit primary-agent handoff should still bootstrap canonical startup state.
 SESSION_ONE="$TMPDIR/session-one.jsonl"
 HANDOFF_SNAPSHOT_ONE="$TMPDIR/context-proposal-explicit-startup.json"
@@ -2212,5 +2242,24 @@ grep -q 'export function parseStartupAnalysisOutput' "$PKG_ROOT/extensions/compl
 grep -q 'export function validateStartupAnalysisRecord' "$PKG_ROOT/extensions/completion/startup-validation.ts"
 grep -q 'export function buildContextProposalConfirmationLayout' "$PKG_ROOT/extensions/completion/prompt-surfaces.ts"
 grep -q 'export function buildEvaluationRoleContextLines' "$PKG_ROOT/extensions/completion/prompt-surfaces.ts"
+
+python3 - "$PKG_ROOT" <<'PY'
+import sys
+from pathlib import Path
+
+pkg_root = Path(sys.argv[1])
+proposal = (pkg_root / 'extensions/completion/proposal.ts').read_text()
+startup_intent = (pkg_root / 'extensions/completion/startup-intent.ts').read_text()
+index = (pkg_root / 'extensions/completion/index.ts').read_text()
+driver = (pkg_root / 'extensions/completion/driver.ts').read_text()
+
+assert 'function inferContextProposalTaskType(' not in proposal, 'proposal heuristic cleanup should remove free-text task_type inference helpers'
+assert 'function inferContextProposalEvaluationProfile(' not in proposal, 'proposal heuristic cleanup should remove free-text evaluation_profile inference helpers'
+assert 'with tests and docs parity' not in proposal, 'proposal heuristic cleanup should remove semantic mission rewriting for docs/test parity'
+assert 'with docs parity' not in proposal, 'proposal heuristic cleanup should remove semantic mission rewriting for docs parity'
+assert 'missionAnchorsLikelyEquivalent' not in startup_intent, 'startup synthesis should no longer use missionAnchorsLikelyEquivalent on the main path'
+assert 'missionAnchorsLikelyEquivalent' not in index, 'index should no longer thread missionAnchorsLikelyEquivalent through startup/refocus wiring'
+assert 'missionAnchorsLikelyEquivalent' not in driver, 'driver should no longer request missionAnchorsLikelyEquivalent from the startup/refocus wiring contract'
+PY
 
 echo "context proposal test passed: $ROOT"

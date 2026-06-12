@@ -20,7 +20,6 @@ export type CookProposalDeps = {
 	normalizeMissionAnchorText: (text: string) => string;
 	isWeakMissionAnchor: (text: string) => boolean;
 	missionAnchorsStrictlyEquivalent: (left: string, right: string) => boolean;
-	missionAnchorsLikelyEquivalent: (left: string, right: string) => boolean;
 	stripCodeBlocks: (text: string) => string;
 };
 
@@ -155,27 +154,6 @@ export function buildCookRecentEntries(args: {
 
 export function shouldAnalyzeCookRecentDiscussion(recentEntries: RecentDiscussionEntry[]): boolean {
 	return recentEntries.some((entry) => entry.text.trim().length > 0);
-}
-
-function sharedNormalizedPrefixLength(left: string, right: string): number {
-	const max = Math.min(left.length, right.length);
-	let index = 0;
-	while (index < max && left[index] === right[index]) index += 1;
-	return index;
-}
-
-function synthesizedMissionTightensExplicitMission(
-	explicitMission: string,
-	candidateMission: string,
-	deps: Pick<CookProposalDeps, "missionAnchorsLikelyEquivalent" | "normalizeMissionAnchorText">,
-): boolean {
-	if (deps.missionAnchorsLikelyEquivalent(explicitMission, candidateMission)) return true;
-	const normalizedExplicit = deps.normalizeMissionAnchorText(explicitMission).toLowerCase();
-	const normalizedCandidate = deps.normalizeMissionAnchorText(candidateMission).toLowerCase();
-	if (!normalizedExplicit || !normalizedCandidate) return false;
-	if (normalizedExplicit.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedExplicit)) return true;
-	const sharedPrefixLength = sharedNormalizedPrefixLength(normalizedExplicit, normalizedCandidate);
-	return sharedPrefixLength >= 24 && sharedPrefixLength / Math.min(normalizedExplicit.length, normalizedCandidate.length) >= 0.5;
 }
 
 function isExplicitStructuredProposalSource(source: ContextProposal["source"]): boolean {
@@ -316,11 +294,7 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 		);
 		if (generated.status === "startable") {
 			const generatedProposal = annotateActiveWorkflowRoutingProposal(generated.proposal, workflowContext, args.deps);
-			if (!explicitProposal) return { proposal: generatedProposal };
-			if (synthesizedMissionTightensExplicitMission(explicitProposal.mission, generatedProposal.mission, args.deps)) {
-				return { proposal: generatedProposal };
-			}
-			return explicit;
+			return { proposal: generatedProposal };
 		}
 	}
 	if (!explicitProposal && synthesisContext.shouldAnalyzeRecentDiscussion) {

@@ -205,20 +205,8 @@ export function deriveMissionAnchor(rawGoal: string, projectName: string): strin
 	if (!normalized || isWeakMissionAnchor(normalized)) {
 		return `Drive ${projectName} to truthful, verifiable completion.`;
 	}
-
-	let mission = normalized
-		.replace(/\b(end[- ]to[- ]end|for me|thanks|thank you)\b/gi, "")
-		.replace(/\s+/g, " ")
-		.trim();
-
-	mission = mission
-		.replace(/\bwith tests and docs\b/gi, "with tests and docs parity")
-		.replace(/\bwith tests and documentation\b/gi, "with tests and docs parity")
-		.replace(/\bwith docs\b/gi, "with docs parity")
-		.trim();
-
-	if (!/[.!?。！？]$/u.test(mission)) mission += ".";
-	return mission;
+	const mission = normalized.replace(/\s+/g, " ").trim();
+	return /[.!?。！？]$/u.test(mission) ? mission : `${mission}.`;
 }
 
 export function assessMissionAnchor(rawGoal: string, projectName: string): { derived: string } {
@@ -540,35 +528,6 @@ function normalizeContextProposalEvaluationProfileHint(value: unknown, asString:
 	return canonical === DEFAULT_EVALUATION_PROFILE ? DEFAULT_EVALUATION_PROFILE : normalized;
 }
 
-function inferContextProposalTaskType(texts: string[]): string | undefined {
-	const corpus = texts
-		.map((text) => normalizeProposalLine(text).toLowerCase())
-		.filter(Boolean)
-		.join("\n");
-	if (!corpus) return undefined;
-	return /(completion|\/cook|\/complete|\.agent|slice|reground|reviewer|auditor|stop judge|stop-judge|workflow)/i.test(corpus)
-		? DEFAULT_TASK_TYPE
-		: undefined;
-}
-
-function inferContextProposalEvaluationProfile(texts: string[], taskType?: string): string | undefined {
-	const corpus = texts
-		.map((text) => normalizeProposalLine(text).toLowerCase())
-		.filter(Boolean)
-		.join("\n");
-	if (!corpus) return undefined;
-	if (
-		/(rubric|evaluation[_\s-]*profile|pass\|concern\|fail|contract coverage|correctness risk|verification evidence|docs\/state parity|reviewer|auditor|stop judge|stop-judge)/i.test(
-			corpus,
-		)
-	) {
-		return DEFAULT_EVALUATION_PROFILE;
-	}
-	return taskType === DEFAULT_TASK_TYPE && /(completion|\/cook|\/complete|slice|workflow|review|audit)/i.test(corpus)
-		? DEFAULT_EVALUATION_PROFILE
-		: undefined;
-}
-
 export function buildContextProposalAnalysis(args: {
 	taskType?: unknown;
 	evaluationProfile?: unknown;
@@ -591,20 +550,8 @@ export function buildContextProposalAnalysis(args: {
 	const alternateMissions = uniqueProposalItems(args.alternateMissions ?? []);
 	const suppressedCompletedTopics = uniqueProposalItems(args.suppressedCompletedTopics ?? []);
 	const suppressedNegatedTopics = uniqueProposalItems(args.suppressedNegatedTopics ?? []);
-	const hintTexts = [
-		...(args.hintTexts ?? []),
-		...diagnostics,
-		...critique,
-		...risks,
-		...possibleNoise,
-		...alternateMissions,
-		...suppressedCompletedTopics,
-		...suppressedNegatedTopics,
-	];
-	const taskType = normalizeContextProposalTaskTypeHint(args.taskType, deps.asString) ?? inferContextProposalTaskType(hintTexts);
-	const evaluationProfile =
-		normalizeContextProposalEvaluationProfileHint(args.evaluationProfile, deps.asString) ??
-		inferContextProposalEvaluationProfile(hintTexts, taskType);
+	const taskType = normalizeContextProposalTaskTypeHint(args.taskType, deps.asString);
+	const evaluationProfile = normalizeContextProposalEvaluationProfileHint(args.evaluationProfile, deps.asString);
 	return {
 		taskType,
 		evaluationProfile,
@@ -623,7 +570,7 @@ export function buildContextProposalAnalysis(args: {
 
 function mergeContextProposalAnalysis(
 	sources: Array<ContextProposalAnalysis | undefined>,
-	hintTexts: string[] = [],
+	_hintTexts: string[] = [],
 ): ContextProposalAnalysis {
 	const diagnostics = uniqueProposalItems(sources.flatMap((source) => source?.diagnostics ?? []));
 	const critique = uniqueProposalItems(sources.flatMap((source) => source?.critique ?? []));
@@ -632,22 +579,10 @@ function mergeContextProposalAnalysis(
 	const alternateMissions = uniqueProposalItems(sources.flatMap((source) => source?.alternateMissions ?? []));
 	const suppressedCompletedTopics = uniqueProposalItems(sources.flatMap((source) => source?.suppressedCompletedTopics ?? []));
 	const suppressedNegatedTopics = uniqueProposalItems(sources.flatMap((source) => source?.suppressedNegatedTopics ?? []));
-	const mergedHints = [
-		...hintTexts,
-		...diagnostics,
-		...critique,
-		...risks,
-		...possibleNoise,
-		...alternateMissions,
-		...suppressedCompletedTopics,
-		...suppressedNegatedTopics,
-	];
-	const taskType =
-		sources.map((source) => source?.taskType).find((value): value is string => Boolean(value)) ??
-		inferContextProposalTaskType(mergedHints);
-	const evaluationProfile =
-		sources.map((source) => source?.evaluationProfile).find((value): value is string => Boolean(value)) ??
-		inferContextProposalEvaluationProfile(mergedHints, taskType);
+	const taskType = sources.map((source) => source?.taskType).find((value): value is string => Boolean(value));
+	const evaluationProfile = sources
+		.map((source) => source?.evaluationProfile)
+		.find((value): value is string => Boolean(value));
 	return {
 		taskType,
 		evaluationProfile,
