@@ -215,7 +215,6 @@ export function deriveCookStartupProposalFromRecentMessages(args: {
 	projectName: string;
 	deps: CookProposalDeps;
 }): CookContextProposalResult {
-	if (args.inlinePrompt) return {};
 	const explicitHandoff = assessLatestCookHandoffProposal(args.recentMessages, args.projectName, args.deps);
 	return explicitHandoff.status === "startable" ? { proposal: explicitHandoff.proposal } : {};
 }

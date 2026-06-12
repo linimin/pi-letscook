@@ -1516,6 +1516,133 @@ assert 'Primary-agent /cook handoff rationale: The implementation plan is concre
 assert 'advisory_startup_brief' not in state or state['advisory_startup_brief'] is None, 'state.json should no longer carry advisory_startup_brief now that startup-brief.json is canonical'
 PY
 
+# Fresh explicit handoff + inline /cook: same-entry inline startup should still prefer the
+# recent explicit handoff over synthesis or startup analysis.
+HANDOFF_ROOT_INLINE_EXPLICIT="$TMPDIR/handoff-root-inline-explicit"
+mkdir -p "$HANDOFF_ROOT_INLINE_EXPLICIT"
+cd "$HANDOFF_ROOT_INLINE_EXPLICIT"
+git init -q
+
+HANDOFF_SESSION_INLINE_EXPLICIT="$TMPDIR/handoff-session-inline-explicit.jsonl"
+HANDOFF_SNAPSHOT_INLINE_EXPLICIT="$TMPDIR/handoff-proposal-inline-explicit.json"
+HANDOFF_MESSAGES_INLINE_EXPLICIT="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:02.000Z",
+    "source_turn_id": "m0002",
+    "mission": "Fix login redirect callback behavior from explicit handoff.",
+    "scope": [
+        "Update the callback redirect decision logic.",
+        "Add the requested-page regression coverage."
+    ],
+    "constraints": [
+        "Do not refactor the broader auth flow."
+    ],
+    "acceptance": [
+        "Add a regression test for returning to the requested page.",
+        "Keep the broader auth flow unchanged while the redirect regression passes."
+    ],
+    "risks": [
+        "Inline startup synthesis or analysis could override the explicit handoff if precedence regresses."
+    ],
+    "notes": [
+        "Keep the inline note secondary to this explicit primary-agent handoff."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Land the callback redirect fix and its regression coverage.",
+    "first_slice_non_goals": [
+        "Do not refactor the broader auth flow."
+    ],
+    "implementation_surfaces": [
+        "src/auth/redirect.ts",
+        "tests/auth/redirect.spec.ts"
+    ],
+    "verification_commands": [
+        "npm test -- redirect.spec.ts"
+    ],
+    "why_this_slice_first": "The redirect callback bug is already bounded enough to start implementation safely.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1",
+    "why_cook_now": "The explicit handoff is concrete enough to start workflow even when the /cook entry also includes inline text."
+}
+messages = [
+    {"role": "user", "content": "Please prepare the callback redirect follow-up and tell me when it is ready for /cook."},
+    {"role": "assistant", "content": "This callback redirect follow-up is ready for /cook.\n\n```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```"},
+]
+print(json.dumps(messages, ensure_ascii=False))
+PY
+)"
+write_session_messages "$HANDOFF_SESSION_INLINE_EXPLICIT" "$HANDOFF_ROOT_INLINE_EXPLICIT" "$HANDOFF_MESSAGES_INLINE_EXPLICIT"
+
+INLINE_SYNTH_HANDOFF_EXPLICIT="$(python3 - <<'PY'
+import json
+capsule = {
+    "kind": "cook_handoff",
+    "source": "primary_agent",
+    "captured_at": "2026-01-01T00:00:03.000Z",
+    "source_turn_id": "s-inline-explicit",
+    "mission": "Replace the startup mission from same-entry synthesis.",
+    "scope": [
+        "Ignore the explicit handoff and replace it from synthesized startup output."
+    ],
+    "constraints": [
+        "This conflicting synthesized output should never win when the explicit handoff is valid."
+    ],
+    "non_goals": [],
+    "acceptance": [
+        "Prove the synthesized handoff would have replaced the mission if precedence regressed."
+    ],
+    "risks": [],
+    "notes": [
+        "This synthesized output exists only to prove explicit-handoff precedence."
+    ],
+    "handoff_kind": "implementation_workflow_handoff",
+    "first_slice_goal": "Demonstrate that synthesis loses to an existing valid explicit handoff.",
+    "first_slice_non_goals": [],
+    "implementation_surfaces": [
+        "scripts/context-proposal-test.sh"
+    ],
+    "verification_commands": [
+        "npm run context-proposal-test"
+    ],
+    "why_this_slice_first": "This conflicting synthesized mission should never be chosen while the explicit handoff remains valid.",
+    "task_type": "completion-workflow",
+    "evaluation_profile": "completion-rubric-v1"
+}
+print("```cook_handoff\n" + json.dumps(capsule, ensure_ascii=False, indent=2) + "\n```")
+PY
+)"
+INLINE_ANALYST_OUTPUT_EXPLICIT='{"verdict":"startable","workflow_relation":"new_workflow","confidence":"high","mission":"Replace the startup mission from validated startup analysis.","scope":["Prefer the inline note over the explicit handoff."],"constraints":["This conflicting analyzed mission should never win when the explicit handoff is valid."],"acceptance":["Rewrite the mission from startup analysis."],"diagnostics":["This startup-analysis output should be ignored when the explicit handoff is valid."],"critique":["This analyzed mission should not override the explicit handoff."],"risks":["Using this mission would violate explicit-handoff precedence."],"possible_noise":["inline note"]}'
+
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$INLINE_SYNTH_HANDOFF_EXPLICIT" \
+PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$INLINE_ANALYST_OUTPUT_EXPLICIT" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_INLINE_EXPLICIT" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$HANDOFF_SESSION_INLINE_EXPLICIT" -e "$PKG_ROOT" -p "/cook please keep this inline note secondary to the recent explicit handoff" >"$TMPDIR/pi-completion-handoff-inline-explicit.out" 2>"$TMPDIR/pi-completion-handoff-inline-explicit.err"
+
+python3 - "$HANDOFF_SNAPSHOT_INLINE_EXPLICIT" "$TMPDIR/pi-completion-handoff-inline-explicit.out" "$TMPDIR/pi-completion-handoff-inline-explicit.err" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+snapshot = json.loads(Path(sys.argv[1]).read_text())
+output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
+state = json.loads(Path('.agent/current/state.json').read_text())
+startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
+
+assert snapshot['source'] == 'handoff_capsule', 'same-entry inline /cook should still snapshot the recent explicit handoff capsule when it is valid'
+assert snapshot['mission'] == 'Fix login redirect callback behavior from explicit handoff.', 'same-entry inline /cook should preserve the recent explicit handoff mission before synthesis or startup analysis'
+assert state['mission_anchor'] == snapshot['mission'], 'same-entry inline /cook should start workflow from the explicit handoff mission'
+assert startup_brief['source'] == 'primary_agent_handoff', 'same-entry inline /cook should preserve primary_agent_handoff startup intake when explicit handoff wins'
+assert startup_brief['risks'] == ['Inline startup synthesis or analysis could override the explicit handoff if precedence regresses.'], 'same-entry inline /cook should preserve the explicit handoff risks canonically'
+assert snapshot['mission'] != 'Replace the startup mission from same-entry synthesis.', 'same-entry inline /cook should ignore synthesized handoff output when a valid explicit handoff already exists'
+assert snapshot['mission'] != 'Replace the startup mission from validated startup analysis.', 'same-entry inline /cook should ignore startup analysis when a valid explicit handoff already exists'
+assert 'Started completion workflow for:' in output, 'same-entry inline /cook should still report workflow start after honoring the explicit handoff'
+PY
+
 # Fresh explicit handoff with only mission-level acceptance and no slice hints should still start workflow.
 HANDOFF_ROOT_HINTLESS="$TMPDIR/handoff-root-hintless"
 mkdir -p "$HANDOFF_ROOT_HINTLESS"
