@@ -26,13 +26,22 @@ import type {
 	ContextProposalAnalysis,
 	ContextProposalDecision,
 } from "./proposal";
-import type { CompletionStateSnapshot, JsonRecord } from "./types";
+import type { CompletionStateSnapshot, JsonRecord, StartupAnalysisConfidence, StartupWorkflowRelation } from "./types";
 
 type ExistingWorkflowDecision =
 	| { action: "continue"; currentMissionAnchor: string }
 	| { action: "refocus"; currentMissionAnchor: string; missionAnchor: string; proposal: ContextProposal };
 
 type CookWorkflowControlAction = "resume" | "park" | "cancel";
+
+type ActiveWorkflowProposalAssessmentReason =
+	| "workflow_relation_continue"
+	| "workflow_relation_refocus"
+	| "missing_explicit_handoff"
+	| "missing_routing_signal"
+	| "fresh_explicit_handoff";
+
+type ActiveWorkflowRoutingSignalSource = "none" | "startup_analysis" | "explicit_structured_artifact";
 
 function buildCookStartupBriefRequiredMessage(deps: CompletionDriverDeps, prefix?: string): string {
 	const requirement = deps.structuredDiscussionFailureDetail;
@@ -43,12 +52,14 @@ type ActiveWorkflowProposalAssessment = {
 	action: "continue" | "refocus";
 	currentMissionAnchor: string;
 	proposal?: ContextProposal;
-	reason: "matching_mission" | "missing_explicit_handoff" | "fresh_explicit_handoff";
+	reason: ActiveWorkflowProposalAssessmentReason;
+	workflowRelation?: StartupWorkflowRelation;
+	confidence?: StartupAnalysisConfidence;
+	signalSource: ActiveWorkflowRoutingSignalSource;
 };
 
 type ExistingWorkflowChooserOptions = {
 	intro?: string;
-	comparison?: "strict" | "semantic";
 	proposedMissionLabel?: string;
 	refocusChoiceLabel?: string;
 	alternateChoiceLabel?: string;
@@ -400,6 +411,70 @@ export async function autoContinueWorkflowIfNeeded(
 	await queueCompletionDriverPrompt(pi, ctx, resumePrompt, "auto-resume", deps, { rootKey, fingerprint });
 }
 
+function isExplicitStructuredProposalSource(source: ContextProposal["source"] | undefined): boolean {
+	return source === "handoff_capsule" || source === "deferred_primary_agent_handoff";
+}
+
+function activeWorkflowRoutingSignalSource(proposal: ContextProposal): ActiveWorkflowRoutingSignalSource {
+	if (isExplicitStructuredProposalSource(proposal.source)) return "explicit_structured_artifact";
+	if (proposal.analysis.workflowRelation && proposal.analysis.confidence) return "startup_analysis";
+	return "none";
+}
+
+function buildActiveWorkflowRoutingAssessment(
+	currentMission: string,
+	proposal: ContextProposal,
+	signalSource: ActiveWorkflowRoutingSignalSource,
+	workflowRelation: StartupWorkflowRelation,
+	confidence: StartupAnalysisConfidence,
+): ActiveWorkflowProposalAssessment {
+	const shouldRefocus = confidence !== "low" && workflowRelation !== "unclear" && workflowRelation !== "continue_current_workflow";
+	return {
+		action: shouldRefocus ? "refocus" : "continue",
+		currentMissionAnchor: currentMission,
+		proposal,
+		reason: shouldRefocus
+			? signalSource === "explicit_structured_artifact"
+				? "fresh_explicit_handoff"
+				: "workflow_relation_refocus"
+			: "workflow_relation_continue",
+		workflowRelation,
+		confidence,
+		signalSource,
+	};
+}
+
+function assessValidatedActiveWorkflowProposal(
+	currentMission: string,
+	proposal: ContextProposal,
+	deps: Pick<CompletionDriverDeps, "missionAnchorsStrictlyEquivalent">,
+): ActiveWorkflowProposalAssessment {
+	const signalSource = activeWorkflowRoutingSignalSource(proposal);
+	const workflowRelation = proposal.analysis.workflowRelation;
+	const confidence = proposal.analysis.confidence;
+	if (workflowRelation && confidence) {
+		return buildActiveWorkflowRoutingAssessment(currentMission, proposal, signalSource, workflowRelation, confidence);
+	}
+	if (signalSource === "explicit_structured_artifact") {
+		return buildActiveWorkflowRoutingAssessment(
+			currentMission,
+			proposal,
+			signalSource,
+			deps.missionAnchorsStrictlyEquivalent(currentMission, proposal.mission)
+				? "continue_current_workflow"
+				: "replace_current_workflow",
+			"high",
+		);
+	}
+	return {
+		action: "continue",
+		currentMissionAnchor: currentMission,
+		proposal,
+		reason: "missing_routing_signal",
+		signalSource,
+	};
+}
+
 async function assessActiveWorkflowProposalRouting(
 	ctx: DriverContext,
 	snapshot: CompletionStateSnapshot,
@@ -414,26 +489,12 @@ async function assessActiveWorkflowProposalRouting(
 			action: "continue",
 			currentMissionAnchor: currentMission,
 			reason: "missing_explicit_handoff",
+			signalSource: "none",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 		return assessment;
 	}
-	if (deps.missionAnchorsLikelyEquivalent(currentMission, proposal.mission)) {
-		const assessment: ActiveWorkflowProposalAssessment = {
-			action: "continue",
-			currentMissionAnchor: currentMission,
-			proposal,
-			reason: "matching_mission",
-		};
-		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
-		return assessment;
-	}
-	const assessment: ActiveWorkflowProposalAssessment = {
-		action: "refocus",
-		currentMissionAnchor: currentMission,
-		proposal,
-		reason: "fresh_explicit_handoff",
-	};
+	const assessment = assessValidatedActiveWorkflowProposal(currentMission, proposal, deps);
 	deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
 	return assessment;
 }
@@ -463,17 +524,9 @@ async function confirmExistingWorkflowProposal(
 	options: ExistingWorkflowChooserOptions = {},
 ): Promise<ExistingWorkflowDecision | undefined> {
 	const currentMission = currentMissionAnchor(snapshot);
-	const comparison = options.comparison ?? "semantic";
 	const candidateProposals = [proposal, ...(proposal.alternateProposals ?? [])].filter((candidate, index, list) =>
 		list.findIndex((other) => deps.missionAnchorsStrictlyEquivalent(other.mission, candidate.mission)) === index,
 	);
-	const missionMatches = (candidate: ContextProposalAlternate): boolean =>
-		comparison === "strict"
-			? deps.missionAnchorsStrictlyEquivalent(currentMission, candidate.mission)
-			: deps.missionAnchorsLikelyEquivalent(currentMission, candidate.mission);
-	if (candidateProposals.some((candidate) => missionMatches(candidate))) {
-		return { action: "continue", currentMissionAnchor: currentMission };
-	}
 	const titleLines = [
 		"Existing completion workflow found",
 		"",
@@ -762,7 +815,7 @@ export async function runCookEntry(
 				await resumeActiveWorkflowFromCanonicalState(pi, ctx, snapshot, deps);
 				return;
 			}
-			const explicitReplacement = assessment.reason === "fresh_explicit_handoff";
+			const explicitReplacement = assessment.signalSource === "explicit_structured_artifact";
 			const decision = await confirmExistingWorkflowProposal(ctx, snapshot, assessment.proposal, deps, {
 				intro: explicitReplacement
 					? "A fresh explicit primary-agent handoff proposes replacing the current workflow. Choose how /cook should proceed:"
@@ -776,7 +829,6 @@ export async function runCookEntry(
 				alternateChoiceLabel: explicitReplacement
 					? "Start alternate workflow from explicit primary-agent handoff\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: undefined,
-				comparison: "strict",
 			});
 			if (!decision) {
 				deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled existing workflow confirmation", deps), "info");
@@ -788,7 +840,7 @@ export async function runCookEntry(
 			}
 			const selectedProposal = decision.proposal;
 			const proposalDecision = await deps.confirmContextProposal(ctx, selectedProposal, {
-				title: assessment.reason === "fresh_explicit_handoff"
+				title: explicitReplacement
 					? "Start the replacement workflow from this explicit startup brief?"
 					: "Start the replacement workflow from this startup brief?",
 			});

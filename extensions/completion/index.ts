@@ -78,7 +78,14 @@ import {
 	scaffoldCompletionFiles as scaffoldCompletionFilesOnDisk,
 } from "./state-store";
 import type { TranscriptionResult } from "./transcription";
-import type { CompletionStateSnapshot, CompletionRole, JsonRecord, LiveRoleActivity } from "./types";
+import type {
+	CompletionStateSnapshot,
+	CompletionRole,
+	JsonRecord,
+	LiveRoleActivity,
+	StartupAnalysisConfidence,
+	StartupWorkflowRelation,
+} from "./types";
 
 const ROLE_NAMES = [
 	"completion-bootstrapper",
@@ -121,11 +128,23 @@ function candidateSlices(plan: JsonRecord | undefined): JsonRecord[] {
 	return Array.isArray(slices) ? slices.filter(isRecord) : [];
 }
 
+type ActiveWorkflowProposalAssessmentReason =
+	| "workflow_relation_continue"
+	| "workflow_relation_refocus"
+	| "missing_explicit_handoff"
+	| "missing_routing_signal"
+	| "fresh_explicit_handoff";
+
+type ActiveWorkflowRoutingSignalSource = "none" | "startup_analysis" | "explicit_structured_artifact";
+
 type ActiveWorkflowProposalAssessment = {
 	action: "continue" | "refocus";
 	currentMissionAnchor: string;
 	proposal?: ContextProposal;
-	reason: "matching_mission" | "missing_explicit_handoff" | "fresh_explicit_handoff";
+	reason: ActiveWorkflowProposalAssessmentReason;
+	workflowRelation?: StartupWorkflowRelation;
+	confidence?: StartupAnalysisConfidence;
+	signalSource: ActiveWorkflowRoutingSignalSource;
 };
 
 function completionTestWorkflowActionOverride(): "continue" | "refocus" | "cancel" | undefined {
@@ -400,6 +419,10 @@ function maybeWriteActiveWorkflowRoutingSnapshot(assessment: ActiveWorkflowPropo
 				mode: "bare",
 				action: assessment.action,
 				reason: assessment.reason,
+				signalSource: assessment.signalSource,
+				workflowRelation: assessment.workflowRelation ?? assessment.proposal?.analysis.workflowRelation ?? null,
+				confidence: assessment.confidence ?? assessment.proposal?.analysis.confidence ?? null,
+				startupVerdict: assessment.proposal?.analysis.startupVerdict ?? null,
 				currentMissionAnchor: assessment.currentMissionAnchor,
 				blockedFailureMessage: null,
 				proposedMissionAnchor: assessment.proposal?.mission ?? null,

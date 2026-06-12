@@ -257,6 +257,9 @@ current_state = json.loads(before['state.json'])
 assert current_state['mission_anchor'] == initial_mission, 'active /cook inline prompt should start from the current mission anchor'
 assert routing['action'] == 'refocus', 'active /cook inline prompt should route through refocus'
 assert routing['reason'] == 'fresh_explicit_handoff', 'active /cook inline prompt should synthesize an explicit startup brief for replacement'
+assert routing['signalSource'] == 'explicit_structured_artifact', 'active /cook inline prompt should report explicit structured routing for the synthesized handoff'
+assert routing['workflowRelation'] == 'replace_current_workflow', 'active /cook inline prompt should classify the synthesized handoff as a replacement workflow'
+assert routing['confidence'] == 'high', 'active /cook inline prompt should keep explicit replacement routing at high confidence'
 assert proposal['mission'] == 'Replace the active workflow from inline /cook prompt.', 'active /cook inline prompt should surface the replacement mission'
 assert 'Replace the active workflow from inline /cook prompt.' in chooser['title'], 'active /cook inline prompt should surface the replacement mission in the chooser'
 assert state['mission_anchor'] == 'Replace the active workflow from inline /cook prompt.', 'active /cook inline prompt should refocus the canonical mission'
@@ -356,6 +359,9 @@ assert 'explicitGoal' not in routing, 'supported bare refocus should not expose 
 assert 'explicitGoalProvided' not in routing, 'supported bare refocus should not expose removed explicit-goal shim fields'
 assert routing['action'] == 'refocus', 'supported bare /cook should classify as refocus when a fresh explicit handoff proposes a different mission'
 assert routing['reason'] == 'fresh_explicit_handoff', 'supported bare /cook should record the explicit-handoff replacement reason'
+assert routing['signalSource'] == 'explicit_structured_artifact', 'supported bare /cook should report the explicit structured routing source'
+assert routing['workflowRelation'] == 'replace_current_workflow', 'supported bare /cook should derive a replacement workflow_relation from the explicit handoff'
+assert routing['confidence'] == 'high', 'supported bare /cook should treat the explicit replacement handoff as high confidence'
 assert routing['proposedMissionAnchor'] == new_anchor, 'explicit handoff routing snapshot should expose the replacement mission anchor'
 assert routing['proposalSource'] == 'handoff_capsule', 'explicit handoff routing snapshot should preserve the handoff source'
 PY
@@ -536,6 +542,9 @@ assert 'explicitGoal' not in routing, 'accepted bare refocus should not expose r
 assert 'explicitGoalProvided' not in routing, 'accepted bare refocus should not expose removed explicit-goal shim fields'
 assert routing['action'] == 'refocus', 'accepted bare refocus should keep the explicit-handoff refocus classification'
 assert routing['reason'] == 'fresh_explicit_handoff', 'accepted bare refocus should keep the explicit-handoff reason'
+assert routing['signalSource'] == 'explicit_structured_artifact', 'accepted bare refocus should preserve the explicit structured routing source'
+assert routing['workflowRelation'] == 'replace_current_workflow', 'accepted bare refocus should keep the replacement workflow_relation'
+assert routing['confidence'] == 'high', 'accepted bare refocus should keep explicit replacement confidence high'
 assert routing['currentMissionAnchor'] == 'Remove completion status line, keep widget.', 'accepted bare refocus should expose the original mission until Start is accepted'
 assert routing['proposalSource'] == 'handoff_capsule', 'accepted bare refocus should preserve the explicit-handoff source'
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after bare refocus'
@@ -628,11 +637,129 @@ active = json.loads(Path('.agent/current/active-slice.json').read_text())
 assert proposal['mission'] == new_anchor, 'same-entry synthesized replacement should preserve the replacement proposal mission'
 assert routing['action'] == 'refocus', 'same-entry synthesized replacement should classify active bare /cook as refocus'
 assert routing['reason'] == 'fresh_explicit_handoff', 'same-entry synthesized replacement should reuse the explicit-handoff routing reason because /cook synthesized an explicit handoff'
+assert routing['signalSource'] == 'explicit_structured_artifact', 'same-entry synthesized replacement should report the explicit structured routing source'
+assert routing['workflowRelation'] == 'replace_current_workflow', 'same-entry synthesized replacement should keep the replacement workflow_relation'
+assert routing['confidence'] == 'high', 'same-entry synthesized replacement should keep explicit replacement confidence high'
 assert routing['proposalSource'] == 'handoff_capsule', 'same-entry synthesized replacement should surface the synthesized handoff as a handoff capsule source'
 assert state['mission_anchor'] == new_anchor, 'state.json mission_anchor mismatch after same-entry synthesized refocus'
 assert plan['mission_anchor'] == new_anchor, 'plan.json mission_anchor mismatch after same-entry synthesized refocus'
 assert active['mission_anchor'] == new_anchor, 'active-slice.json mission_anchor mismatch after same-entry synthesized refocus'
 assert state['continuation_reason'].startswith('User refocused workflow via /cook:'), 'same-entry synthesized replacement should record the /cook refocus continuation reason'
+PY
+
+MULTILINGUAL_ANALYST_SESSION="$TMPDIR/session-multilingual-active-analyst.jsonl"
+MULTILINGUAL_ANALYST_ROUTING="$TMPDIR/multilingual-active-analyst-routing.json"
+MULTILINGUAL_ANALYST_PROPOSAL="$TMPDIR/multilingual-active-analyst-proposal.json"
+MULTILINGUAL_ANALYST_CHOOSER="$TMPDIR/multilingual-active-analyst-chooser.json"
+write_session "$MULTILINGUAL_ANALYST_SESSION" "$TMPDIR" "請把目前的工作流程改成支援多語系 /cook refocus 路由，並保留低信心時繼續原工作流程的保護。"
+
+MULTILINGUAL_ANALYST_OUTPUT='{"verdict":"startable","workflow_relation":"replace_current_workflow","confidence":"high","mission":"支援多語系 /cook refocus 路由並保留低信心保護。","scope":["讓目前的工作流程改走多語系 refocus 路由。","保留低信心時繼續原工作流程的保護。"],"constraints":["不要跳過現有的 Start/Cancel replacement gate。"],"acceptance":["新增回歸測試證明多語系 active-workflow refocus 會使用 workflow_relation/confidence 路由。"],"diagnostics":["The active workflow request clearly asks to replace the current mission with a multilingual refocus mission."],"critique":["Keep the approval-only replacement gate."],"risks":["If workflow_relation is ignored, /cook could continue the wrong mission."],"possible_noise":[]}'
+PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
+PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$MULTILINGUAL_ANALYST_OUTPUT" \
+PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
+PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
+PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$MULTILINGUAL_ANALYST_ROUTING" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$MULTILINGUAL_ANALYST_PROPOSAL" \
+PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$MULTILINGUAL_ANALYST_CHOOSER" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$MULTILINGUAL_ANALYST_SESSION" -e "$PKG_ROOT" -p "/cook" \
+  >"$TMPDIR/pi-completion-multilingual-active-analyst.out" 2>"$TMPDIR/pi-completion-multilingual-active-analyst.err"
+
+python3 - "$MULTILINGUAL_ANALYST_ROUTING" "$MULTILINGUAL_ANALYST_PROPOSAL" "$MULTILINGUAL_ANALYST_CHOOSER" "$TMPDIR/pi-completion-multilingual-active-analyst.out" "$TMPDIR/pi-completion-multilingual-active-analyst.err" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+mission = '支援多語系 /cook refocus 路由並保留低信心保護.'
+routing = json.loads(Path(sys.argv[1]).read_text())
+proposal = json.loads(Path(sys.argv[2]).read_text())
+chooser = json.loads(Path(sys.argv[3]).read_text())
+output = Path(sys.argv[4]).read_text() + Path(sys.argv[5]).read_text()
+state = json.loads(Path('.agent/current/state.json').read_text())
+plan = json.loads(Path('.agent/current/plan.json').read_text())
+active = json.loads(Path('.agent/current/active-slice.json').read_text())
+
+assert routing['mode'] == 'bare', 'multilingual analyst refocus should keep bare active-workflow routing mode'
+assert routing['action'] == 'refocus', 'multilingual analyst refocus should classify the active workflow as a replacement'
+assert routing['reason'] == 'workflow_relation_refocus', 'multilingual analyst refocus should route through validated workflow_relation/confidence'
+assert routing['signalSource'] == 'startup_analysis', 'multilingual analyst refocus should report startup-analysis routing'
+assert routing['workflowRelation'] == 'replace_current_workflow', 'multilingual analyst refocus should preserve the validated workflow_relation'
+assert routing['confidence'] == 'high', 'multilingual analyst refocus should preserve the validated confidence'
+assert routing['proposalSource'] == 'analyst', 'multilingual analyst refocus should surface the analyst proposal source'
+assert proposal['source'] == 'analyst', 'multilingual analyst refocus should keep the analyst proposal source'
+assert proposal['analysis']['workflowRelation'] == 'replace_current_workflow', 'multilingual analyst refocus should preserve workflow_relation in the proposal snapshot'
+assert proposal['analysis']['confidence'] == 'high', 'multilingual analyst refocus should preserve confidence in the proposal snapshot'
+assert chooser['choices'][0].startswith('Continue current workflow'), 'multilingual analyst refocus should still offer continue in the chooser'
+assert state['mission_anchor'] == mission, 'multilingual analyst refocus should rewrite the canonical mission anchor after confirmation'
+assert plan['mission_anchor'] == mission, 'multilingual analyst refocus should rewrite the plan mission anchor after confirmation'
+assert active['mission_anchor'] == mission, 'multilingual analyst refocus should rewrite the active-slice mission anchor after confirmation'
+assert 'Refocused completion workflow to: ' + mission in output, 'multilingual analyst refocus should report the accepted replacement mission'
+PY
+
+LOW_CONFIDENCE_ACTIVE_SESSION="$TMPDIR/session-low-confidence-active.jsonl"
+LOW_CONFIDENCE_ACTIVE_ROUTING="$TMPDIR/low-confidence-active-routing.json"
+LOW_CONFIDENCE_ACTIVE_RESUME="$TMPDIR/low-confidence-active-resume.txt"
+LOW_CONFIDENCE_ACTIVE_CHOOSER="$TMPDIR/low-confidence-active-chooser.json"
+LOW_CONFIDENCE_ACTIVE_PROPOSAL="$TMPDIR/low-confidence-active-proposal.json"
+LOW_CONFIDENCE_ACTIVE_BEFORE="$TMPDIR/low-confidence-active-before.json"
+write_session "$LOW_CONFIDENCE_ACTIVE_SESSION" "$TMPDIR" "先幫我看看是不是要改方向，現在還不確定。"
+python3 - "$LOW_CONFIDENCE_ACTIVE_BEFORE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+tracked = [
+    Path('.agent/current/state.json'),
+    Path('.agent/current/plan.json'),
+    Path('.agent/current/active-slice.json'),
+    Path('.agent/current/verification-evidence.json'),
+]
+Path(sys.argv[1]).write_text(json.dumps({path.name: path.read_text() for path in tracked}, indent=2) + '\n')
+PY
+
+LOW_CONFIDENCE_ACTIVE_OUTPUT='{"verdict":"needs_clarification","workflow_relation":"unclear","confidence":"low","mission":"釐清是否需要改變目前的工作流程。","scope":[],"constraints":[],"acceptance":[],"diagnostics":["The active-workflow request is too ambiguous to justify refocusing safely."],"critique":["Keep the current workflow until the replacement mission is explicit."],"risks":["Guessing could replace the active workflow incorrectly."],"possible_noise":["先幫我看看"]}'
+PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
+PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$LOW_CONFIDENCE_ACTIVE_OUTPUT" \
+PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$LOW_CONFIDENCE_ACTIVE_ROUTING" \
+PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$LOW_CONFIDENCE_ACTIVE_RESUME" \
+PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$LOW_CONFIDENCE_ACTIVE_CHOOSER" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$LOW_CONFIDENCE_ACTIVE_PROPOSAL" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi --session "$LOW_CONFIDENCE_ACTIVE_SESSION" -e "$PKG_ROOT" -p "/cook" \
+  >"$TMPDIR/pi-completion-low-confidence-active.out" 2>"$TMPDIR/pi-completion-low-confidence-active.err"
+
+python3 - "$LOW_CONFIDENCE_ACTIVE_ROUTING" "$LOW_CONFIDENCE_ACTIVE_RESUME" "$LOW_CONFIDENCE_ACTIVE_CHOOSER" "$LOW_CONFIDENCE_ACTIVE_PROPOSAL" "$LOW_CONFIDENCE_ACTIVE_BEFORE" "$TMPDIR/pi-completion-low-confidence-active.out" "$TMPDIR/pi-completion-low-confidence-active.err" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+routing = json.loads(Path(sys.argv[1]).read_text())
+resume = Path(sys.argv[2]).read_text()
+chooser = Path(sys.argv[3])
+proposal = Path(sys.argv[4])
+before = json.loads(Path(sys.argv[5]).read_text())
+output = Path(sys.argv[6]).read_text() + Path(sys.argv[7]).read_text()
+after = {
+    'state.json': Path('.agent/current/state.json').read_text(),
+    'plan.json': Path('.agent/current/plan.json').read_text(),
+    'active-slice.json': Path('.agent/current/active-slice.json').read_text(),
+    'verification-evidence.json': Path('.agent/current/verification-evidence.json').read_text(),
+}
+state_before = json.loads(before['state.json'])
+state_after = json.loads(after['state.json'])
+
+assert routing['mode'] == 'bare', 'low-confidence active workflow should still snapshot bare routing mode'
+assert routing['action'] == 'continue', 'low-confidence active workflow should preserve the current workflow instead of refocusing'
+assert routing['reason'] == 'missing_explicit_handoff', 'low-confidence active workflow should fail closed back to canonical continue semantics'
+assert routing['signalSource'] == 'none', 'low-confidence active workflow should not treat a rejected analysis as a replacement signal'
+assert routing['workflowRelation'] is None, 'low-confidence active workflow should not surface a replacement workflow_relation after the analysis is rejected'
+assert routing['confidence'] is None, 'low-confidence active workflow should not surface replacement confidence after the analysis is rejected'
+assert state_after['mission_anchor'] == state_before['mission_anchor'], 'low-confidence active workflow should keep the current mission anchor unchanged'
+assert before == after, 'low-confidence active workflow should leave canonical state unchanged'
+assert 'Resume the completion workflow from canonical state.' in resume, 'low-confidence active workflow should resume the canonical workflow prompt'
+assert not chooser.exists(), 'low-confidence active workflow should not open the replacement chooser'
+assert not proposal.exists(), 'low-confidence active workflow should not open the replacement proposal confirmation'
+assert 'Refocused completion workflow to:' not in output, 'low-confidence active workflow should not report a refocus'
 PY
 
 DONE_CLEANUP_REMINDER="$TMPDIR/done-cleanup-reminder.txt"

@@ -1,15 +1,17 @@
 import {
 	assessLatestCookHandoffProposal,
 	deriveCookContextProposalFromRecentDiscussion,
+	finalizeContextProposalAnalysis,
 } from "./proposal";
 import type {
 	ContextProposal,
+	ContextProposalAlternate,
 	ContextProposalAnalysis,
 	ContextProposalWorkflowContext,
 	RecentDiscussionEntry,
 	RecentSessionMessage,
 } from "./proposal";
-import type { CompletionStateSnapshot } from "./types";
+import type { CompletionStateSnapshot, StartupAnalysisConfidence, StartupWorkflowRelation } from "./types";
 
 export type CookProposalDeps = {
 	asString: (value: unknown) => string | undefined;
@@ -176,6 +178,58 @@ function synthesizedMissionTightensExplicitMission(
 	return sharedPrefixLength >= 24 && sharedPrefixLength / Math.min(normalizedExplicit.length, normalizedCandidate.length) >= 0.5;
 }
 
+function isExplicitStructuredProposalSource(source: ContextProposal["source"]): boolean {
+	return source === "handoff_capsule" || source === "deferred_primary_agent_handoff";
+}
+
+function annotateActiveWorkflowRoutingCandidate<T extends ContextProposalAlternate>(
+	candidate: T,
+	workflowContext: ContextProposalWorkflowContext | undefined,
+	deps: Pick<CookProposalDeps, "missionAnchorsStrictlyEquivalent">,
+): T {
+	const currentMissionAnchor = workflowContext?.currentMissionAnchor?.trim();
+	if (!currentMissionAnchor || workflowContext?.continuationPolicy === "done") return candidate;
+	if (!isExplicitStructuredProposalSource(candidate.source)) return candidate;
+	const workflowRelation: StartupWorkflowRelation =
+		candidate.analysis.workflowRelation
+			?? (deps.missionAnchorsStrictlyEquivalent(currentMissionAnchor, candidate.mission)
+				? "continue_current_workflow"
+				: "replace_current_workflow");
+	const confidence: StartupAnalysisConfidence = candidate.analysis.confidence ?? "high";
+	const routingDiagnostic = workflowRelation === "continue_current_workflow"
+		? "Explicit structured startup artifact strictly matches the current workflow mission, so /cook should continue the current workflow by default."
+		: "Explicit structured startup artifact proposes a different mission than the current workflow, so /cook should require approval before refocusing.";
+	const diagnostics = candidate.analysis.diagnostics.includes(routingDiagnostic)
+		? candidate.analysis.diagnostics
+		: [...candidate.analysis.diagnostics, routingDiagnostic];
+	return {
+		...candidate,
+		analysis: finalizeContextProposalAnalysis(
+			{
+				...candidate.analysis,
+				workflowRelation,
+				confidence,
+				diagnostics,
+			},
+			[candidate.goalText, candidate.mission, currentMissionAnchor],
+		),
+	};
+}
+
+function annotateActiveWorkflowRoutingProposal(
+	proposal: ContextProposal,
+	workflowContext: ContextProposalWorkflowContext | undefined,
+	deps: Pick<CookProposalDeps, "missionAnchorsStrictlyEquivalent">,
+): ContextProposal {
+	const annotated = annotateActiveWorkflowRoutingCandidate(proposal, workflowContext, deps);
+	return {
+		...annotated,
+		alternateProposals: proposal.alternateProposals.map((candidate) =>
+			annotateActiveWorkflowRoutingCandidate(candidate, workflowContext, deps)
+		),
+	};
+}
+
 export function buildCookSynthesisContext(args: {
 	inlinePrompt?: string;
 	recentMessages: RecentSessionMessage[];
@@ -231,13 +285,18 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 		workflowContextLines: string[];
 	}) => Promise<ContextProposal | undefined>;
 }): Promise<CookContextProposalResult> {
-	const explicit = deriveCookStartupProposalFromRecentMessages({
-		inlinePrompt: args.inlinePrompt,
-		recentMessages: args.recentMessages,
-		projectName: args.projectName,
-		deps: args.deps,
-	});
-	const explicitProposal = explicit.proposal;
+	const workflowContext = workflowContextFromSnapshot(args.snapshot);
+	const annotateProposal = (proposal: ContextProposal | undefined): ContextProposal | undefined =>
+		proposal ? annotateActiveWorkflowRoutingProposal(proposal, workflowContext, args.deps) : undefined;
+	const explicitProposal = annotateProposal(
+		deriveCookStartupProposalFromRecentMessages({
+			inlinePrompt: args.inlinePrompt,
+			recentMessages: args.recentMessages,
+			projectName: args.projectName,
+			deps: args.deps,
+		}).proposal,
+	);
+	const explicit: CookContextProposalResult = explicitProposal ? { proposal: explicitProposal } : {};
 	const shouldTightenExplicitProposal = explicitProposal ? proposalNeedsCookStartupTightening(explicitProposal) : false;
 	if (explicitProposal && !shouldTightenExplicitProposal) return explicit;
 	const synthesisContext = buildCookSynthesisContext({
@@ -247,7 +306,7 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 		explicit,
 		stripCodeBlocks: args.deps.stripCodeBlocks,
 	});
-	const { recentEntries, workflowContext, workflowContextLines } = synthesisContext;
+	const { recentEntries, workflowContext: synthesisWorkflowContext, workflowContextLines } = synthesisContext;
 	const raw = await args.generateCookHandoff?.({ recentEntries, workflowContextLines });
 	if (raw) {
 		const generated = assessLatestCookHandoffProposal(
@@ -256,9 +315,10 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 			args.deps,
 		);
 		if (generated.status === "startable") {
-			if (!explicitProposal) return { proposal: generated.proposal };
-			if (synthesizedMissionTightensExplicitMission(explicitProposal.mission, generated.proposal.mission, args.deps)) {
-				return { proposal: generated.proposal };
+			const generatedProposal = annotateActiveWorkflowRoutingProposal(generated.proposal, workflowContext, args.deps);
+			if (!explicitProposal) return { proposal: generatedProposal };
+			if (synthesizedMissionTightensExplicitMission(explicitProposal.mission, generatedProposal.mission, args.deps)) {
+				return { proposal: generatedProposal };
 			}
 			return explicit;
 		}
@@ -269,9 +329,9 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 			analyzeContextProposal: args.analyzeContextProposal
 				? async (candidateEntries) => args.analyzeContextProposal?.({ recentEntries: candidateEntries, workflowContextLines })
 				: undefined,
-			workflowContext,
+			workflowContext: synthesisWorkflowContext,
 		});
-		if (derivedFromRecentDiscussion) return { proposal: derivedFromRecentDiscussion };
+		if (derivedFromRecentDiscussion) return { proposal: annotateProposal(derivedFromRecentDiscussion) };
 	}
 	if (explicitProposal) return explicit;
 	return {};
