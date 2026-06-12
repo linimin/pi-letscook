@@ -97,7 +97,7 @@ checks = {
     ],
     "extensions/completion/index.ts": [
         '"/cook failed closed because the primary-agent startup step could not prepare a workflow startup brief from the current task context. Clarify the mission, repo-change intent, or key constraints in the main chat, then rerun /cook."',
-        'description: "/cook workflow: start or replace workflow from a primary-agent startup brief (optionally seeded by an inline prompt), resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls"',
+        'description: "/cook workflow: start or replace workflow by first preferring a fresh explicit primary-agent handoff, then same-entry primary-agent handoff synthesis from the current task context or inline prompt, and only then bounded validated recent_discussion startup analysis when no handoff is startable (fail closed otherwise); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls"',
         '"Do not call completion_role from ordinary chat; it is reserved for active /cook workflow sessions."',
         '`COMPLETION WORKFLOW DRIVER\\nStart or continue the completion workflow for this repo.',
         'function isLikelyWorkflowContinuationTurn(',
