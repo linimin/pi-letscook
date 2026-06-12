@@ -23,6 +23,7 @@ export function buildStartupAnalysisPrompt(projectName: string, discussion: stri
 		"Treat /cook itself as the workflow-entry signal; do not require English implementation-intent keywords before analyzing recent discussion.",
 		"Prefer the latest clear user implementation intent and canonical workflow context over older background discussion.",
 		"Use recent user/custom discussion plus canonical workflow context only; do not assume a workflow-startable mission when the discussion is planning-only, ambiguous, or weak.",
+		"Do not include task_type or evaluation_profile in discussion-derived startup-analysis output. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.",
 		"When startup intent is unclear, contradictory, or low-confidence, return a non-startable analysis instead of inventing a generic mission anchor.",
 	];
 	if (contextLines.length > 0) lines.push("", "Canonical workflow context:", ...contextLines);
@@ -57,28 +58,28 @@ export function parseStartupAnalysisOutput(raw: string, projectName: string): Co
 	});
 	if (!validated) return undefined;
 	if (validated.verdict !== "startable") return undefined;
-	const proposal = parseContextProposalAnalystOutput(
-		JSON.stringify({
-			mission: validated.mission,
-			scope: validated.scope,
-			constraints: validated.constraints,
-			acceptance: validated.acceptance,
-			diagnostics: validated.diagnostics,
-			critique: validated.critique,
-			risks: validated.risks,
-			possible_noise: validated.possibleNoise,
-			alternate_missions: validated.alternateMissions,
-			completed_topics: validated.suppressedCompletedTopics,
-			negated_topics: validated.suppressedNegatedTopics,
-			task_type: validated.taskType,
-			evaluation_profile: validated.evaluationProfile,
-		}),
-		projectName,
-	);
+	const sanitizedRecord = {
+		verdict: validated.verdict,
+		workflow_relation: validated.workflowRelation,
+		confidence: validated.confidence,
+		mission: validated.mission,
+		scope: validated.scope,
+		constraints: validated.constraints,
+		acceptance: validated.acceptance,
+		diagnostics: validated.diagnostics,
+		critique: validated.critique,
+		risks: validated.risks,
+		possible_noise: validated.possibleNoise,
+		alternate_missions: validated.alternateMissions,
+		completed_topics: validated.suppressedCompletedTopics,
+		negated_topics: validated.suppressedNegatedTopics,
+	};
+	const sanitizedBasisPreview = JSON.stringify(sanitizedRecord).replace(/\s+/g, " ").trim();
+	const proposal = parseContextProposalAnalystOutput(JSON.stringify(sanitizedRecord), projectName);
 	if (!proposal) return undefined;
 	return {
 		...proposal,
-		basisPreview: validated.basisPreview,
+		basisPreview: sanitizedBasisPreview,
 		analysis: finalizeContextProposalAnalysis(
 			{
 				...proposal.analysis,

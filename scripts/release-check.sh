@@ -78,7 +78,18 @@ checks = {
         '"Do not expect /cook to infer or guess startup intent from recent discussion alone; /cook should use explicit primary-agent handoff data, whether it already exists or is synthesized in the same /cook entry."',
         '"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role."',
         '"Supported same-repo controls are: rerun /cook or /cook resume to continue from canonical state; run /cook park to record a parked paused posture that unlocks ordinary direct edits and forces canonical reground before workflow continuation; run /cook cancel to close the workflow and disable stale hard locks or auto-resume."',
-        '"Do not invent task_type or evaluation_profile from free text. Omit those fields unless an explicit structured artifact already supplied them."',
+        '"Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook."',
+    ],
+    "scripts/role-runner-contract-test.sh": [
+        "Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.",
+        "Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.",
+        "assertNotIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise, task_type, evaluation_profile.');",
+    ],
+    "scripts/context-proposal-test.sh": [
+        "# not_repo_change startup analysis: /cook should still fail closed for non-repo-change discussion.",
+        "NOT_REPO_CHANGE_ANALYST_OUTPUT=",
+        "not_repo_change startup analysis should fail closed without writing canonical state",
+        "validated startup analysis should ignore analyst-supplied task_type hints and keep the canonical default",
     ],
     "extensions/completion/index.ts": [
         '"/cook failed closed because the primary-agent startup step could not prepare a workflow startup brief from the current task context. Clarify the mission, repo-change intent, or key constraints in the main chat, then rerun /cook."',

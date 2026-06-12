@@ -253,10 +253,13 @@ export function buildContextProposalAnalystPrompt(projectName: string, discussio
 	const lines = [
 		`Project: ${projectName}`,
 		"Infer the current implementation mission from the discussion.",
+		"Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.",
+		"Use verdict values: startable, needs_clarification, planning_only, not_repo_change, or unsafe.",
+		"Use workflow_relation values: new_workflow, continue_current_workflow, replace_current_workflow, or unclear.",
 		"Prefer the latest clear user implementation intent over older background context.",
 		"Treat stale, completed, or explicitly negated topics as context to ignore unless the latest discussion clearly reopens them.",
 		"Use only recent user/custom discussion plus canonical workflow context; do not infer startup intent from slash-command arguments or planning-only artifacts.",
-		"Do not invent task_type or evaluation_profile from free text. Omit those fields unless an explicit structured artifact already supplied them.",
+		"Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.",
 	];
 	if (contextLines.length > 0) lines.push("", "Canonical workflow context:", ...contextLines);
 	lines.push("", "Recent discussion:", discussion || "(none)");

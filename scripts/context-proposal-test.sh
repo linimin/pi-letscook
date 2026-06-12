@@ -1261,7 +1261,7 @@ cd "$INLINE_ANALYST_ROOT"
 git init -q
 
 INLINE_ANALYST_SNAPSHOT="$TMPDIR/context-proposal-inline-analyst.json"
-INLINE_ANALYST_OUTPUT='{"verdict":"startable","workflow_relation":"new_workflow","confidence":"high","mission":"支援中文 /cook 啟動分析並保留失敗關閉保護。","scope":["讓中文 inline /cook 提示也會先進入啟動分析。","保留不確定時的失敗關閉保護。"],"constraints":["不要重新引入英文字彙門檻。"],"acceptance":["新增回歸測試覆蓋中文 inline /cook 啟動。"],"diagnostics":["The inline prompt supplied enough repo-change intent even without English implementation keywords."],"critique":["Keep the startup flow language-agnostic."],"risks":["A weak analysis must still fail closed instead of guessing the mission."],"possible_noise":["older startup heuristics"]}'
+INLINE_ANALYST_OUTPUT='{"verdict":"startable","workflow_relation":"new_workflow","confidence":"high","mission":"支援中文 /cook 啟動分析並保留失敗關閉保護。","scope":["讓中文 inline /cook 提示也會先進入啟動分析。","保留不確定時的失敗關閉保護。"],"constraints":["不要重新引入英文字彙門檻。"],"acceptance":["新增回歸測試覆蓋中文 inline /cook 啟動。"],"diagnostics":["The inline prompt supplied enough repo-change intent even without English implementation keywords."],"critique":["Keep the startup flow language-agnostic."],"risks":["A weak analysis must still fail closed instead of guessing the mission."],"possible_noise":["older startup heuristics"],"task_type":"discussion-derived-routing","evaluation_profile":"custom-analysis-profile"}'
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
@@ -1285,10 +1285,16 @@ assert proposal['mission'] == '支援中文 /cook 啟動分析並保留失敗關
 assert proposal['analysis']['workflowRelation'] == 'new_workflow', 'validated startup analysis should preserve workflow_relation in the proposal snapshot'
 assert proposal['analysis']['confidence'] == 'high', 'validated startup analysis should preserve confidence in the proposal snapshot'
 assert proposal['analysis']['diagnostics'] == ['The inline prompt supplied enough repo-change intent even without English implementation keywords.'], 'validated startup analysis should preserve diagnostics in the proposal snapshot'
+assert proposal['analysis']['taskType'] == 'completion-workflow', 'validated startup analysis should ignore analyst-supplied task_type hints and keep the canonical default'
+assert proposal['analysis']['evaluationProfile'] == 'completion-rubric-v1', 'validated startup analysis should ignore analyst-supplied evaluation_profile hints and keep the canonical default'
+assert 'discussion-derived-routing' not in proposal['basisPreview'], 'validated startup analysis should strip discussion-derived task_type hints from basisPreview'
+assert 'custom-analysis-profile' not in proposal['basisPreview'], 'validated startup analysis should strip discussion-derived evaluation_profile hints from basisPreview'
 assert state['mission_anchor'] == proposal['mission'], 'multilingual inline prompt should start workflow from the analyzed mission'
-assert state['task_type'] == 'completion-workflow', 'startup analysis should fall back to canonical task_type when the structured startup output omits it'
-assert state['evaluation_profile'] == 'completion-rubric-v1', 'startup analysis should fall back to canonical evaluation_profile when the structured startup output omits it'
+assert state['task_type'] == 'completion-workflow', 'startup analysis should fall back to canonical task_type when the structured startup output omits or strips it'
+assert state['evaluation_profile'] == 'completion-rubric-v1', 'startup analysis should fall back to canonical evaluation_profile when the structured startup output omits or strips it'
 assert startup_brief['source'] == 'recent_discussion', 'analyzed startup briefs should still persist as recent_discussion intake'
+assert startup_brief['task_type'] == 'completion-workflow', 'analyzed startup briefs should keep the canonical task_type when startup analysis tries to supply a discussion-derived hint'
+assert startup_brief['evaluation_profile'] == 'completion-rubric-v1', 'analyzed startup briefs should keep the canonical evaluation_profile when startup analysis tries to supply a discussion-derived hint'
 assert any(note.startswith('Diagnostic: The inline prompt supplied enough repo-change intent even without English implementation keywords.') for note in startup_brief['notes']), 'startup brief notes should preserve startup-analysis diagnostics canonically'
 assert not state['mission_anchor'].startswith('Drive '), 'startup analysis must not synthesize the generic mission anchor for multilingual startup'
 assert 'Started completion workflow for:' in output, 'multilingual inline prompt should report workflow start after validated startup analysis'
@@ -1320,6 +1326,33 @@ assert not Path('.agent').exists(), 'low-confidence startup analysis should fail
 assert not snapshot.exists(), 'low-confidence startup analysis should not emit a startup proposal snapshot'
 assert '/cook failed closed' in output, 'low-confidence startup analysis should fail closed instead of guessing a startup brief'
 assert 'Drive ' not in output, 'low-confidence startup analysis should not fall back to the generic mission anchor'
+PY
+
+# not_repo_change startup analysis: /cook should still fail closed for non-repo-change discussion.
+NOT_REPO_CHANGE_ROOT="$TMPDIR/not-repo-change-root"
+mkdir -p "$NOT_REPO_CHANGE_ROOT"
+cd "$NOT_REPO_CHANGE_ROOT"
+git init -q
+
+NOT_REPO_CHANGE_SNAPSHOT="$TMPDIR/context-proposal-not-repo-change.json"
+NOT_REPO_CHANGE_ANALYST_OUTPUT='{"verdict":"not repo change","workflow_relation":"unclear","confidence":"high","mission":"Answer the startup question without changing the repo.","scope":[],"constraints":[],"acceptance":[],"diagnostics":["The request is operational guidance only and does not ask for repo changes."],"critique":["Do not enter workflow mode for non-repo-change guidance."],"risks":["Treating this as implementation work would rewrite canonical state unnecessarily."],"possible_noise":["Could you explain the current workflow?"]}'
+
+PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
+PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$NOT_REPO_CHANGE_ANALYST_OUTPUT" \
+PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$NOT_REPO_CHANGE_SNAPSHOT" \
+PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+pi -e "$PKG_ROOT" -p "/cook 先說明這個流程怎麼運作，不要改 repo" >"$TMPDIR/pi-completion-not-repo-change.out" 2>"$TMPDIR/pi-completion-not-repo-change.err"
+
+python3 - "$TMPDIR/pi-completion-not-repo-change.out" "$TMPDIR/pi-completion-not-repo-change.err" "$NOT_REPO_CHANGE_SNAPSHOT" <<'PY'
+import sys
+from pathlib import Path
+
+output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
+snapshot = Path(sys.argv[3])
+
+assert not Path('.agent').exists(), 'not_repo_change startup analysis should fail closed without writing canonical state'
+assert not snapshot.exists(), 'not_repo_change startup analysis should not emit a startup proposal snapshot'
+assert 'primary-agent startup step could not prepare a workflow startup brief' in output, 'not_repo_change startup analysis should fail closed instead of creating workflow intent'
 PY
 
 # Custom confirmation UI: start should render proposal content separately from approval-only Start/Cancel actions.

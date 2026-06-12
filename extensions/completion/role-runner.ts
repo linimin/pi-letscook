@@ -79,7 +79,7 @@ const PACKAGE_AGENTS_DIR = PACKAGE_ROOT ? path.join(PACKAGE_ROOT, "agents") : un
 const CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT = [
 	"You analyze recent /cook startup discussion and return a strict JSON object.",
 	"Do not emit markdown, code fences, or commentary.",
-	"Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise, task_type, evaluation_profile.",
+	"Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.",
 	"You may additionally include optional keys alternate_missions, completed_topics, and negated_topics when they are clearly supported by the discussion and canonical workflow context.",
 	"Use verdict values: startable, needs_clarification, planning_only, not_repo_change, or unsafe.",
 	"Use workflow_relation values: new_workflow, continue_current_workflow, replace_current_workflow, or unclear.",
@@ -96,7 +96,7 @@ const CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT = [
 	"diagnostics must explain why the verdict, workflow_relation, and confidence were chosen.",
 	"critique must contain operator-facing cautions, concerns, or reminders that should be shown separately from mission and scope later.",
 	"risks must contain concrete failure modes or regressions that the later workflow should keep in view.",
-	"task_type and evaluation_profile should be candidate routing hints only; reuse completion-workflow and completion-rubric-v1 unless the structured startup intent clearly requires another explicit value.",
+	"Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.",
 	"possible_noise should list discussion points that look stale, weakly related, unsafe to promote into scope, or already completed elsewhere.",
 	"When discussion is insufficient, contradictory, planning-only, or low-confidence, prefer a non-startable verdict with diagnostics over invention.",
 ].join(" ");

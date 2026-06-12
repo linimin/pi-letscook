@@ -6,7 +6,7 @@
 
 - removed the remaining main-path `/cook` free-text `task_type` / `evaluation_profile` inference so startup and refocus now keep the packaged `completion-workflow` / `completion-rubric-v1` defaults unless an explicit structured artifact supplies routing fields
 - tightened same-entry explicit-handoff startup synthesis so only explicit handoffs that still need startup tightening can be replaced by synthesized structured output, removing generic semantic mission matching while preserving explicit-precedence for already-complete handoffs
-- added planning-only regression and release-parity coverage so heuristic cleanup cannot silently reopen non-repo-change startup paths or drift public contract text
+- added live startup-analysis prompt parity plus planning-only and `not_repo_change` fail-closed regression coverage so heuristic cleanup cannot silently reintroduce discussion-derived routing hints, reopen non-repo-change startup paths, or drift public contract text
 
 ## 0.1.89
 
