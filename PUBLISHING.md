@@ -8,6 +8,12 @@ Run from the package root:
 npm run smoke-test
 bash ./scripts/helper-runtime-capability-test.sh
 bash ./scripts/helper-packaging-smoke-test.sh
+bash ./scripts/helper-authority-boundary-test.sh
+bash ./scripts/helper-artifact-layout-test.sh
+bash ./scripts/helper-runtime-contract-test.sh
+bash ./scripts/helper-role-gating-test.sh
+bash ./scripts/helper-structured-output-test.sh
+bash ./scripts/helper-observability-test.sh
 npm run release-check
 ```
 

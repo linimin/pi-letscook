@@ -1,6 +1,6 @@
 # @linimin/pi-letscook
 
-`/cook` is optional workflow mode for turning main-chat discussion about concrete repo changes into a resumable repo workflow stored in repo-local `.agent/**` state.
+`/cook` is optional workflow mode for turning main-chat discussion about concrete repo changes into a resumable repo workflow stored in repo-local `.agent/**` state. Internal V1 helper subagents (`completion_assist`) are available only to allowed completion roles beneath the single canonical `/cook` control plane; they are not a public generic subagent framework.
 
 You can still implement directly in ordinary chat when you do not need workflow state. Use `/cook` when you want confirm-first startup, resumability, review/audit flow, or canonical `.agent/**` control.
 
