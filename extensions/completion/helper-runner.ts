@@ -154,6 +154,27 @@ function normalizeRepoRelativePath(rawPath: string, fieldName: string): string {
 	return normalized === "." ? "." : normalized.replace(/^\.\//, "");
 }
 
+function resolveHelperArtifactDir(artifactsRoot: string, runId: string): string {
+	if (runId.includes("\0")) {
+		throw new CompletionHelperRunnerError("policy", "helper runId must not contain NUL bytes");
+	}
+	if (runId.trim().length === 0) {
+		throw new CompletionHelperRunnerError("policy", "helper runId must be non-empty");
+	}
+	if (path.isAbsolute(runId)) {
+		throw new CompletionHelperRunnerError("policy", "helper runId must stay under canonical helper scratch");
+	}
+	if (runId.includes("/") || runId.includes("\\")) {
+		throw new CompletionHelperRunnerError("policy", "helper runId must not contain path separators");
+	}
+	const resolvedArtifactsRoot = path.resolve(artifactsRoot);
+	const artifactDir = path.resolve(resolvedArtifactsRoot, runId);
+	if (artifactDir === resolvedArtifactsRoot || !isPathInside(resolvedArtifactsRoot, artifactDir)) {
+		throw new CompletionHelperRunnerError("policy", "helper runId must stay under canonical helper scratch");
+	}
+	return artifactDir;
+}
+
 function truncateUtf8(value: string, maxBytes: number): string {
 	if (utf8Length(value) <= maxBytes) return value;
 	let result = "";
@@ -588,9 +609,8 @@ function artifactRelativePath(root: string, targetPath: string): string {
 
 export async function runCompletionHelper(args: RunCompletionHelperArgs): Promise<CompletionHelperResult> {
 	let rootRealpath = path.resolve(args.root);
-	const artifactsRootHint = helperArtifactsDir(rootRealpath);
 	const runId = args.runId ?? `${args.helper}-${Date.now()}-${randomUUID().slice(0, 8)}`;
-	let artifactDir = path.join(artifactsRootHint, runId);
+	let artifactDir = path.join(helperArtifactsDir(rootRealpath), "_rejected-run-id");
 	let resolvedCwd = rootRealpath;
 	let usedModel: string | undefined;
 	let callerRoleModel: string | undefined;
@@ -624,7 +644,8 @@ export async function runCompletionHelper(args: RunCompletionHelperArgs): Promis
 			throw new CompletionHelperRunnerError("policy", `${args.callerRole} may not run helper ${args.helper} in V1`);
 		}
 		rootRealpath = await resolveRepoRootRealpath(args.root);
-		artifactDir = path.join(helperArtifactsDir(rootRealpath), runId);
+		artifactDir = path.join(helperArtifactsDir(rootRealpath), "_rejected-run-id");
+		artifactDir = resolveHelperArtifactDir(helperArtifactsDir(rootRealpath), runId);
 		resolvedCwd = rootRealpath;
 		const helperDefinition = await loadHelperDefinition(args.helper);
 		resolvedCwd = await resolveHelperCwd(rootRealpath, args.cwd);
@@ -637,7 +658,7 @@ export async function runCompletionHelper(args: RunCompletionHelperArgs): Promis
 		callerRoleModel = modelResolution.callerRoleModel;
 		const timeoutMs = clampHelperTimeoutMs(args.helper, args.timeoutMs);
 		const artifactsRoot = await ensureHelperArtifactsRoot(rootRealpath);
-		artifactDir = path.join(artifactsRoot, runId);
+		artifactDir = resolveHelperArtifactDir(artifactsRoot, runId);
 		await fsp.mkdir(artifactDir, { recursive: false });
 		const promptPath = path.join(artifactDir, "prompt.md");
 		await writeTextArtifact(artifactDir, "prompt.md", helperDefinition.systemPrompt);

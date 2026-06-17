@@ -24,6 +24,15 @@ async function readJson(filePath) {
   return JSON.parse(await fsp.readFile(filePath, 'utf8'));
 }
 
+async function pathExists(targetPath) {
+  try {
+    await fsp.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 (async () => {
   const pkgRoot = process.env.PKGTST_ROOT;
   const runnerMod = await import(pathToFileURL(path.join(pkgRoot, 'extensions/completion/helper-runner.ts')).href);
@@ -45,6 +54,7 @@ async function readJson(filePath) {
     await fsp.mkdir(path.join(repoRoot, 'subdir'), { recursive: true });
     await fsp.mkdir(path.join(repoRoot, '.pi', 'helpers'), { recursive: true });
     const realRepoRoot = await fsp.realpath(repoRoot);
+    const helperRoot = helperArtifactsDir(realRepoRoot);
     await fsp.writeFile(path.join(repoRoot, '.pi', 'helpers', 'scout.md'), 'override should be ignored\n', 'utf8');
 
     const result = await runCompletionHelper({
@@ -99,6 +109,43 @@ async function readJson(filePath) {
     const artifactResult = await readJson(resultPath);
     assert.equal(artifactResult.ok, true, 'successful result.json should preserve the success contract');
     assert.equal(artifactResult.artifactDir, expectedArtifactDir);
+
+    async function assertRejectedRunId(runId, escapedPath) {
+      let runnerCalled = false;
+      const rejected = await runCompletionHelper({
+        root: repoRoot,
+        helper: 'scout',
+        callerRole: 'completion-implementer',
+        task: `Reject unsafe helper runId: ${runId}`,
+        runId,
+        subprocessRunner: async () => {
+          runnerCalled = true;
+          return {
+            exitCode: 0,
+            assistantText: JSON.stringify({
+              summary: 'Runner should never be called for unsafe run ids.',
+              evidence: [],
+              paths: [],
+              open_questions: [],
+            }),
+            eventLines: [],
+          };
+        },
+      });
+      assert.equal(rejected.ok, false, `unsafe runId must fail closed: ${runId}`);
+      assert.equal(rejected.failureKind, 'policy', `unsafe runId must be rejected as policy: ${runId}`);
+      assert.ok(rejected.message.includes('runId'), `unexpected invalid-runId message for ${runId}: ${rejected.message}`);
+      assert.equal(runnerCalled, false, `subprocess runner must not be called for unsafe runId: ${runId}`);
+      assert.ok(
+        path.resolve(rejected.artifactDir).startsWith(`${helperRoot}${path.sep}`),
+        `rejected runId must keep its reported artifact dir under canonical helper scratch: ${rejected.artifactDir}`,
+      );
+      assert.equal(await pathExists(escapedPath), false, `unsafe runId must not create escaped artifacts: ${escapedPath}`);
+    }
+
+    await assertRejectedRunId('../escaped-artifacts', path.join(realRepoRoot, '.agent', 'current', 'tmp', 'escaped-artifacts'));
+    await assertRejectedRunId('nested/run-id', path.join(helperRoot, 'nested', 'run-id'));
+    await assertRejectedRunId('nested\\run-id', path.join(helperRoot, 'nested\\run-id'));
 
     const missingScratchRoot = path.join(tmpRoot, 'missing-scratch-repo');
     await fsp.mkdir(missingScratchRoot, { recursive: true });
