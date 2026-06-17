@@ -6,10 +6,12 @@ Run from the package root:
 
 ```bash
 npm run smoke-test
+bash ./scripts/helper-runtime-capability-test.sh
+bash ./scripts/helper-packaging-smoke-test.sh
 npm run release-check
 ```
 
-Those direct verifier entrypoints self-isolate the repo-local extension when they shell back into `pi`, so no extra `pi --no-extensions` wrapper is required even if this package is also installed globally on the publishing machine.
+Those direct verifier entrypoints self-isolate the repo-local extension when they shell back into `pi`, so no extra `pi --no-extensions` wrapper is required even if this package is also installed globally on the publishing machine. The two helper probes intentionally pack and extract the package before invoking `pi -e ...`, so source-tree-only success is not treated as sufficient helper-runtime proof.
 
 ## GitHub release flow
 

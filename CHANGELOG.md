@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- added a PR0 helper capability gate with a dormant explicit-load `extensions/helper-tools/` probe extension, published `helpers/scout.md` / `helpers/critic.md` assets, and fail-closed `scripts/helper-runtime-capability-test.sh` / `scripts/helper-packaging-smoke-test.sh` coverage for packaged `pi -e ...` loading, required helper CLI flags, and JSON-mode progress/final-result capture
+- wired the helper capability and packaging probes into `npm run release-check`, `package.json`, README, and PUBLISHING guidance so helper rollout stays blocked until package-installed runtime assumptions are proven on the supported Pi CLI
+
 ### Fixed
 
 - removed the remaining main-path `/cook` free-text `task_type` / `evaluation_profile` inference so startup and refocus now keep the packaged `completion-workflow` / `completion-rubric-v1` defaults unless an explicit structured artifact supplies routing fields

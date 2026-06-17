@@ -198,6 +198,8 @@ Reviewer, auditor, and stop-judge dispatch/reminder surfaces now also thread the
 
 Deterministic verification now also persists a durable canonical artifact in `.agent/current/verification-evidence.json`. Fresh scaffolds create an idle placeholder, implementers update it for the selected slice or current HEAD, reminder/recovery/evaluation surfaces thread its path and summary, and the package-owned verifier entrypoints (`scripts/verify-completion-control-plane.js` and `scripts/verify-completion-stop.sh`), `bash scripts/canonical-evidence-artifact-test.sh`, `npm run release-check`, plus the thin `.agent/verify_completion_*.sh` forwarders all fail closed when that artifact is missing, stale, or out of parity with the selected slice or current HEAD.
 
+The package now also ships dormant package-owned helper prompt assets in `helpers/` plus an explicit-load `extensions/helper-tools/` probe extension used only by the release-gated helper capability checks. This capability-gate slice does **not** auto-load that extension or expose `completion_assist`; helper runtime exposure stays blocked until later slices land on top of the verified `pi -e ...`, CLI-flag, and JSON-mode assumptions.
+
 Canonical reviewer/auditor/stop-judge transcription now fails closed on malformed rubric-bearing reports: the shared rubric heading plus all four rubric dimensions must be present, required role fields must remain intact, and reviewer/stop-judge yes/no verdicts cannot contradict rubric `fail` lines.
 
 Evaluator calibration now also fails closed on semantically lenient but well-formed reports. `npm run evaluator-calibration-test` drives the packaged transcription path through reviewer yes-with-follow-up, auditor open-contracts-with-`Next mandatory slice: none`, and stop-judge yes-with-open-contracts fixtures while still accepting truthful passing reports. It also rejects the reproducible `none; ...` bypass family for reviewer follow-up, auditor worktree blockers, and stop-judge open-contract reporting, while still accepting the reviewer routing forms `Smallest follow-up slice: none; proceed to completion-auditor.`, `Smallest follow-up slice: none, proceed to completion-auditor.`, and `Smallest follow-up slice: none - proceed to auditor.` with terminal punctuation or whitespace only. The role runner now also does one targeted repair retry for the common reviewer yes-with-follow-up and auditor clean-with-blockers contradictions before surfacing a transcription warning, while the canonical transcription gate itself remains fail-closed. Both `npm run release-check` and the package-owned `scripts/verify-completion-stop.sh` entrypoint — including the thin `.agent/verify_completion_stop.sh` forwarder — include this calibration gate.
@@ -261,8 +263,10 @@ In short:
 ## Package layout
 
 - `extensions/completion/index.ts` — main extension implementation
+- `extensions/helper-tools/index.ts` — explicit-load helper capability probe extension used by release-gated helper runtime checks
 - `skills/completion-protocol/` — shared protocol documentation
 - `agents/completion-*.md` — package-local completion role prompts
+- `helpers/` — package-owned helper prompt assets published ahead of later helper-runtime slices
 - `scripts/` — smoke, regression, and release checks
 
 ## Development
@@ -276,13 +280,15 @@ npm run smoke-test
 npm run refocus-test
 npm run context-proposal-test
 bash scripts/canonical-evidence-artifact-test.sh
+bash scripts/helper-runtime-capability-test.sh
+bash scripts/helper-packaging-smoke-test.sh
 npm run observability-status-test
 npm run evaluator-calibration-test
 npm run rubric-contract-test
 npm run release-check
 ```
 
-`npm run release-check` is the broad packaged-release verifier. It begins with `npm run verify-completion-control-plane`, so missing or stale `.agent/current/verification-evidence.json` parity fails closed before the broader suite runs, then asserts the shipped `/cook` public parity surfaces in `README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
+`npm run release-check` is the broad packaged-release verifier. It begins with `npm run verify-completion-control-plane`, then runs the helper runtime capability probe plus packed-artifact helper smoke so package-installed `pi -e ...` loading, the required helper CLI flag set, published helper assets, and JSON-mode progress/final-result capture fail closed before the broader suite continues. After that it asserts the shipped `/cook` public parity surfaces in `README.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes deterministic canonical evidence artifact coverage and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression, and finishes with `npm pack --dry-run`.
 
 The direct package-root verifier commands above intentionally self-isolate the repo-local extension when they shell back into `pi`, so you should not need to wrap them with `pi --no-extensions` even if `@linimin/pi-letscook` is also installed globally on the same machine.
 
