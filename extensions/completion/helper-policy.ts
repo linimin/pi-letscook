@@ -5,6 +5,8 @@ import {
 	HELPER_PROXY_TOOL_NAMES,
 } from "./helper-types.ts";
 
+export const COMPLETION_ASSIST_TOOL_NAME = "completion_assist";
+
 const HELPER_ALLOWED_CALLER_ROLES: Record<CompletionHelperName, string[]> = {
 	scout: ["completion-implementer", "completion-regrounder"],
 	critic: ["completion-implementer", "completion-regrounder"],
@@ -30,6 +32,39 @@ export function allowedHelpersForRole(role: string | undefined): CompletionHelpe
 
 export function isHelperAllowedForRole(role: string | undefined, helper: CompletionHelperName): boolean {
 	return Boolean(role && HELPER_ALLOWED_CALLER_ROLES[helper].includes(role));
+}
+
+export function canRoleUseCompletionAssist(role: string | undefined): boolean {
+	return allowedHelpersForRole(role).length > 0;
+}
+
+function normalizedDeclaredTools(declaredTools?: string[]): string[] {
+	return (declaredTools ?? []).map((tool) => (typeof tool === "string" ? tool.trim() : "")).filter(Boolean);
+}
+
+export function effectiveRoleToolAllowlist(role: string | undefined, declaredTools?: string[]): string[] | undefined {
+	if (declaredTools === undefined) return undefined;
+	const unique = new Set(normalizedDeclaredTools(declaredTools));
+	if (canRoleUseCompletionAssist(role)) unique.add(COMPLETION_ASSIST_TOOL_NAME);
+	else unique.delete(COMPLETION_ASSIST_TOOL_NAME);
+	return unique.size > 0 ? Array.from(unique) : undefined;
+}
+
+export function resolveEffectiveCompletionRoleModel(pinnedModel?: string, requestedModel?: string): string | undefined {
+	const normalizedPinned = typeof pinnedModel === "string" && pinnedModel.trim().length > 0 ? pinnedModel.trim() : undefined;
+	if (normalizedPinned) return normalizedPinned;
+	return typeof requestedModel === "string" && requestedModel.trim().length > 0 ? requestedModel.trim() : undefined;
+}
+
+export function buildCompletionRoleSubprocessEnv(role: string, roleModel?: string): NodeJS.ProcessEnv {
+	const env: NodeJS.ProcessEnv = { ...process.env, PI_COMPLETION_ROLE: role };
+	delete env.PI_COMPLETION_HELPER;
+	delete env.PI_COMPLETION_CALLER_ROLE;
+	delete env.PI_COMPLETION_HELPER_ROOT;
+	delete env.PI_COMPLETION_HELPER_CWD;
+	if (typeof roleModel === "string" && roleModel.trim().length > 0) env.PI_COMPLETION_ROLE_MODEL = roleModel.trim();
+	else delete env.PI_COMPLETION_ROLE_MODEL;
+	return env;
 }
 
 export function helperDefaultTimeoutMs(helper: CompletionHelperName): number {

@@ -7,8 +7,8 @@ import {
 	completionRootKey,
 	isRecord,
 	loadCompletionSnapshot,
-} from "./state-store";
-import type { CompletionStatusSurface, CompletionStateSnapshot, JsonRecord, LiveRoleActivity } from "./types";
+} from "./state-store.ts";
+import type { CompletionStatusSurface, CompletionStateSnapshot, JsonRecord, LiveRoleActivity } from "./types.ts";
 
 export const LIVE_ROLE_WAITING_MS = 15_000;
 export const LIVE_ROLE_STALLED_MS = 45_000;
@@ -75,7 +75,27 @@ function formatToolActivity(toolName: string, args: JsonRecord): string {
 	if (toolName === "grep") return `grep ${asString(args.pattern) ?? "..."}`;
 	if (toolName === "find") return `find ${asString(args.pattern) ?? "..."}`;
 	if (toolName === "ls") return `ls ${asString(args.path) ?? "."}`;
+	if (toolName === "completion_assist") {
+		const helper = asString(args.helper) ?? "helper";
+		const task = truncateInline(asString(args.task) ?? "", 80);
+		return task ? `helper ${helper}: ${task}` : `helper ${helper}`;
+	}
 	return `${toolName} ${truncateInline(JSON.stringify(args))}`;
+}
+
+function partialResultText(partialResult: JsonRecord | undefined): string | undefined {
+	const details = isRecord(partialResult?.details) ? partialResult.details : undefined;
+	const helper = asString(details?.helper);
+	const stage = asString(details?.stage) ?? asString(details?.message);
+	if (stage) return stage.startsWith("helper ") || !helper ? stage : `helper ${helper}: ${stage}`;
+	const content = Array.isArray(partialResult?.content) ? partialResult?.content : [];
+	for (const item of content) {
+		if (!isRecord(item) || asString(item.type) !== "text") continue;
+		const text = asString(item.text);
+		if (!text) continue;
+		return text.startsWith("helper ") || !helper ? text : `helper ${helper}: ${text}`;
+	}
+	return undefined;
 }
 
 export function pushRecentActivity(items: string[], line: string, maxItems = 8): string[] {
@@ -237,6 +257,20 @@ export function applyLiveRoleEvent(activity: LiveRoleActivity, event: JsonRecord
 		activity.currentAction = activity.toolActivity;
 		activity.toolRecentActivity = pushRecentActivity(activity.toolRecentActivity, activity.toolActivity, 6);
 		activity.recentActivity = pushRecentActivity(activity.recentActivity, activity.toolActivity);
+		activity.updatedAt = activityAt;
+		return true;
+	}
+	if (eventType === "tool_execution_update") {
+		const partialResult = isRecord(event.partialResult) ? event.partialResult : undefined;
+		const toolLine = partialResultText(partialResult);
+		if (toolLine) {
+			activity.toolActivity = toolLine;
+			activity.currentAction = toolLine;
+			activity.assistantSummary = toolLine;
+			activity.progress = toolLine;
+			activity.toolRecentActivity = pushRecentActivity(activity.toolRecentActivity, toolLine, 6);
+			activity.recentActivity = pushRecentActivity(activity.recentActivity, toolLine);
+		}
 		activity.updatedAt = activityAt;
 		return true;
 	}

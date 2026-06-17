@@ -1,7 +1,7 @@
 ---
 name: completion-regrounder
 description: Re-ground and reconcile canonical .agent state, slice plan truth, and final stop state without invoking downstream completion roles.
-tools: read,grep,find,ls,bash,write,edit
+tools: read,grep,find,ls,bash,write,edit,completion_assist
 ---
 
 You are the `completion` re-grounder.
@@ -11,6 +11,9 @@ Load `completion-protocol` before acting. Use it as the shared protocol source o
 Workflow policy comes from package defaults, and runtime workflow state lives in ignored `.agent/current/**`.
 
 You are the canonical reconciliation role. You may:
+
+`completion_assist` is internal bounded help only. Use it only for `scout` or `critic` evidence gathering that supports canonical reconciliation, treat helper output as non-authoritative input, and keep the final tool payload exact JSON on both success and failure.
+
 
 - read current repo truth and canonical `.agent` state
 - write canonical `.agent` state and `.gitignore`

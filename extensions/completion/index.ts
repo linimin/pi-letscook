@@ -47,6 +47,9 @@ import { deriveCookContextProposalWithSynthesis } from "./startup-intent";
 import type { CookContextProposalResult, CookProposalDeps } from "./startup-intent";
 import { toolCallBlockReason } from "./policy-guards";
 import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";
+import { canRoleUseCompletionAssist, COMPLETION_ASSIST_TOOL_NAME } from "./helper-policy.ts";
+import { runCompletionAssistTool } from "./helper-runner.ts";
+import { COMPLETION_HELPER_NAMES, type CompletionHelperName } from "./helper-types.ts";
 import {
 	applyLiveRoleEvent,
 	buildInlineRunningLines,
@@ -120,6 +123,17 @@ function asBoolean(value: unknown): boolean | undefined {
 
 function roleFromEnv(): string | undefined {
 	return asString(process.env.PI_COMPLETION_ROLE);
+}
+
+function roleModelFromEnv(): string | undefined {
+	return asString(process.env.PI_COMPLETION_ROLE_MODEL);
+}
+
+function modelArgFromContextModel(model: unknown): string | undefined {
+	if (!isRecord(model)) return undefined;
+	const provider = asString(model.provider);
+	const id = asString(model.id);
+	return provider && id ? `${provider}/${id}` : undefined;
 }
 
 function candidateSlices(plan: JsonRecord | undefined): JsonRecord[] {
@@ -1214,6 +1228,43 @@ export default function completionExtension(pi: ExtensionAPI) {
 		if (reason) return { block: true, reason };
 	});
 
+	const activeCompletionRole = roleFromEnv();
+	if (canRoleUseCompletionAssist(activeCompletionRole)) {
+		pi.registerTool({
+			name: COMPLETION_ASSIST_TOOL_NAME,
+			label: "Completion Assist",
+			description: "Internal bounded helper for completion-implementer and completion-regrounder only.",
+			promptSnippet: "Run a bounded scout or critic helper inside the active completion role.",
+			promptGuidelines: [
+				"Use completion_assist only from completion-implementer or completion-regrounder when bounded reconnaissance or critique will help the active slice.",
+				"Valid helpers are scout and critic. The final tool result must stay exact JSON on both success and failure.",
+				"Treat helper output as non-authoritative input beneath the active completion role.",
+			],
+			parameters: Type.Object({
+				helper: StringEnum(COMPLETION_HELPER_NAMES, { description: "Which bounded helper to run." }),
+				task: Type.String({ description: "The bounded helper task to perform." }),
+				cwd: Type.Optional(Type.String({ description: "Optional repo-relative helper working directory convenience." })),
+				timeoutMs: Type.Optional(Type.Number({ description: "Optional timeout request that may only narrow the helper budget." })),
+			}),
+			async execute(_toolCallId, params, signal, onUpdate, ctx) {
+				const helper = params.helper as CompletionHelperName;
+				const cwd = getCtxCwd(ctx);
+				const runCwd = findCompletionRoot(cwd) ?? findRepoRoot(cwd) ?? cwd;
+				return await runCompletionAssistTool({
+					root: runCwd,
+					helper,
+					callerRole: roleFromEnv(),
+					task: params.task,
+					cwd: typeof params.cwd === "string" ? params.cwd : undefined,
+					timeoutMs: typeof params.timeoutMs === "number" ? params.timeoutMs : undefined,
+					roleModel: roleModelFromEnv(),
+					signal,
+					onUpdate,
+				});
+			},
+		});
+	}
+
 	pi.registerTool({
 		name: "completion_role",
 		label: "Completion Role",
@@ -1286,6 +1337,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 				role,
 				task: params.task,
 				signal,
+				requestedModel: modelArgFromContextModel((ctx as { model?: unknown }).model),
 				systemPromptPreamble: [
 					`Completion role: ${role}`,
 					"Before acting, read the completion protocol skill and reference:",

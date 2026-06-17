@@ -251,7 +251,8 @@ export async function resolveHelperModel(args: {
 	callerRole: string;
 	roleModel?: string;
 }): Promise<ResolvedHelperModel> {
-	const callerRoleModel = asString(args.roleModel) ?? await loadPackagedCallerRoleModel(args.callerRole);
+	const callerRoleModel =
+		asString(args.roleModel) ?? asString(process.env.PI_COMPLETION_ROLE_MODEL) ?? await loadPackagedCallerRoleModel(args.callerRole);
 	return {
 		callerRoleModel,
 		usedModel: args.helperDefinition.model ?? callerRoleModel,
@@ -440,7 +441,51 @@ function progressEventFromJsonEvent(event: JsonRecord): CompletionHelperProgress
 	return undefined;
 }
 
+type HelperSpawnTestOverride = {
+	events?: JsonRecord[];
+	exitCode?: number;
+	stderr?: string;
+	assistantText?: string;
+	eventLines?: string[];
+};
+
+function helperSpawnTestOverride(): HelperSpawnTestOverride | undefined {
+	const raw = asString(process.env.PI_COMPLETION_TEST_HELPER_SPAWN_RESULT_JSON);
+	if (!raw) return undefined;
+	try {
+		const parsed = JSON.parse(raw);
+		if (!isRecord(parsed)) return undefined;
+		return {
+			events: Array.isArray(parsed.events) ? parsed.events.filter(isRecord) : undefined,
+			exitCode: typeof parsed.exitCode === "number" && Number.isFinite(parsed.exitCode) ? parsed.exitCode : undefined,
+			stderr: asString(parsed.stderr),
+			assistantText: typeof parsed.assistantText === "string" ? parsed.assistantText : undefined,
+			eventLines: Array.isArray(parsed.eventLines)
+				? parsed.eventLines.filter((line): line is string => typeof line === "string")
+				: undefined,
+		};
+	} catch {
+		return undefined;
+	}
+}
+
 export async function defaultHelperSubprocessRunner(spec: CompletionHelperSpawnSpec): Promise<CompletionHelperSpawnResult> {
+	const testOverride = helperSpawnTestOverride();
+	if (testOverride) {
+		const eventLines: string[] = [];
+		for (const event of testOverride.events ?? []) {
+			const rawLine = JSON.stringify(event);
+			eventLines.push(rawLine);
+			spec.onJsonEvent?.(event, rawLine);
+		}
+		if (testOverride.eventLines?.length) eventLines.push(...testOverride.eventLines);
+		return {
+			exitCode: testOverride.exitCode ?? 0,
+			stderr: testOverride.stderr,
+			assistantText: testOverride.assistantText,
+			eventLines,
+		};
+	}
 	return await new Promise<CompletionHelperSpawnResult>((resolve, reject) => {
 		const proc = spawn(spec.command, spec.args, {
 			cwd: spec.cwd,
@@ -601,6 +646,29 @@ function buildFailureResult(args: {
 		stderr: args.stderr,
 		exitCode: args.exitCode,
 	};
+}
+
+export function completionAssistFailureContract(args: {
+	helper: CompletionHelperName;
+	failureKind: CompletionHelperFailureKind | string;
+	message: string;
+	resolvedCwd: string;
+	artifactDir: string;
+}) {
+	return {
+		ok: false,
+		helper: args.helper,
+		failureKind: args.failureKind,
+		message: args.message,
+		resolvedCwd: args.resolvedCwd,
+		artifactDir: args.artifactDir,
+	};
+}
+
+export function completionAssistProgressText(helper: CompletionHelperName, event: CompletionHelperProgressEvent): string {
+	const message = event.message.trim();
+	if (message.startsWith("helper ")) return message;
+	return `helper ${helper}: ${message}`;
 }
 
 function artifactRelativePath(root: string, targetPath: string): string {
@@ -831,4 +899,75 @@ export async function runCompletionHelper(args: RunCompletionHelperArgs): Promis
 	} finally {
 		if (lockHeld) await releaseHelperLock(rootRealpath);
 	}
+}
+
+export async function runCompletionAssistTool(args: {
+	root: string;
+	helper: CompletionHelperName;
+	callerRole?: string;
+	task: string;
+	cwd?: string;
+	timeoutMs?: number;
+	signal?: AbortSignal;
+	roleModel?: string;
+	onUpdate?: (partialResult: { content: Array<{ type: "text"; text: string }>; details: Record<string, unknown> }) => void;
+}): Promise<{ content: Array<{ type: "text"; text: string }>; details: CompletionHelperResult | ReturnType<typeof completionAssistFailureContract>; isError: boolean }> {
+	const callerRole = asString(args.callerRole);
+	const runRoot = path.resolve(args.root);
+	if (!callerRole) {
+		const failure = completionAssistFailureContract({
+			helper: args.helper,
+			failureKind: "policy",
+			message: "completion_assist may only be used from an active completion role inside /cook.",
+			resolvedCwd: runRoot,
+			artifactDir: path.join(runRoot, ".agent", "current", "tmp", "helpers", "_rejected-role"),
+		});
+		return {
+			content: [{ type: "text", text: JSON.stringify(failure) }],
+			details: failure,
+			isError: true,
+		};
+	}
+	const result = await runCompletionHelper({
+		root: runRoot,
+		helper: args.helper,
+		callerRole,
+		task: args.task,
+		cwd: args.cwd,
+		timeoutMs: args.timeoutMs,
+		roleModel: args.roleModel,
+		signal: args.signal,
+		onProgress: (event) => {
+			const line = completionAssistProgressText(args.helper, event);
+			args.onUpdate?.({
+				content: [{ type: "text", text: line }],
+				details: {
+					...(event.details ?? {}),
+					helper: args.helper,
+					kind: event.kind,
+					stage: line,
+					message: line,
+				},
+			});
+		},
+	});
+	if (result.ok) {
+		return {
+			content: [{ type: "text", text: JSON.stringify(result.output) }],
+			details: result,
+			isError: false,
+		};
+	}
+	const failure = completionAssistFailureContract({
+		helper: result.helper,
+		failureKind: result.failureKind,
+		message: result.message,
+		resolvedCwd: result.resolvedCwd,
+		artifactDir: result.artifactDir,
+	});
+	return {
+		content: [{ type: "text", text: JSON.stringify(failure) }],
+		details: result,
+		isError: true,
+	};
 }

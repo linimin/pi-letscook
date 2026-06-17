@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { canRoleUseCompletionAssist, COMPLETION_ASSIST_TOOL_NAME } from "./helper-policy.ts";
 import type { JsonRecord } from "./types";
 
 function asString(value: unknown): string | undefined {
@@ -73,6 +74,18 @@ export function toolCallBlockReason(args: {
 
 	if (toolName === "completion_role" && !completionRoleDispatchAllowed) {
 		return "completion_role may only be used from an active /cook workflow session.";
+	}
+
+	if (toolName === COMPLETION_ASSIST_TOOL_NAME) {
+		if (!role) {
+			return "completion_assist may only be used from an active completion role inside /cook.";
+		}
+		if (!canRoleUseCompletionAssist(role)) {
+			return `${role} may not use completion_assist in V1.`;
+		}
+		if (!workflowHardLockActive) {
+			return "completion_assist may only be used while the canonical /cook workflow is active.";
+		}
 	}
 
 	if (toolName === "edit" || toolName === "write") {

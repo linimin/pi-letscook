@@ -15,6 +15,11 @@ import {
 } from "./startup-analysis";
 import { contextProposalAnalystProgressLines, primaryAgentHandoffProgressLines } from "./prompt-surfaces";
 import {
+	buildCompletionRoleSubprocessEnv,
+	effectiveRoleToolAllowlist,
+	resolveEffectiveCompletionRoleModel,
+} from "./helper-policy.ts";
+import {
 	applyLiveRoleEvent,
 	buildInlineRunningLines,
 	cloneLiveRoleActivity,
@@ -34,6 +39,7 @@ export type RunCompletionRoleParams = {
 	role: CompletionRole;
 	task?: string;
 	signal?: AbortSignal;
+	requestedModel?: string;
 	systemPromptPreamble: string[];
 	evaluationContextLines?: string[];
 	onUpdate?: (activity: LiveRoleActivity) => void;
@@ -605,6 +611,9 @@ export function getPiInvocation(args: string[]): { command: string; args: string
 
 export async function runCompletionRole(params: RunCompletionRoleParams): Promise<RunCompletionRoleResult> {
 	const agent = await loadAgentDefinition(params.root, params.role);
+	const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);
+	const effectiveToolAllowlist = effectiveRoleToolAllowlist(params.role, agent.tools);
+	const roleEnv = buildCompletionRoleSubprocessEnv(params.role, roleModel);
 	const systemPromptTemp = await writeTempFile(params.root, "pi-completion-role-", agent.systemPrompt);
 	const baseTaskLines = [...params.systemPromptPreamble];
 	if (params.evaluationContextLines?.length) baseTaskLines.push("", ...params.evaluationContextLines);
@@ -626,8 +635,8 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 		}
 		const prompt = taskLines.join("\n");
 		const args: string[] = ["--mode", "json", "-p", "--no-session", "--append-system-prompt", systemPromptTemp.filePath];
-		if (agent.model) args.push("--model", agent.model);
-		if (agent.tools && agent.tools.length > 0) args.push("--tools", agent.tools.join(","));
+		if (roleModel) args.push("--model", roleModel);
+		if (effectiveToolAllowlist && effectiveToolAllowlist.length > 0) args.push("--tools", effectiveToolAllowlist.join(","));
 		args.push(prompt);
 
 		const invocation = getPiInvocation(args);
@@ -641,7 +650,7 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 			const exitCode = await new Promise<number>((resolve) => {
 				const proc = spawn(invocation.command, invocation.args, {
 					cwd: params.root,
-					env: { ...process.env, PI_COMPLETION_ROLE: params.role },
+					env: roleEnv,
 					stdio: ["ignore", "pipe", "pipe"],
 					shell: false,
 				});

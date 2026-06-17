@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import { promises as fsp } from "node:fs";
 import * as path from "node:path";
-import type { CompletionStateSnapshot, CompletionWorkflowStateProbe, JsonRecord } from "./types";
+import type { CompletionStateSnapshot, CompletionWorkflowStateProbe, JsonRecord } from "./types.ts";
 
 const PROTOCOL_ID = "completion";
 const DEFAULT_TASK_TYPE = "completion-workflow";

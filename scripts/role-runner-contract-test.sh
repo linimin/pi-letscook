@@ -30,7 +30,13 @@ assertIncludes('extensions/completion/role-runner.ts', 'const reportFields = par
 assertIncludes('extensions/completion/role-runner.ts', 'const transcription = exitCode === 0 ? await transcribeRoleOutput(params.role, params.root, output, reportFields) : undefined;');
 assertIncludes('extensions/completion/role-runner.ts', 'Structured report repair mode:');
 assertIncludes('extensions/completion/role-runner.ts', 'Retrying ${params.role} once to repair structured report consistency.');
-assertIncludes('extensions/completion/role-runner.ts', 'env: { ...process.env, PI_COMPLETION_ROLE: params.role },');
+assertIncludes('extensions/completion/helper-policy.ts', 'export function effectiveRoleToolAllowlist(');
+assertIncludes('extensions/completion/helper-policy.ts', 'export function resolveEffectiveCompletionRoleModel(');
+assertIncludes('extensions/completion/helper-policy.ts', 'export function buildCompletionRoleSubprocessEnv(');
+assertIncludes('extensions/completion/role-runner.ts', 'const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);');
+assertIncludes('extensions/completion/role-runner.ts', 'const effectiveToolAllowlist = effectiveRoleToolAllowlist(params.role, agent.tools);');
+assertIncludes('extensions/completion/role-runner.ts', 'const roleEnv = buildCompletionRoleSubprocessEnv(params.role, roleModel);');
+assertIncludes('extensions/completion/role-runner.ts', 'env: roleEnv,');
 assertIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.');
 assertIncludes('extensions/completion/role-runner.ts', 'Use workflow_relation values: new_workflow, continue_current_workflow, replace_current_workflow, or unclear.');
 assertIncludes('extensions/completion/role-runner.ts', 'Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.');
@@ -47,6 +53,7 @@ assertIncludes('extensions/completion/prompt-surfaces.ts', 'Return exactly one J
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.');
 assertIncludes('extensions/completion/index.ts', 'import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";');
 assertIncludes('extensions/completion/index.ts', 'const result = await runCompletionRole({');
+assertIncludes('extensions/completion/index.ts', 'requestedModel: modelArgFromContextModel((ctx as { model?: unknown }).model),');
 assertIncludes('extensions/completion/index.ts', 'generateCookHandoff: async ({ recentEntries, workflowContextLines }) =>');
 assertIncludes('extensions/completion/index.ts', 'generateCookHandoffWithAgent({');
 assertNotIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: mission, scope, constraints, acceptance, critique, risks, task_type, evaluation_profile, confidence, possible_noise.');

@@ -50,6 +50,9 @@
     "helper-packaging-smoke-test": "bash ./scripts/helper-packaging-smoke-test.sh",
     "helper-authority-boundary-test": "bash ./scripts/helper-authority-boundary-test.sh",
     "helper-artifact-layout-test": "bash ./scripts/helper-artifact-layout-test.sh",
+    "helper-role-gating-test": "bash ./scripts/helper-role-gating-test.sh",
+    "helper-structured-output-test": "bash ./scripts/helper-structured-output-test.sh",
+    "helper-observability-test": "bash ./scripts/helper-observability-test.sh",
     "helper-runtime-contract-test": "bash ./scripts/helper-runtime-contract-test.sh",
     "release-check": "bash ./scripts/release-check.sh",
     "worktree-root-boundary-test": "bash ./scripts/worktree-root-boundary-test.sh"
