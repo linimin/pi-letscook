@@ -54,6 +54,14 @@ export function resolveFiles(root: string) {
 	};
 }
 
+export function helperArtifactsDir(root: string): string {
+	return path.join(resolveFiles(root).tmpDir, "helpers");
+}
+
+export function helperRunLockDir(root: string): string {
+	return path.join(helperArtifactsDir(root), "_active.lock");
+}
+
 function walkUpForDir(startCwd: string, segments: string[], stopAt?: string): string | undefined {
 	let current = path.resolve(startCwd);
 	const boundary = stopAt ? path.resolve(stopAt) : undefined;

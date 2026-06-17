@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
+import { buildHelperProxyToolDefinitions } from "../completion/helper-proxy-tools.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -14,8 +15,21 @@ type HelperAssetReport = {
 	sha256: string | null;
 };
 
-const EXTENSION_DIR = typeof __dirname === "string" ? __dirname : process.cwd();
-const PACKAGE_ROOT = path.resolve(EXTENSION_DIR, "..", "..");
+function resolvePackageRoot(): string {
+	const candidates = [
+		typeof __dirname === "string" ? path.resolve(__dirname, "..", "..") : undefined,
+		process.cwd(),
+	].filter((candidate): candidate is string => Boolean(candidate));
+	for (const candidate of candidates) {
+		if (fs.existsSync(path.join(candidate, "package.json")) && fs.existsSync(path.join(candidate, "helpers", "scout.md"))) {
+			return candidate;
+		}
+	}
+	return candidates[0] ?? process.cwd();
+}
+
+const PACKAGE_ROOT = resolvePackageRoot();
+const EXTENSION_DIR = path.join(PACKAGE_ROOT, "extensions", "helper-tools");
 const PACKAGE_JSON_PATH = path.join(PACKAGE_ROOT, "package.json");
 const HELPER_ASSET_PATHS = {
 	scout: path.join(PACKAGE_ROOT, "helpers", "scout.md"),
@@ -164,4 +178,8 @@ export default function helperToolsExtension(pi: ExtensionAPI) {
 			};
 		},
 	});
+
+	for (const tool of buildHelperProxyToolDefinitions(Type)) {
+		pi.registerTool(tool as any);
+	}
 }
