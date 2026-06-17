@@ -15,10 +15,16 @@ cleanup_release_check_agent_dir() {
 trap cleanup_release_check_agent_dir EXIT
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
-echo "[release-check] running control-plane validation, helper runtime capability probe, packaged helper smoke, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context/worktree-root regressions, agent_end auto-resume delivery coverage, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
+echo "[release-check] running control-plane validation, helper runtime capability probe, packaged helper smoke, helper authority-boundary, artifact-layout, runtime-contract, role-gating, structured-output, observability regressions, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context/worktree-root regressions, agent_end auto-resume delivery coverage, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
 npm run verify-completion-control-plane
 bash ./scripts/helper-runtime-capability-test.sh
 PI_HELPER_PACKAGING_SKIP_RUNTIME=1 bash ./scripts/helper-packaging-smoke-test.sh
+bash ./scripts/helper-authority-boundary-test.sh
+bash ./scripts/helper-artifact-layout-test.sh
+bash ./scripts/helper-runtime-contract-test.sh
+bash ./scripts/helper-role-gating-test.sh
+bash ./scripts/helper-structured-output-test.sh
+bash ./scripts/helper-observability-test.sh
 
 python3 - <<'PY'
 from pathlib import Path
