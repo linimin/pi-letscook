@@ -66,12 +66,11 @@ from pathlib import Path
 checks = {
     "README.md": [
         "You can still implement directly in ordinary chat when you do not need workflow state.",
-        "When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent handoff.",
-        "If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context or inline `/cook` prompt, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.",
-        "If no explicit or synthesized handoff is startable, `/cook` may still use validated `recent_discussion` startup analysis as a bounded fallback before showing **Start** or **Cancel**.",
-        "Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent handoff in the same entry when needed or, when no handoff is available, fall back to validated `recent_discussion` startup analysis.",
+        "When you explicitly run `/cook`, it calls a same-entry primary-agent handoff synthesis step from the current task context or inline `/cook` prompt, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.",
+        "If no primary-agent-generated handoff is startable, `/cook` may still use validated `recent_discussion` startup analysis as a bounded fallback before showing **Start** or **Cancel**.",
+        "Preview `/cook` capsules in ordinary chat may still help the conversation, but `/cook` does not consume them directly. It always synthesizes the startup handoff for the current workflow entry and only falls back to validated `recent_discussion` analysis when synthesis cannot produce a startable brief.",
         "`/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation",
-        "startup and next-round entry stay confirm-first, following explicit primary-agent handoff -> same-entry primary-agent handoff synthesis -> validated `recent_discussion` startup analysis -> fail closed",
+        "startup and next-round entry stay confirm-first, following same-entry primary-agent handoff synthesis -> validated `recent_discussion` startup analysis -> fail closed",
         "stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow",
         "When a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.",
         "`task_type` and `evaluation_profile` only come from explicit structured startup artifacts when those fields are present; otherwise `/cook` keeps the packaged `completion-workflow` / `completion-rubric-v1` defaults instead of inferring them from free-text discussion",
@@ -81,12 +80,12 @@ checks = {
         "preserved the confirmed `/cook` startup intent in canonical `.agent/current/startup-brief.json` so workflow entry is durable before regrounding authors canonical slices",
         "moved workflow-session legitimacy away from in-memory routing activation and legacy `/skill:completion-protocol` prompt dependence toward canonical workflow-session state plus explicit `/cook` entry turns",
         "removed the remaining main-path `/cook` free-text `task_type` / `evaluation_profile` inference so startup and refocus now keep the packaged `completion-workflow` / `completion-rubric-v1` defaults unless an explicit structured artifact supplies routing fields",
-        "tightened same-entry explicit-handoff startup synthesis so only explicit handoffs that still need startup tightening can be replaced by synthesized structured output, removing generic semantic mission matching while preserving explicit-precedence for already-complete handoffs",
+        "removed fresh explicit `cook_handoff` capsule precedence from `/cook` startup so every workflow entry now synthesizes a fresh primary-agent handoff from current context or inline prompt before any validated `recent_discussion` fallback runs",
         "aligned `/cook` startup docs/help plus smoke/release parity checks with the shipped validated `recent_discussion` fallback so public contract text no longer claims startup is handoff-only while explicit-handoff precedence and fail-closed analysis remain intact",
     ],
     "extensions/completion/prompt-surfaces.ts": [
-        '"If the user explicitly runs /cook, the extension should first prefer a fresh explicit primary-agent handoff, otherwise call a primary-agent handoff synthesis step from the current task context, show Start/Cancel confirmation, and persist the confirmed startup brief into .agent/** without making the user rerun /cook."',
-        '"If no explicit or synthesized handoff is available, /cook may still use a validated recent-discussion startup brief as a bounded fallback for a concrete repo-change mission."',
+        '"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context or inline /cook prompt, show Start/Cancel confirmation, and persist the confirmed startup brief into .agent/** without making the user rerun /cook."',
+        '"If no primary-agent-generated handoff is startable, /cook may still use a validated recent-discussion startup brief as a bounded fallback for a concrete repo-change mission."',
         '"Do not describe that recent-discussion fallback as generic guessing, and weak, planning-only, not_repo_change, or unclear discussion must still fail closed."',
         '"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role."',
         '"Supported same-repo controls are: rerun /cook or /cook resume to continue from canonical state; run /cook park to record a parked paused posture that unlocks ordinary direct edits and forces canonical reground before workflow continuation; run /cook cancel to close the workflow and disable stale hard locks or auto-resume."',
@@ -105,7 +104,7 @@ checks = {
     ],
     "extensions/completion/index.ts": [
         '"/cook failed closed because the primary-agent startup step could not prepare a workflow startup brief from the current task context. Clarify the mission, repo-change intent, or key constraints in the main chat, then rerun /cook."',
-        'description: "/cook workflow: start or replace workflow by first preferring a fresh explicit primary-agent handoff, then same-entry primary-agent handoff synthesis from the current task context or inline prompt, and only then bounded validated recent_discussion startup analysis when no handoff is startable (fail closed otherwise); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls"',
+        'description: "/cook workflow: start or replace workflow by first asking the primary agent to synthesize a startup handoff from the current task context or inline prompt, and only then bounded validated recent_discussion startup analysis when no primary-agent handoff is startable (fail closed otherwise); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls"',
         '"Do not call completion_role from ordinary chat; it is reserved for active /cook workflow sessions."',
         '`COMPLETION WORKFLOW DRIVER\\nStart or continue the completion workflow for this repo.',
         'function isLikelyWorkflowContinuationTurn(',
@@ -121,8 +120,8 @@ checks = {
     "skills/cook-handoff-boundary/SKILL.md": [
         '- load or follow `completion-protocol` while still in ordinary chat',
         '- call `completion_role` before the user has explicitly entered `/cook`',
-        'if no explicit or synthesized handoff is startable, allow validated recent-discussion startup analysis only as a bounded fallback for a concrete repo-change mission',
-        '`/cook` may use validated recent-discussion startup analysis only when no explicit or synthesized handoff is available',
+        'if no primary-agent-generated handoff is startable, allow validated recent-discussion startup analysis only as a bounded fallback for a concrete repo-change mission',
+        '`/cook` may use validated recent-discussion startup analysis only when no primary-agent-generated handoff is startable',
     ],
     "skills/completion-protocol/SKILL.md": [
         'Load this skill only after the user explicitly enters `/cook` and you are operating inside the `completion` workflow as the workflow driver or a completion role.',

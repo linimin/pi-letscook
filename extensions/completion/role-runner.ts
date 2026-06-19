@@ -114,6 +114,7 @@ const PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT = [
 	"Return either exactly one fenced ```cook_handoff JSON block or one brief plain sentence explaining why no workflow startup handoff can be prepared.",
 	"If you can prepare a handoff, the JSON must use kind cook_handoff, source primary_agent, and handoff_kind implementation_workflow_handoff.",
 	"Capture the best mission-level startup brief you can from recent discussion and canonical workflow context so /cook can move directly into Start/Cancel confirmation.",
+	"If canonical workflow context includes inline /cook startup intent, treat that inline prompt as the highest-priority explicit mission signal for this generation step.",
 	"When the user has clearly accepted a concrete assistant-proposed slice, carry that slice forward into the handoff instead of broadening or re-guessing the mission.",
 	"Do not make /cook infer or rediscover the mission from recent discussion later; author the handoff now from the primary-agent view of the task.",
 	"When recent discussion is meta-discussion about how to implement a change, recover the underlying repo-change mission instead of echoing planning-only wording.",

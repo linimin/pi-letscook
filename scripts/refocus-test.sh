@@ -2,8 +2,81 @@
 set -euo pipefail
 
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+latest_session_handoff_output() {
+  local session_path="$1"
+  python3 - "$session_path" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+session_path = Path(sys.argv[1])
+if not session_path.exists():
+    raise SystemExit(0)
+entries = []
+with session_path.open('r', encoding='utf-8') as fh:
+    for line in fh:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+for entry in reversed(entries):
+    if entry.get('type') != 'message':
+        continue
+    message = entry.get('message') or {}
+    if message.get('role') != 'assistant':
+        continue
+    content = message.get('content')
+    if not isinstance(content, str):
+        continue
+    matches = re.findall(r"```cook_handoff\s*[\s\S]*?```", content, re.MULTILINE)
+    if matches:
+        print(matches[-1])
+        break
+PY
+}
 pi() {
-  command pi --no-extensions "$@"
+  local session_path=""
+  local prompt=""
+  local prev=""
+  for arg in "$@"; do
+    if [[ "$prev" == "--session" ]]; then
+      session_path="$arg"
+      prev=""
+      continue
+    fi
+    if [[ "$prev" == "-p" ]]; then
+      prompt="$arg"
+      prev=""
+      continue
+    fi
+    if [[ "$arg" == "--session" || "$arg" == "-p" ]]; then
+      prev="$arg"
+    fi
+  done
+  local -a extra_env=()
+  if [[ -z "${PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT:-}" && -n "$session_path" && "$prompt" =~ ^/cook([[:space:]]*)$ ]]; then
+    local handoff
+    handoff="$(latest_session_handoff_output "$session_path")"
+    if [[ -n "$handoff" ]]; then
+      extra_env+=("PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT=$handoff")
+    fi
+  fi
+  local -a forwarded_env=()
+  while IFS= read -r name; do
+    [[ "$name" == "PI_COMPLETION_ROLE" ]] && continue
+    forwarded_env+=("$name=${!name}")
+  done < <(compgen -v | grep -E '^PI_(COMPLETION|HELPER)_' || true)
+  local pi_cmd
+  pi_cmd="$(command -v pi)"
+  set +u
+  env "${forwarded_env[@]}" "${extra_env[@]}" "$pi_cmd" --no-extensions "$@"
+  local status=$?
+  set -u
+  return $status
 }
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -256,7 +329,7 @@ active = json.loads(after['active-slice.json'])
 current_state = json.loads(before['state.json'])
 assert current_state['mission_anchor'] == initial_mission, 'active /cook inline prompt should start from the current mission anchor'
 assert routing['action'] == 'refocus', 'active /cook inline prompt should route through refocus'
-assert routing['reason'] == 'fresh_explicit_handoff', 'active /cook inline prompt should synthesize an explicit startup brief for replacement'
+assert routing['reason'] == 'primary_agent_handoff', 'active /cook inline prompt should synthesize an explicit startup brief for replacement'
 assert routing['signalSource'] == 'explicit_structured_artifact', 'active /cook inline prompt should report explicit structured routing for the synthesized handoff'
 assert routing['workflowRelation'] == 'replace_current_workflow', 'active /cook inline prompt should classify the synthesized handoff as a replacement workflow'
 assert routing['confidence'] == 'high', 'active /cook inline prompt should keep explicit replacement routing at high confidence'
@@ -358,7 +431,7 @@ assert routing['mode'] == 'bare', 'supported refocus should use bare active-work
 assert 'explicitGoal' not in routing, 'supported bare refocus should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'supported bare refocus should not expose removed explicit-goal shim fields'
 assert routing['action'] == 'refocus', 'supported bare /cook should classify as refocus when a fresh explicit handoff proposes a different mission'
-assert routing['reason'] == 'fresh_explicit_handoff', 'supported bare /cook should record the explicit-handoff replacement reason'
+assert routing['reason'] == 'primary_agent_handoff', 'supported bare /cook should record the explicit-handoff replacement reason'
 assert routing['signalSource'] == 'explicit_structured_artifact', 'supported bare /cook should report the explicit structured routing source'
 assert routing['workflowRelation'] == 'replace_current_workflow', 'supported bare /cook should derive a replacement workflow_relation from the explicit handoff'
 assert routing['confidence'] == 'high', 'supported bare /cook should treat the explicit replacement handoff as high confidence'
@@ -459,13 +532,13 @@ assert routing['mode'] == 'bare', 'bare /cook should snapshot bare active-workfl
 assert 'explicitGoal' not in routing, 'bare chooser routing should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'bare chooser routing should not expose removed explicit-goal shim fields'
 assert routing['action'] == 'refocus', 'fresh explicit replacement handoff should classify active bare /cook as refocus'
-assert routing['reason'] == 'fresh_explicit_handoff', 'fresh explicit replacement handoff should record the explicit-handoff reason'
+assert routing['reason'] == 'primary_agent_handoff', 'fresh explicit replacement handoff should record the explicit-handoff reason'
 assert routing['currentMissionAnchor'] == updated_mission, 'explicit-handoff routing should keep the current mission anchor until the user approves replacement'
 assert routing['proposedMissionAnchor'] == replacement_mission, 'explicit-handoff routing should expose the proposed replacement mission'
 assert routing['proposalSource'] == 'handoff_capsule', 'explicit-handoff routing should preserve the handoff source'
 assert chooser['title'].startswith('Existing completion workflow found'), 'bare chooser snapshot should describe the existing-workflow prompt'
 assert chooser['choices'][0].startswith('Continue current workflow'), 'bare chooser should keep the continue option'
-assert chooser['choices'][1].startswith('Start new workflow from explicit primary-agent handoff'), 'bare chooser should offer the explicit-handoff replacement option'
+assert chooser['choices'][1].startswith('Start new workflow from primary-agent-generated startup handoff'), 'bare chooser should offer the generated-handoff replacement option'
 assert 'Start/Cancel confirmation' in chooser['choices'][1], 'bare chooser should mention the approval-only replacement confirmation'
 assert chooser['choices'][2].startswith('Cancel'), 'bare chooser should keep the cancel option'
 assert 'Discuss changes in the main chat and rerun /cook.' in output, 'bare chooser cancel should redirect users back to the main chat and rerun /cook'
@@ -502,7 +575,7 @@ assert state['mission_anchor'] == updated_mission, 'final Start/Cancel cancel sh
 assert plan['mission_anchor'] == updated_mission, 'final Start/Cancel cancel should keep plan.json unchanged'
 assert active['mission_anchor'] == updated_mission, 'final Start/Cancel cancel should keep active-slice.json unchanged'
 assert routing['action'] == 'refocus', 'final Start/Cancel cancel should still come from an explicit-handoff refocus classification'
-assert routing['reason'] == 'fresh_explicit_handoff', 'final Start/Cancel cancel should preserve the explicit-handoff reason'
+assert routing['reason'] == 'primary_agent_handoff', 'final Start/Cancel cancel should preserve the explicit-handoff reason'
 assert routing['currentMissionAnchor'] == updated_mission, 'final Start/Cancel cancel should keep the current mission anchor until the user approves replacement'
 assert proposal['mission'] == replacement_mission, 'final Start/Cancel cancel should still prepare the replacement proposal before rewriting state'
 assert proposal['source'] == 'handoff_capsule', 'final Start/Cancel cancel should preserve the explicit-handoff proposal source'
@@ -541,7 +614,7 @@ assert routing['mode'] == 'bare', 'accepted bare refocus should keep bare routin
 assert 'explicitGoal' not in routing, 'accepted bare refocus should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'accepted bare refocus should not expose removed explicit-goal shim fields'
 assert routing['action'] == 'refocus', 'accepted bare refocus should keep the explicit-handoff refocus classification'
-assert routing['reason'] == 'fresh_explicit_handoff', 'accepted bare refocus should keep the explicit-handoff reason'
+assert routing['reason'] == 'primary_agent_handoff', 'accepted bare refocus should keep the explicit-handoff reason'
 assert routing['signalSource'] == 'explicit_structured_artifact', 'accepted bare refocus should preserve the explicit structured routing source'
 assert routing['workflowRelation'] == 'replace_current_workflow', 'accepted bare refocus should keep the replacement workflow_relation'
 assert routing['confidence'] == 'high', 'accepted bare refocus should keep explicit replacement confidence high'
@@ -636,7 +709,7 @@ active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert proposal['mission'] == new_anchor, 'same-entry synthesized replacement should preserve the replacement proposal mission'
 assert routing['action'] == 'refocus', 'same-entry synthesized replacement should classify active bare /cook as refocus'
-assert routing['reason'] == 'fresh_explicit_handoff', 'same-entry synthesized replacement should reuse the explicit-handoff routing reason because /cook synthesized an explicit handoff'
+assert routing['reason'] == 'primary_agent_handoff', 'same-entry synthesized replacement should reuse the explicit-handoff routing reason because /cook synthesized an explicit handoff'
 assert routing['signalSource'] == 'explicit_structured_artifact', 'same-entry synthesized replacement should report the explicit structured routing source'
 assert routing['workflowRelation'] == 'replace_current_workflow', 'same-entry synthesized replacement should keep the replacement workflow_relation'
 assert routing['confidence'] == 'high', 'same-entry synthesized replacement should keep explicit replacement confidence high'
@@ -750,7 +823,7 @@ state_after = json.loads(after['state.json'])
 
 assert routing['mode'] == 'bare', 'low-confidence active workflow should still snapshot bare routing mode'
 assert routing['action'] == 'continue', 'low-confidence active workflow should preserve the current workflow instead of refocusing'
-assert routing['reason'] == 'missing_explicit_handoff', 'low-confidence active workflow should fail closed back to canonical continue semantics'
+assert routing['reason'] == 'missing_replacement_proposal', 'low-confidence active workflow should fail closed back to canonical continue semantics'
 assert routing['signalSource'] == 'none', 'low-confidence active workflow should not treat a rejected analysis as a replacement signal'
 assert routing['workflowRelation'] is None, 'low-confidence active workflow should not surface a replacement workflow_relation after the analysis is rejected'
 assert routing['confidence'] is None, 'low-confidence active workflow should not surface replacement confidence after the analysis is rejected'

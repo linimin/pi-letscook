@@ -37,9 +37,9 @@ type CookWorkflowControlAction = "resume" | "park" | "cancel";
 type ActiveWorkflowProposalAssessmentReason =
 	| "workflow_relation_continue"
 	| "workflow_relation_refocus"
-	| "missing_explicit_handoff"
+	| "missing_replacement_proposal"
 	| "missing_routing_signal"
-	| "fresh_explicit_handoff";
+	| "primary_agent_handoff";
 
 type ActiveWorkflowRoutingSignalSource = "none" | "startup_analysis" | "explicit_structured_artifact";
 
@@ -434,7 +434,7 @@ function buildActiveWorkflowRoutingAssessment(
 		proposal,
 		reason: shouldRefocus
 			? signalSource === "explicit_structured_artifact"
-				? "fresh_explicit_handoff"
+				? "primary_agent_handoff"
 				: "workflow_relation_refocus"
 			: "workflow_relation_continue",
 		workflowRelation,
@@ -487,7 +487,7 @@ async function assessActiveWorkflowProposalRouting(
 		const assessment: ActiveWorkflowProposalAssessment = {
 			action: "continue",
 			currentMissionAnchor: currentMission,
-			reason: "missing_explicit_handoff",
+			reason: "missing_replacement_proposal",
 			signalSource: "none",
 		};
 		deps.maybeWriteActiveWorkflowRoutingSnapshot(assessment);
@@ -814,19 +814,19 @@ export async function runCookEntry(
 				await resumeActiveWorkflowFromCanonicalState(pi, ctx, snapshot, deps);
 				return;
 			}
-			const explicitReplacement = assessment.signalSource === "explicit_structured_artifact";
+			const generatedReplacement = assessment.signalSource === "explicit_structured_artifact";
 			const decision = await confirmExistingWorkflowProposal(ctx, snapshot, assessment.proposal, deps, {
-				intro: explicitReplacement
-					? "A fresh explicit primary-agent handoff proposes replacing the current workflow. Choose how /cook should proceed:"
+				intro: generatedReplacement
+					? "A primary-agent-generated startup handoff proposes replacing the current workflow. Choose how /cook should proceed:"
 					: "A replacement workflow is ready. Choose how /cook should proceed:",
-				proposedMissionLabel: explicitReplacement
-					? "Proposed mission from explicit primary-agent handoff"
+				proposedMissionLabel: generatedReplacement
+					? "Proposed mission from primary-agent-generated startup handoff"
 					: "Proposed mission",
-				refocusChoiceLabel: explicitReplacement
-					? "Start new workflow from explicit primary-agent handoff\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+				refocusChoiceLabel: generatedReplacement
+					? "Start new workflow from primary-agent-generated startup handoff\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: "Start new workflow\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state.",
-				alternateChoiceLabel: explicitReplacement
-					? "Start alternate workflow from explicit primary-agent handoff\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
+				alternateChoiceLabel: generatedReplacement
+					? "Start alternate workflow from primary-agent-generated startup handoff\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."
 					: undefined,
 			});
 			if (!decision) {
@@ -839,8 +839,8 @@ export async function runCookEntry(
 			}
 			const selectedProposal = decision.proposal;
 			const proposalDecision = await deps.confirmContextProposal(ctx, selectedProposal, {
-				title: explicitReplacement
-					? "Start the replacement workflow from this explicit startup brief?"
+				title: generatedReplacement
+					? "Start the replacement workflow from this primary-agent-generated startup brief?"
 					: "Start the replacement workflow from this startup brief?",
 			});
 			if (!proposalDecision) {

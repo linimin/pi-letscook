@@ -18,11 +18,11 @@ export function buildCookHandoffBoundaryReminder(): string {
 		"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role.",
 		"If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.",
 		"If the user asks follow-up questions or wants to keep refining scope, continue helping naturally in ordinary chat.",
-		"If the user explicitly runs /cook, the extension should first prefer a fresh explicit primary-agent handoff, otherwise call a primary-agent handoff synthesis step from the current task context, show Start/Cancel confirmation, and persist the confirmed startup brief into .agent/** without making the user rerun /cook.",
-		"If no explicit or synthesized handoff is available, /cook may still use a validated recent-discussion startup brief as a bounded fallback for a concrete repo-change mission.",
+		"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context or inline /cook prompt, show Start/Cancel confirmation, and persist the confirmed startup brief into .agent/** without making the user rerun /cook.",
+		"If no primary-agent-generated handoff is startable, /cook may still use a validated recent-discussion startup brief as a bounded fallback for a concrete repo-change mission.",
 		"Do not describe that recent-discussion fallback as generic guessing, and weak, planning-only, not_repo_change, or unclear discussion must still fail closed.",
 		"Only provide a preview startup brief or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior.",
-		"Any preview capsule is startup intake for /cook only: do not present it as canonical .agent state, an active slice, or a persistent repo contract.",
+		"Any preview capsule is illustrative only: /cook still synthesizes a fresh startup handoff when the user enters workflow mode, and the preview is not canonical .agent state, an active slice, or a persistent repo contract.",
 		"When you continue in ordinary chat, do not pretend /cook already started and do not silently rewrite discussion into canonical workflow state.",
 	].join(" ");
 }

@@ -144,9 +144,9 @@ function candidateSlices(plan: JsonRecord | undefined): JsonRecord[] {
 type ActiveWorkflowProposalAssessmentReason =
 	| "workflow_relation_continue"
 	| "workflow_relation_refocus"
-	| "missing_explicit_handoff"
+	| "missing_replacement_proposal"
 	| "missing_routing_signal"
-	| "fresh_explicit_handoff";
+	| "primary_agent_handoff";
 
 type ActiveWorkflowRoutingSignalSource = "none" | "startup_analysis" | "explicit_structured_artifact";
 
@@ -1078,7 +1078,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: start or replace workflow by first preferring a fresh explicit primary-agent handoff, then same-entry primary-agent handoff synthesis from the current task context or inline prompt, and only then bounded validated recent_discussion startup analysis when no handoff is startable (fail closed otherwise); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls",
+			description: "/cook workflow: start or replace workflow by first asking the primary agent to synthesize a startup handoff from the current task context or inline prompt, and only then bounded validated recent_discussion startup analysis when no primary-agent handoff is startable (fail closed otherwise); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,

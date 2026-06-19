@@ -1456,6 +1456,25 @@ export function extractLatestCookHandoffProposal(
 	return assessment.status === "startable" ? assessment.proposal : undefined;
 }
 
+export function extractCookHandoffProposalFromText(
+	text: string,
+	projectName: string,
+	deps: ProposalParseDeps,
+	options?: {
+		messageId?: string;
+		timestampMs?: number;
+		source?: ContextProposalAlternate["source"];
+	},
+): ContextProposal | undefined {
+	const capsules = parseCookHandoffCapsulesFromText(text, options?.messageId, options?.timestampMs, deps);
+	for (let capsuleIndex = capsules.length - 1; capsuleIndex >= 0; capsuleIndex -= 1) {
+		const proposal = buildContextProposalFromCookHandoffCapsule(capsules[capsuleIndex], projectName, deps);
+		if (!proposal) continue;
+		return options?.source && options.source !== proposal.source ? retagContextProposalSource(proposal, options.source) : proposal;
+	}
+	return undefined;
+}
+
 export async function deriveCookContextProposalFromRecentDiscussion(
 	projectName: string,
 	recentEntries: RecentDiscussionEntry[],

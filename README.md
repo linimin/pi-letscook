@@ -55,16 +55,16 @@ Then run `/reload` in Pi.
 
 ## What `/cook` expects
 
-- enough current task context for `/cook` to reuse a fresh explicit `cook_handoff`, synthesize one in the same entry, or—only when no handoff is available—validate a recent-discussion startup brief for a concrete repo-change mission
+- enough current task context for `/cook` to ask the primary agent to synthesize a startup handoff in the same entry or—only when no primary-agent handoff is startable—validate a recent-discussion startup brief for a concrete repo-change mission
 - a mission-level repo-change brief that can truthfully start workflow, even when the first slice still needs regrounding
 - scope, constraints, acceptance, and risk context strong enough for `completion-regrounder` to reconcile canonical slices from repo truth after Start
 - README/CHANGELOG updates still count as concrete repo changes
-- assistant-produced summaries and plan/spec/design-doc/proposal-only artifacts still do not count as workflow-ready startup input by themselves; `/cook` still needs either a concrete handoff or a validated recent-discussion repo-change brief
-- `/cook` follows this startup precedence: fresh explicit `cook_handoff` -> same-entry primary-agent handoff synthesis -> validated `recent_discussion` startup analysis -> fail closed
+- assistant-produced summaries and plan/spec/design-doc/proposal-only artifacts still do not count as workflow-ready startup input by themselves; `/cook` still needs either a primary-agent-generated handoff or a validated recent-discussion repo-change brief
+- `/cook` follows this startup precedence: same-entry primary-agent handoff synthesis -> validated `recent_discussion` startup analysis -> fail closed
 
-If explicit or synthesized handoff data still cannot prepare a concrete workflow startup brief, `/cook` may use validated `recent_discussion` startup analysis as a bounded fallback only when the recent discussion clearly describes a concrete repo-change mission. Weak, ambiguous, planning-only, `not_repo_change`, or otherwise unclear startup analysis still fails closed, leaves canonical `.agent/**` state unchanged, and tells you to refine the mission, repo-change intent, or key constraints in the main chat before rerunning `/cook`.
+If same-entry primary-agent handoff synthesis still cannot prepare a concrete workflow startup brief, `/cook` may use validated `recent_discussion` startup analysis as a bounded fallback only when the recent discussion clearly describes a concrete repo-change mission. Weak, ambiguous, planning-only, `not_repo_change`, or otherwise unclear startup analysis still fails closed, leaves canonical `.agent/**` state unchanged, and tells you to refine the mission, repo-change intent, or key constraints in the main chat before rerunning `/cook`.
 
-If a fresh explicit handoff exists but its acceptance or initial-slice details are still weak, `/cook` treats that capsule as startup input instead of as an automatic blocker. The same-entry primary-agent handoff synthesis step may tighten the mission, acceptance, or advisory first-slice hints from recent discussion before Start / Cancel confirmation.
+Any earlier preview `cook_handoff` capsule in ordinary chat is illustrative only. `/cook` still synthesizes a fresh startup handoff from current context when workflow mode begins, and any initial-slice details remain advisory until regrounding.
 
 If you pass inline arguments to `/cook`, `/cook` treats them as explicit startup intent for this workflow entry. It still synthesizes a primary-agent startup brief, shows **Start** / **Cancel**, and only writes canonical state after confirmation.
 
@@ -74,19 +74,19 @@ Only explicit `/cook` enters workflow mode. Ordinary prompts stay in the main ch
 
 `/cook <prompt>` is still the same explicit workflow command. The inline prompt is startup intent, not canonical state.
 
-Ordinary chat can still directly implement repo changes. `/cook` is for the cases where you want workflow control rather than just implementation help, and the primary agent should prepare the handoff before you run it.
+Ordinary chat can still directly implement repo changes. `/cook` is for the cases where you want workflow control rather than just implementation help, and the primary agent will synthesize the startup handoff when you enter workflow mode.
 
-When you explicitly run `/cook`, it first checks for a fresh explicit primary-agent handoff. If one is missing, it calls a same-entry primary-agent handoff synthesis step from the current task context or inline `/cook` prompt, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
+When you explicitly run `/cook`, it calls a same-entry primary-agent handoff synthesis step from the current task context or inline `/cook` prompt, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.
 
-If no explicit or synthesized handoff is startable, `/cook` may still use validated `recent_discussion` startup analysis as a bounded fallback before showing **Start** or **Cancel**.
+If no primary-agent-generated handoff is startable, `/cook` may still use validated `recent_discussion` startup analysis as a bounded fallback before showing **Start** or **Cancel**.
 
-Explicit `/cook` capsules are still valid startup intake, but they are no longer the only path because `/cook` can synthesize the primary-agent handoff in the same entry when needed or, when no handoff is available, fall back to validated `recent_discussion` startup analysis.
+Preview `/cook` capsules in ordinary chat may still help the conversation, but `/cook` does not consume them directly. It always synthesizes the startup handoff for the current workflow entry and only falls back to validated `recent_discussion` analysis when synthesis cannot produce a startable brief.
 
 Important behavior:
 - `/cook` is an optional workflow boundary and manual entry point
 - `/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation
-- startup and next-round entry stay confirm-first, following explicit primary-agent handoff -> same-entry primary-agent handoff synthesis -> validated `recent_discussion` startup analysis -> fail closed
-- active workflows resume from canonical `.agent/**` state unless a concrete replacement proposal is available from explicit handoff, same-entry synthesis, or validated `recent_discussion` analysis in the same `/cook` entry
+- startup and next-round entry stay confirm-first, following same-entry primary-agent handoff synthesis -> validated `recent_discussion` startup analysis -> fail closed
+- active workflows resume from canonical `.agent/**` state unless a concrete replacement proposal is available from primary-agent synthesis or validated `recent_discussion` analysis in the same `/cook` entry
 - stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow
 - explicit slash commands other than `/cook` continue normally in the main chat
 - ordinary main-chat discussion may clarify, propose, or directly implement repo changes without entering workflow mode
@@ -109,13 +109,13 @@ Start a new workflow directly from explicit inline startup intent:
 
 ## What happens when you run `/cook`
 
-`/cook` first checks for a fresh explicit primary-agent handoff capsule. New-workflow entry and done-workflow next-round entry use that handoff when it already exists; otherwise `/cook` calls a same-entry primary-agent handoff synthesis step from current context or inline prompt. If no explicit or synthesized handoff is startable, `/cook` may still use validated `recent_discussion` startup analysis as a bounded fallback for a concrete repo-change mission before it continues to Start / Cancel. Any initial-slice details included there are advisory hints only; `completion-regrounder` still authors the canonical slice plan after Start. Active workflows still resume canonical state by default unless a concrete replacement proposal is available from explicit handoff, same-entry synthesis, or validated recent-discussion analysis in the same `/cook` entry. None of this prevents ordinary-chat implementation when you choose not to enter workflow mode.
+`/cook` first asks the primary agent to synthesize a startup handoff from current context or inline prompt. If no primary-agent-generated handoff is startable, `/cook` may still use validated `recent_discussion` startup analysis as a bounded fallback for a concrete repo-change mission before it continues to Start / Cancel. Any initial-slice details included there are advisory hints only; `completion-regrounder` still authors the canonical slice plan after Start. Active workflows still resume canonical state by default unless a concrete replacement proposal is available from primary-agent synthesis or validated recent-discussion analysis in the same `/cook` entry. None of this prevents ordinary-chat implementation when you choose not to enter workflow mode.
 
 | Repo state | What you'll see |
 |---|---|
-| No workflow yet | `/cook` consumes a fresh explicit primary-agent handoff when one already exists, or synthesizes one from the primary-agent view in the same entry, then asks you to choose **Start** or **Cancel**. If no explicit or synthesized handoff is available, `/cook` may still use validated `recent_discussion` startup analysis as a bounded fallback. If a fresh explicit handoff is weak, `/cook` first tries to tighten mission, acceptance, or advisory slice hints through same-entry startup synthesis before failing closed. Weak, planning-only, non-repo-change, or unclear startup analysis still fails closed. |
-| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerunning `/cook` or `/cook resume` resumes from canonical state, `/cook park` records a parked paused posture so ordinary chat may edit directly until a later reground, and `/cook cancel` closes the workflow. If a concrete replacement proposal exists already, is synthesized in the same `/cook` entry, or is validated from recent discussion and points to a different mission, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous, low-confidence, or missing replacement analysis stays conservative. |
-| Previous workflow is `done` | `/cook` can start the next implementation round from a fresh explicit primary-agent handoff or from the same-entry primary-agent handoff synthesis step behind **Start** or **Cancel**. If neither is available, the same bounded validated `recent_discussion` fallback still applies. Startup hints may still be advisory; `completion-regrounder` derives the canonical next slices after Start. |
+| No workflow yet | `/cook` synthesizes a startup handoff from the primary-agent view in the same entry, then asks you to choose **Start** or **Cancel**. If no primary-agent-generated handoff is available, `/cook` may still use validated `recent_discussion` startup analysis as a bounded fallback. Weak, planning-only, non-repo-change, or unclear startup analysis still fails closed. |
+| Active workflow exists | Usually a resume of the current workflow from canonical `.agent/**` state. If canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerunning `/cook` or `/cook resume` resumes from canonical state, `/cook park` records a parked paused posture so ordinary chat may edit directly until a later reground, and `/cook cancel` closes the workflow. If a concrete replacement proposal is synthesized in the same `/cook` entry or is validated from recent discussion and points to a different mission, `/cook` shows a chooser first and only rewrites canonical state after you confirm the replacement. Ambiguous, low-confidence, or missing replacement analysis stays conservative. |
+| Previous workflow is `done` | `/cook` can start the next implementation round from the same-entry primary-agent handoff synthesis step behind **Start** or **Cancel**. If that is not available, the same bounded validated `recent_discussion` fallback still applies. Startup hints may still be advisory; `completion-regrounder` derives the canonical next slices after Start. |
 
 ## Confirmation and fail-closed behavior
 
@@ -132,7 +132,7 @@ When you accept startup or refocus, `/cook` persists the chosen workflow state i
 
 The confirmed startup brief is also preserved there in `.agent/current/startup-brief.json` as canonical intake for later re-grounding. It may carry optional `*_hint` fields for an initial slice, but those hints are advisory and do not replace `.agent/current/plan.json` or `.agent/current/active-slice.json`, which remain under regrounder authority.
 
-The pre-`/cook` handoff capsule itself is not canonical workflow state. It is only startup intake for `/cook`.
+Any pre-`/cook` handoff capsule itself is not canonical workflow state. It is only an illustrative preview; `/cook` still synthesizes the actual startup handoff for the current entry.
 
 ## Observability
 

@@ -2,8 +2,81 @@
 set -euo pipefail
 
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+latest_session_handoff_output() {
+  local session_path="$1"
+  python3 - "$session_path" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+session_path = Path(sys.argv[1])
+if not session_path.exists():
+    raise SystemExit(0)
+entries = []
+with session_path.open('r', encoding='utf-8') as fh:
+    for line in fh:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+for entry in reversed(entries):
+    if entry.get('type') != 'message':
+        continue
+    message = entry.get('message') or {}
+    if message.get('role') != 'assistant':
+        continue
+    content = message.get('content')
+    if not isinstance(content, str):
+        continue
+    matches = re.findall(r"```cook_handoff\s*[\s\S]*?```", content, re.MULTILINE)
+    if matches:
+        print(matches[-1])
+        break
+PY
+}
 pi() {
-  env -u PI_COMPLETION_ROLE pi --no-extensions "$@"
+  local session_path=""
+  local prompt=""
+  local prev=""
+  for arg in "$@"; do
+    if [[ "$prev" == "--session" ]]; then
+      session_path="$arg"
+      prev=""
+      continue
+    fi
+    if [[ "$prev" == "-p" ]]; then
+      prompt="$arg"
+      prev=""
+      continue
+    fi
+    if [[ "$arg" == "--session" || "$arg" == "-p" ]]; then
+      prev="$arg"
+    fi
+  done
+  local -a extra_env=()
+  if [[ -z "${PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT:-}" && -n "$session_path" && "$prompt" =~ ^/cook([[:space:]]*)$ ]]; then
+    local handoff
+    handoff="$(latest_session_handoff_output "$session_path")"
+    if [[ -n "$handoff" ]]; then
+      extra_env+=("PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT=$handoff")
+    fi
+  fi
+  local -a forwarded_env=()
+  while IFS= read -r name; do
+    [[ "$name" == "PI_COMPLETION_ROLE" ]] && continue
+    forwarded_env+=("$name=${!name}")
+  done < <(compgen -v | grep -E '^PI_(COMPLETION|HELPER)_' || true)
+  local pi_cmd
+  pi_cmd="$(command -v pi)"
+  set +u
+  env -u PI_COMPLETION_ROLE "${forwarded_env[@]}" "${extra_env[@]}" "$pi_cmd" --no-extensions "$@"
+  local status=$?
+  set -u
+  return $status
 }
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT

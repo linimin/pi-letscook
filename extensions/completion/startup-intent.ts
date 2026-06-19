@@ -1,6 +1,6 @@
 import {
-	assessLatestCookHandoffProposal,
 	deriveCookContextProposalFromRecentDiscussion,
+	extractCookHandoffProposalFromText,
 	finalizeContextProposalAnalysis,
 } from "./proposal";
 import type {
@@ -39,8 +39,6 @@ export type CookSynthesisContext = {
 	recentEntries: RecentDiscussionEntry[];
 	workflowContext?: ContextProposalWorkflowContext;
 	workflowContextLines: string[];
-	explicit: CookContextProposalResult;
-	shouldTightenExplicitProposal: boolean;
 	shouldAnalyzeRecentDiscussion: boolean;
 };
 
@@ -81,7 +79,7 @@ function buildAdvisoryStartupBriefNotes(analysis: ContextProposalAnalysis): stri
 		...analysis.critique,
 		...analysis.possibleNoise.map((item) => `Possible noise: ${item}`),
 	];
-	return notes.length > 0 ? notes : ["No additional operator notes were derived from recent discussion."];
+	return notes.length > 0 ? notes : ["No additional operator notes were derived for this startup handoff."];
 }
 
 export function startupHintsPresent(hints: StartupIntentHints | undefined): boolean {
@@ -93,17 +91,6 @@ export function startupHintsPresent(hints: StartupIntentHints | undefined): bool
 			hints.verificationCommands.length > 0 ||
 			hints.whyThisSliceFirst,
 	);
-}
-
-export function proposalNeedsCookStartupTightening(
-	proposal: Pick<ContextProposal, "source" | "startupHints" | "analysis">,
-): boolean {
-	if (proposal.source !== "handoff_capsule") return false;
-	const startupHints = proposal.startupHints;
-	if (!startupHints?.firstSliceGoal) return true;
-	if (startupHints.implementationSurfaces.length === 0) return true;
-	if (startupHints.verificationCommands.length === 0) return true;
-	return proposal.analysis.critique.some((item) => /startup acceptance (?:was not fully captured|remained high-level)/iu.test(item));
 }
 
 export function workflowContextFromSnapshot(
@@ -156,7 +143,7 @@ export function shouldAnalyzeCookRecentDiscussion(recentEntries: RecentDiscussio
 	return recentEntries.some((entry) => entry.text.trim().length > 0);
 }
 
-function isExplicitStructuredProposalSource(source: ContextProposal["source"]): boolean {
+function isPrimaryAgentStructuredProposalSource(source: ContextProposal["source"]): boolean {
 	return source === "handoff_capsule" || source === "deferred_primary_agent_handoff";
 }
 
@@ -167,7 +154,7 @@ function annotateActiveWorkflowRoutingCandidate<T extends ContextProposalAlterna
 ): T {
 	const currentMissionAnchor = workflowContext?.currentMissionAnchor?.trim();
 	if (!currentMissionAnchor || workflowContext?.continuationPolicy === "done") return candidate;
-	if (!isExplicitStructuredProposalSource(candidate.source)) return candidate;
+	if (!isPrimaryAgentStructuredProposalSource(candidate.source)) return candidate;
 	const workflowRelation: StartupWorkflowRelation =
 		candidate.analysis.workflowRelation
 			?? (deps.missionAnchorsStrictlyEquivalent(currentMissionAnchor, candidate.mission)
@@ -175,8 +162,8 @@ function annotateActiveWorkflowRoutingCandidate<T extends ContextProposalAlterna
 				: "replace_current_workflow");
 	const confidence: StartupAnalysisConfidence = candidate.analysis.confidence ?? "high";
 	const routingDiagnostic = workflowRelation === "continue_current_workflow"
-		? "Explicit structured startup artifact strictly matches the current workflow mission, so /cook should continue the current workflow by default."
-		: "Explicit structured startup artifact proposes a different mission than the current workflow, so /cook should require approval before refocusing.";
+		? "Primary-agent-generated structured startup handoff strictly matches the current workflow mission, so /cook should continue the current workflow by default."
+		: "Primary-agent-generated structured startup handoff proposes a different mission than the current workflow, so /cook should require approval before refocusing.";
 	const diagnostics = candidate.analysis.diagnostics.includes(routingDiagnostic)
 		? candidate.analysis.diagnostics
 		: [...candidate.analysis.diagnostics, routingDiagnostic];
@@ -212,10 +199,7 @@ export function buildCookSynthesisContext(args: {
 	inlinePrompt?: string;
 	recentMessages: RecentSessionMessage[];
 	snapshot?: CompletionStateSnapshot;
-	explicit: CookContextProposalResult;
-	stripCodeBlocks: (text: string) => string;
 }): CookSynthesisContext {
-	const shouldTightenExplicitProposal = args.explicit.proposal ? proposalNeedsCookStartupTightening(args.explicit.proposal) : false;
 	const recentEntries = buildCookRecentEntries({
 		inlinePrompt: args.inlinePrompt,
 		recentMessages: args.recentMessages,
@@ -226,29 +210,13 @@ export function buildCookSynthesisContext(args: {
 		workflowContextLines.push(`inline /cook startup intent: ${args.inlinePrompt}`);
 		workflowContextLines.push("Treat the inline /cook prompt as the highest-priority explicit startup intent for this workflow entry.");
 	}
-	if (args.explicit.proposal && shouldTightenExplicitProposal) {
-		workflowContextLines.push("A fresh explicit primary-agent handoff is available. Use it as startup input, but tighten weak acceptance or initial-slice hints from recent discussion when possible.");
-		workflowContextLines.push(`Explicit handoff summary:\n${args.explicit.proposal.basisPreview}`);
-	}
 	const shouldAnalyzeRecentDiscussion = shouldAnalyzeCookRecentDiscussion(recentEntries);
 	return {
 		recentEntries,
 		workflowContext,
 		workflowContextLines,
-		explicit: args.explicit,
-		shouldTightenExplicitProposal,
 		shouldAnalyzeRecentDiscussion,
 	};
-}
-
-export function deriveCookStartupProposalFromRecentMessages(args: {
-	inlinePrompt?: string;
-	recentMessages: RecentSessionMessage[];
-	projectName: string;
-	deps: CookProposalDeps;
-}): CookContextProposalResult {
-	const explicitHandoff = assessLatestCookHandoffProposal(args.recentMessages, args.projectName, args.deps);
-	return explicitHandoff.status === "startable" ? { proposal: explicitHandoff.proposal } : {};
 }
 
 export async function deriveCookContextProposalWithSynthesis(args: {
@@ -266,38 +234,23 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 	const workflowContext = workflowContextFromSnapshot(args.snapshot);
 	const annotateProposal = (proposal: ContextProposal | undefined): ContextProposal | undefined =>
 		proposal ? annotateActiveWorkflowRoutingProposal(proposal, workflowContext, args.deps) : undefined;
-	const explicitProposal = annotateProposal(
-		deriveCookStartupProposalFromRecentMessages({
-			inlinePrompt: args.inlinePrompt,
-			recentMessages: args.recentMessages,
-			projectName: args.projectName,
-			deps: args.deps,
-		}).proposal,
-	);
-	const explicit: CookContextProposalResult = explicitProposal ? { proposal: explicitProposal } : {};
-	const shouldTightenExplicitProposal = explicitProposal ? proposalNeedsCookStartupTightening(explicitProposal) : false;
-	if (explicitProposal && !shouldTightenExplicitProposal) return explicit;
 	const synthesisContext = buildCookSynthesisContext({
 		inlinePrompt: args.inlinePrompt,
 		recentMessages: args.recentMessages,
 		snapshot: args.snapshot,
-		explicit,
-		stripCodeBlocks: args.deps.stripCodeBlocks,
 	});
 	const { recentEntries, workflowContext: synthesisWorkflowContext, workflowContextLines } = synthesisContext;
 	const raw = await args.generateCookHandoff?.({ recentEntries, workflowContextLines });
 	if (raw) {
-		const generated = assessLatestCookHandoffProposal(
-			[{ role: "assistant", text: raw, messageId: "generated-primary-agent-handoff", timestampMs: Date.now(), isCommand: false }],
-			args.projectName,
-			args.deps,
+		const generatedProposal = annotateProposal(
+			extractCookHandoffProposalFromText(raw, args.projectName, args.deps, {
+				messageId: "generated-primary-agent-handoff",
+				timestampMs: Date.now(),
+			}),
 		);
-		if (generated.status === "startable") {
-			const generatedProposal = annotateActiveWorkflowRoutingProposal(generated.proposal, workflowContext, args.deps);
-			return { proposal: generatedProposal };
-		}
+		if (generatedProposal) return { proposal: generatedProposal };
 	}
-	if (!explicitProposal && synthesisContext.shouldAnalyzeRecentDiscussion) {
+	if (synthesisContext.shouldAnalyzeRecentDiscussion) {
 		const derivedFromRecentDiscussion = await deriveCookContextProposalFromRecentDiscussion(args.projectName, recentEntries, {
 			...args.deps,
 			analyzeContextProposal: args.analyzeContextProposal
@@ -307,7 +260,6 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 		});
 		if (derivedFromRecentDiscussion) return { proposal: annotateProposal(derivedFromRecentDiscussion) };
 	}
-	if (explicitProposal) return explicit;
 	return {};
 }
 

@@ -58,17 +58,17 @@ But even in those cases:
 
 If the user explicitly runs or clearly chooses `/cook` workflow mode, the system behavior should be:
 
-1. check for a fresh explicit primary-agent `cook_handoff`
-2. if none exists, call a primary-agent handoff synthesis step immediately from the current task context
-3. if no explicit or synthesized handoff is startable, allow validated recent-discussion startup analysis only as a bounded fallback for a concrete repo-change mission
+1. call a primary-agent handoff synthesis step immediately from the current task context
+2. if `/cook` includes inline prompt text, treat that inline prompt as the highest-priority startup intent for the synthesis step
+3. if no primary-agent-generated handoff is startable, allow validated recent-discussion startup analysis only as a bounded fallback for a concrete repo-change mission
 4. use the resulting startup brief to show Start / Cancel confirmation in the same `/cook` entry
 5. after Start, persist a canonical startup brief in `.agent/**` and treat workflow entry as active
 6. let `completion-regrounder` turn that startup brief plus repo truth into canonical slices
 
 That means:
 
-- `/cook` should prefer primary-agent-authored handoff data when it already exists or can be synthesized in the same entry
-- `/cook` may use validated recent-discussion startup analysis only when no explicit or synthesized handoff is available
+- `/cook` should synthesize a fresh primary-agent startup handoff for the current entry instead of consuming an older session capsule directly
+- `/cook` may use validated recent-discussion startup analysis only when no primary-agent-generated handoff is startable
 - `/cook` must not treat recent discussion as generic guessing; weak, planning-only, not-repo-change, or unclear input still fails closed
 - `/cook` should persist the confirmed startup brief before regrounding begins
 - `/cook` should not require a manual rerun just to consume a handoff it can synthesize immediately from the primary-agent view
@@ -110,11 +110,11 @@ Notes:
 
 - `constraints` may be replaced or supplemented by `non_goals` when clearer.
 - `first_slice_goal`, `first_slice_non_goals`, `implementation_surfaces`, `verification_commands`, and `why_this_slice_first` are optional startup hints. Include them when they are clearly supported, but do not treat them as required before `/cook` can start workflow.
-- Any capsule is startup intake for `/cook` only. It is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
+- Any capsule is illustrative preview material only. `/cook` still synthesizes the actual startup handoff for the current entry, and the preview is not canonical `.agent/**` state, not active-slice state, and not a second repo contract source.
 
 Suggested wording:
 
-> We can continue directly in ordinary chat if you want. If you prefer workflow mode, run `/cook` and it should prefer a primary-agent startup brief, then fall back to validated recent-discussion startup analysis only when no handoff is available. Any first-slice details are only hints until regrounding authors the canonical slices.
+> We can continue directly in ordinary chat if you want. If you prefer workflow mode, run `/cook` and it should synthesize a fresh primary-agent startup brief for that entry, then fall back to validated recent-discussion startup analysis only when synthesis cannot produce a startable handoff. Any first-slice details are only hints until regrounding authors the canonical slices.
 
 ## Forbidden Behaviors
 

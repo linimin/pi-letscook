@@ -2,8 +2,81 @@
 set -euo pipefail
 
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+latest_session_handoff_output() {
+  local session_path="$1"
+  python3 - "$session_path" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+session_path = Path(sys.argv[1])
+if not session_path.exists():
+    raise SystemExit(0)
+entries = []
+with session_path.open('r', encoding='utf-8') as fh:
+    for line in fh:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+for entry in reversed(entries):
+    if entry.get('type') != 'message':
+        continue
+    message = entry.get('message') or {}
+    if message.get('role') != 'assistant':
+        continue
+    content = message.get('content')
+    if not isinstance(content, str):
+        continue
+    matches = re.findall(r"```cook_handoff\s*[\s\S]*?```", content, re.MULTILINE)
+    if matches:
+        print(matches[-1])
+        break
+PY
+}
 pi() {
-  command pi --no-extensions "$@"
+  local session_path=""
+  local prompt=""
+  local prev=""
+  for arg in "$@"; do
+    if [[ "$prev" == "--session" ]]; then
+      session_path="$arg"
+      prev=""
+      continue
+    fi
+    if [[ "$prev" == "-p" ]]; then
+      prompt="$arg"
+      prev=""
+      continue
+    fi
+    if [[ "$arg" == "--session" || "$arg" == "-p" ]]; then
+      prev="$arg"
+    fi
+  done
+  local -a extra_env=()
+  if [[ -z "${PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT:-}" && -n "$session_path" && "$prompt" =~ ^/cook([[:space:]]*)$ ]]; then
+    local handoff
+    handoff="$(latest_session_handoff_output "$session_path")"
+    if [[ -n "$handoff" ]]; then
+      extra_env+=("PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT=$handoff")
+    fi
+  fi
+  local -a forwarded_env=()
+  while IFS= read -r name; do
+    [[ "$name" == "PI_COMPLETION_ROLE" ]] && continue
+    forwarded_env+=("$name=${!name}")
+  done < <(compgen -v | grep -E '^PI_(COMPLETION|HELPER)_' || true)
+  local pi_cmd
+  pi_cmd="$(command -v pi)"
+  set +u
+  env "${forwarded_env[@]}" "${extra_env[@]}" "$pi_cmd" --no-extensions "$@"
+  local status=$?
+  set -u
+  return $status
 }
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
@@ -459,7 +532,7 @@ assert routing['mode'] == 'bare', 'active bare /cook resume regression should sn
 assert 'explicitGoal' not in routing, 'active bare /cook resume routing should not expose removed explicit-goal shim fields'
 assert 'explicitGoalProvided' not in routing, 'active bare /cook resume routing should not expose removed explicit-goal shim fields'
 assert routing['action'] == 'continue', 'active bare /cook should resume when no fresh explicit handoff exists'
-assert routing['reason'] == 'missing_explicit_handoff', 'active bare /cook should explain that resume happened because no fresh explicit handoff existed'
+assert routing['reason'] == 'missing_replacement_proposal', 'active bare /cook should explain that resume happened because no fresh explicit handoff existed'
 assert routing['currentMissionAnchor'] == mission, 'resume routing should preserve the current mission anchor'
 assert routing['proposedMissionAnchor'] is None, 'resume routing should not derive a replacement mission from recent discussion'
 assert 'Resume the completion workflow from canonical state.' in resume, 'active bare /cook resume should still use the canonical resume prompt'
@@ -505,7 +578,7 @@ active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert routing['mode'] == 'bare', 'discussion-driven refocus removal should snapshot bare routing mode'
 assert routing['action'] == 'continue', 'bare /cook should resume instead of deriving a replacement workflow from recent discussion'
-assert routing['reason'] == 'missing_explicit_handoff', 'discussion-driven refocus removal should explain that no fresh explicit handoff existed'
+assert routing['reason'] == 'missing_replacement_proposal', 'discussion-driven refocus removal should explain that no fresh explicit handoff existed'
 assert routing['currentMissionAnchor'] == mission, 'discussion-driven refocus removal should preserve the current mission anchor'
 assert routing['proposedMissionAnchor'] is None, 'discussion-driven refocus removal should not preserve a replacement mission from recent discussion'
 assert 'Resume the completion workflow from canonical state.' in resume, 'discussion-driven refocus removal should still queue the canonical resume prompt'
@@ -580,7 +653,7 @@ active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
 assert routing['mode'] == 'bare', 'summary-only active bare /cook regression should snapshot bare routing mode'
 assert routing['action'] == 'continue', 'summary-only active bare /cook should resume rather than derive replacement startup'
-assert routing['reason'] == 'missing_explicit_handoff', 'summary-only active bare /cook should explain that no fresh explicit handoff existed'
+assert routing['reason'] == 'missing_replacement_proposal', 'summary-only active bare /cook should explain that no fresh explicit handoff existed'
 assert routing['currentMissionAnchor'] == mission, 'summary-only active bare /cook should preserve the current mission anchor'
 assert routing['proposedMissionAnchor'] is None, 'summary-only active bare /cook should not derive a replacement mission from summary artifacts alone'
 assert 'Resume the completion workflow from canonical state.' in resume, 'summary-only active bare /cook should still resume the canonical workflow'
@@ -723,7 +796,7 @@ after = {    'state.json': Path('.agent/current/state.json').read_text(),
 
 assert routing['mode'] == 'bare', 'fresh non-startable explicit handoff should snapshot bare routing mode'
 assert routing['action'] == 'refocus', 'fresh non-startable explicit handoff should synthesize a concrete replacement option instead of blocking active bare /cook'
-assert routing['reason'] == 'fresh_explicit_handoff', 'fresh non-startable explicit handoff should keep explicit-handoff replacement routing after startup synthesis tightens it'
+assert routing['reason'] == 'primary_agent_handoff', 'fresh non-startable explicit handoff should keep explicit-handoff replacement routing after startup synthesis tightens it'
 assert routing['signalSource'] == 'explicit_structured_artifact', 'fresh non-startable explicit handoff should report the explicit-structured routing source'
 assert routing['workflowRelation'] == 'replace_current_workflow', 'fresh non-startable explicit handoff should derive a replacement workflow_relation from the explicit artifact'
 assert routing['confidence'] == 'high', 'fresh non-startable explicit handoff should treat the explicit replacement artifact as high confidence'
@@ -1071,7 +1144,7 @@ after = {path.name: path.read_text() for path in tracked}
 state = json.loads(after['state.json'])
 assert routing['mode'] == 'bare', 'active inline prompt should keep the existing routing snapshot schema'
 assert routing['action'] == 'refocus', 'active inline prompt should route through refocus'
-assert routing['reason'] == 'fresh_explicit_handoff', 'active inline prompt should synthesize an explicit startup brief for replacement'
+assert routing['reason'] == 'primary_agent_handoff', 'active inline prompt should synthesize an explicit startup brief for replacement'
 assert routing['signalSource'] == 'explicit_structured_artifact', 'active inline prompt should report explicit structured routing for the synthesized handoff'
 assert routing['workflowRelation'] == 'replace_current_workflow', 'active inline prompt should classify the synthesized handoff as a replacement workflow'
 assert routing['confidence'] == 'high', 'active inline prompt should keep explicit replacement routing at high confidence'
@@ -1587,8 +1660,8 @@ assert 'Primary-agent /cook handoff rationale: The implementation plan is concre
 assert 'advisory_startup_brief' not in state or state['advisory_startup_brief'] is None, 'state.json should no longer carry advisory_startup_brief now that startup-brief.json is canonical'
 PY
 
-# Fresh explicit handoff + inline /cook: same-entry inline startup should still prefer the
-# recent explicit handoff over synthesis or startup analysis.
+# Fresh preview handoff + inline /cook: same-entry inline startup should now use the
+# current /cook synthesis output rather than consuming the older session capsule directly.
 HANDOFF_ROOT_INLINE_EXPLICIT="$TMPDIR/handoff-root-inline-explicit"
 mkdir -p "$HANDOFF_ROOT_INLINE_EXPLICIT"
 cd "$HANDOFF_ROOT_INLINE_EXPLICIT"
@@ -1704,14 +1777,14 @@ output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
 state = json.loads(Path('.agent/current/state.json').read_text())
 startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
 
-assert snapshot['source'] == 'handoff_capsule', 'same-entry inline /cook should still snapshot the recent explicit handoff capsule when it is valid'
-assert snapshot['mission'] == 'Fix login redirect callback behavior from explicit handoff.', 'same-entry inline /cook should preserve the recent explicit handoff mission before synthesis or startup analysis'
-assert state['mission_anchor'] == snapshot['mission'], 'same-entry inline /cook should start workflow from the explicit handoff mission'
-assert startup_brief['source'] == 'primary_agent_handoff', 'same-entry inline /cook should preserve primary_agent_handoff startup intake when explicit handoff wins'
-assert startup_brief['risks'] == ['Inline startup synthesis or analysis could override the explicit handoff if precedence regresses.'], 'same-entry inline /cook should preserve the explicit handoff risks canonically'
-assert snapshot['mission'] != 'Replace the startup mission from same-entry synthesis.', 'same-entry inline /cook should ignore synthesized handoff output when a valid explicit handoff already exists'
-assert snapshot['mission'] != 'Replace the startup mission from validated startup analysis.', 'same-entry inline /cook should ignore startup analysis when a valid explicit handoff already exists'
-assert 'Started completion workflow for:' in output, 'same-entry inline /cook should still report workflow start after honoring the explicit handoff'
+assert snapshot['source'] == 'handoff_capsule', 'same-entry inline /cook should snapshot the synthesized primary-agent handoff output'
+assert snapshot['mission'] == 'Replace the startup mission from same-entry synthesis.', 'same-entry inline /cook should use the same-entry synthesized mission instead of consuming the older session capsule directly'
+assert state['mission_anchor'] == snapshot['mission'], 'same-entry inline /cook should start workflow from the synthesized mission'
+assert startup_brief['source'] == 'primary_agent_handoff', 'same-entry inline /cook should preserve primary_agent_handoff startup intake when synthesis wins'
+assert startup_brief['risks'] == [], 'same-entry inline /cook should preserve synthesized-handoff risks canonically'
+assert snapshot['mission'] != 'Fix login redirect callback behavior from explicit handoff.', 'same-entry inline /cook should not consume the older explicit preview capsule directly'
+assert snapshot['mission'] != 'Replace the startup mission from validated startup analysis.', 'same-entry inline /cook should prefer synthesized handoff output over startup analysis when synthesis succeeds'
+assert 'Started completion workflow for:' in output, 'same-entry inline /cook should still report workflow start after honoring the synthesized handoff'
 PY
 
 # Fresh explicit handoff with only mission-level acceptance and no slice hints should still start workflow.
@@ -1763,7 +1836,6 @@ PY
 write_session_messages "$HANDOFF_SESSION_HINTLESS" "$HANDOFF_ROOT_HINTLESS" "$HANDOFF_MESSAGES_HINTLESS"
 
 PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
-PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$HANDOFF_SNAPSHOT_HINTLESS" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$HANDOFF_SESSION_HINTLESS" -e "$PKG_ROOT" -p "/cook" >"$TMPDIR/pi-completion-handoff-hintless.out" 2>"$TMPDIR/pi-completion-handoff-hintless.err"
