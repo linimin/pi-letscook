@@ -729,44 +729,39 @@ write_session "$MULTILINGUAL_ANALYST_SESSION" "$TMPDIR" "請把目前的工作�
 MULTILINGUAL_ANALYST_OUTPUT='{"verdict":"startable","workflow_relation":"replace_current_workflow","confidence":"high","mission":"支援多語系 /cook refocus 路由並保留低信心保護。","scope":["讓目前的工作流程改走多語系 refocus 路由。","保留低信心時繼續原工作流程的保護。"],"constraints":["不要跳過現有的 Start/Cancel replacement gate。"],"acceptance":["新增回歸測試證明多語系 active-workflow refocus 會使用 workflow_relation/confidence 路由。"],"diagnostics":["The active workflow request clearly asks to replace the current mission with a multilingual refocus mission."],"critique":["Keep the approval-only replacement gate."],"risks":["If workflow_relation is ignored, /cook could continue the wrong mission."],"possible_noise":[]}'
 PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS=1 \
 PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT="$MULTILINGUAL_ANALYST_OUTPUT" \
-PI_COMPLETION_EXISTING_WORKFLOW_ACTION=refocus \
-PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
 PI_COMPLETION_TEST_ACTIVE_WORKFLOW_ROUTING_PATH="$MULTILINGUAL_ANALYST_ROUTING" \
 PI_COMPLETION_TEST_CONTEXT_PROPOSAL_PATH="$MULTILINGUAL_ANALYST_PROPOSAL" \
 PI_COMPLETION_TEST_EXISTING_WORKFLOW_CHOOSER_PATH="$MULTILINGUAL_ANALYST_CHOOSER" \
+PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$TMPDIR/multilingual-active-analyst-resume.txt" \
 PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi --session "$MULTILINGUAL_ANALYST_SESSION" -e "$PKG_ROOT" -p "/cook" \
   >"$TMPDIR/pi-completion-multilingual-active-analyst.out" 2>"$TMPDIR/pi-completion-multilingual-active-analyst.err"
 
-python3 - "$MULTILINGUAL_ANALYST_ROUTING" "$MULTILINGUAL_ANALYST_PROPOSAL" "$MULTILINGUAL_ANALYST_CHOOSER" "$TMPDIR/pi-completion-multilingual-active-analyst.out" "$TMPDIR/pi-completion-multilingual-active-analyst.err" <<'PY'
+python3 - "$MULTILINGUAL_ANALYST_ROUTING" "$MULTILINGUAL_ANALYST_PROPOSAL" "$MULTILINGUAL_ANALYST_CHOOSER" "$TMPDIR/multilingual-active-analyst-resume.txt" "$TMPDIR/pi-completion-multilingual-active-analyst.out" "$TMPDIR/pi-completion-multilingual-active-analyst.err" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-mission = '支援多語系 /cook refocus 路由並保留低信心保護.'
 routing = json.loads(Path(sys.argv[1]).read_text())
-proposal = json.loads(Path(sys.argv[2]).read_text())
-chooser = json.loads(Path(sys.argv[3]).read_text())
-output = Path(sys.argv[4]).read_text() + Path(sys.argv[5]).read_text()
+proposal = Path(sys.argv[2])
+chooser = Path(sys.argv[3])
+resume = Path(sys.argv[4]).read_text()
+output = Path(sys.argv[5]).read_text() + Path(sys.argv[6]).read_text()
 state = json.loads(Path('.agent/current/state.json').read_text())
 plan = json.loads(Path('.agent/current/plan.json').read_text())
 active = json.loads(Path('.agent/current/active-slice.json').read_text())
 
-assert routing['mode'] == 'bare', 'multilingual analyst refocus should keep bare active-workflow routing mode'
-assert routing['action'] == 'refocus', 'multilingual analyst refocus should classify the active workflow as a replacement'
-assert routing['reason'] == 'workflow_relation_refocus', 'multilingual analyst refocus should route through validated workflow_relation/confidence'
-assert routing['signalSource'] == 'startup_analysis', 'multilingual analyst refocus should report startup-analysis routing'
-assert routing['workflowRelation'] == 'replace_current_workflow', 'multilingual analyst refocus should preserve the validated workflow_relation'
-assert routing['confidence'] == 'high', 'multilingual analyst refocus should preserve the validated confidence'
-assert routing['proposalSource'] == 'analyst', 'multilingual analyst refocus should surface the analyst proposal source'
-assert proposal['source'] == 'analyst', 'multilingual analyst refocus should keep the analyst proposal source'
-assert proposal['analysis']['workflowRelation'] == 'replace_current_workflow', 'multilingual analyst refocus should preserve workflow_relation in the proposal snapshot'
-assert proposal['analysis']['confidence'] == 'high', 'multilingual analyst refocus should preserve confidence in the proposal snapshot'
-assert chooser['choices'][0].startswith('Continue current workflow'), 'multilingual analyst refocus should still offer continue in the chooser'
-assert state['mission_anchor'] == mission, 'multilingual analyst refocus should rewrite the canonical mission anchor after confirmation'
-assert plan['mission_anchor'] == mission, 'multilingual analyst refocus should rewrite the plan mission anchor after confirmation'
-assert active['mission_anchor'] == mission, 'multilingual analyst refocus should rewrite the active-slice mission anchor after confirmation'
-assert 'Refocused completion workflow to: ' + mission in output, 'multilingual analyst refocus should report the accepted replacement mission'
+assert routing['mode'] == 'bare', 'multilingual active /cook should keep bare active-workflow routing mode'
+assert routing['action'] == 'continue', 'multilingual active /cook should continue the current workflow when synthesis is unavailable'
+assert routing['reason'] == 'missing_replacement_proposal', 'multilingual active /cook should report missing replacement proposal when synthesis is unavailable'
+assert routing['signalSource'] == 'none', 'multilingual active /cook should not treat startup-analysis output as a replacement signal'
+assert routing['workflowRelation'] is None, 'multilingual active /cook should not surface a replacement workflow_relation when synthesis is unavailable'
+assert routing['confidence'] is None, 'multilingual active /cook should not surface replacement confidence when synthesis is unavailable'
+assert not proposal.exists(), 'multilingual active /cook should not emit a replacement proposal snapshot when synthesis is unavailable'
+assert not chooser.exists(), 'multilingual active /cook should not open the replacement chooser when synthesis is unavailable'
+assert 'Resume the completion workflow from canonical state.' in resume, 'multilingual active /cook should resume the canonical workflow prompt when synthesis is unavailable'
+assert 'Refocused completion workflow to:' not in output, 'multilingual active /cook should not report a refocus when synthesis is unavailable'
+assert state['mission_anchor'] == plan['mission_anchor'] == active['mission_anchor'], 'multilingual active /cook should leave canonical mission anchors unchanged'
 PY
 
 LOW_CONFIDENCE_ACTIVE_SESSION="$TMPDIR/session-low-confidence-active.jsonl"

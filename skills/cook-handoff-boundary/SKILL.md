@@ -1,6 +1,6 @@
 ---
 name: cook-handoff-boundary
-description: Ordinary-chat contract for treating `/cook` as an optional workflow mode while requiring `/cook` to prefer primary-agent-authored handoff data and use validated recent-discussion fallback conservatively.
+description: Ordinary-chat contract for treating `/cook` as an optional workflow mode while requiring `/cook` to synthesize a fresh primary-agent startup handoff and fail closed when that handoff is not startable.
 ---
 
 # /cook Handoff Boundary
@@ -60,7 +60,7 @@ If the user explicitly runs or clearly chooses `/cook` workflow mode, the system
 
 1. call a primary-agent handoff synthesis step immediately from the current task context
 2. if `/cook` includes inline prompt text, treat that inline prompt as the highest-priority startup intent for the synthesis step
-3. if no primary-agent-generated handoff is startable, allow validated recent-discussion startup analysis only as a bounded fallback for a concrete repo-change mission
+3. if no primary-agent-generated handoff is startable, fail closed without rewriting canonical workflow state
 4. use the resulting startup brief to show Start / Cancel confirmation in the same `/cook` entry
 5. after Start, persist a canonical startup brief in `.agent/**` and treat workflow entry as active
 6. let `completion-regrounder` turn that startup brief plus repo truth into canonical slices
@@ -68,8 +68,7 @@ If the user explicitly runs or clearly chooses `/cook` workflow mode, the system
 That means:
 
 - `/cook` should synthesize a fresh primary-agent startup handoff for the current entry instead of consuming an older session capsule directly
-- `/cook` may use validated recent-discussion startup analysis only when no primary-agent-generated handoff is startable
-- `/cook` must not treat recent discussion as generic guessing; weak, planning-only, not-repo-change, or unclear input still fails closed
+- `/cook` must fail closed when primary-agent synthesis cannot produce a startable handoff
 - `/cook` should persist the confirmed startup brief before regrounding begins
 - `/cook` should not require a manual rerun just to consume a handoff it can synthesize immediately from the primary-agent view
 
@@ -114,7 +113,7 @@ Notes:
 
 Suggested wording:
 
-> We can continue directly in ordinary chat if you want. If you prefer workflow mode, run `/cook` and it should synthesize a fresh primary-agent startup brief for that entry, then fall back to validated recent-discussion startup analysis only when synthesis cannot produce a startable handoff. Any first-slice details are only hints until regrounding authors the canonical slices.
+> We can continue directly in ordinary chat if you want. If you prefer workflow mode, run `/cook` and it should synthesize a fresh primary-agent startup brief for that entry. If synthesis still cannot produce a startable handoff, `/cook` should fail closed until the mission is clarified in main chat. Any first-slice details are only hints until regrounding authors the canonical slices.
 
 ## Forbidden Behaviors
 
@@ -129,8 +128,8 @@ Before the user explicitly runs `/cook`, the primary agent must not:
 
 When the user does explicitly choose `/cook`, the system must not:
 
-- let `/cook` treat recent discussion as startup input without validated, fail-closed startup analysis
-- let `/cook` replace missing handoff data with generic transcript guessing
+- let `/cook` replace a missing startup handoff with generic transcript guessing
+- rewrite canonical workflow state when primary-agent synthesis has not produced a startable handoff
 - require a second `/cook` invocation when same-entry primary-agent handoff synthesis is possible
 
 ## Relationship To `completion-protocol`

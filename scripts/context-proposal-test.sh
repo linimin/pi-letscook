@@ -1326,8 +1326,8 @@ assert 'Started a new completion workflow round for:' in output, 'done-workflow 
 assert 'completion-regrounder will derive the next slices from repo truth' in output, 'done-workflow analyst-backed startup should explain that regrounder derives the next slices'
 PY
 
-# Inline /cook prompt: validated startup analysis should handle multilingual startup without lexical gating
-# when same-entry primary-agent handoff synthesis is unavailable.
+# Inline /cook prompt: when same-entry primary-agent handoff synthesis is unavailable,
+# /cook should now fail closed rather than falling back to validated startup analysis.
 INLINE_ANALYST_ROOT="$TMPDIR/inline-analyst-root"
 mkdir -p "$INLINE_ANALYST_ROOT"
 cd "$INLINE_ANALYST_ROOT"
@@ -1344,33 +1344,15 @@ PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
 pi -e "$PKG_ROOT" -p "/cook 我想讓這個流程在中文描述下也會先做啟動分析，遇到不確定時直接失敗關閉" >"$TMPDIR/pi-completion-inline-analyst.out" 2>"$TMPDIR/pi-completion-inline-analyst.err"
 
 python3 - "$TMPDIR/pi-completion-inline-analyst.out" "$TMPDIR/pi-completion-inline-analyst.err" "$INLINE_ANALYST_SNAPSHOT" <<'PY'
-import json
 import sys
 from pathlib import Path
 
 output = Path(sys.argv[1]).read_text() + Path(sys.argv[2]).read_text()
-proposal = json.loads(Path(sys.argv[3]).read_text())
-state = json.loads(Path('.agent/current/state.json').read_text())
-startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
-
-assert proposal['source'] == 'analyst', 'multilingual inline prompt should fall through to validated startup analysis when synthesis is unavailable'
-assert proposal['mission'] == '支援中文 /cook 啟動分析並保留失敗關閉保護.', 'validated startup analysis should preserve the multilingual mission anchor'
-assert proposal['analysis']['workflowRelation'] == 'new_workflow', 'validated startup analysis should preserve workflow_relation in the proposal snapshot'
-assert proposal['analysis']['confidence'] == 'high', 'validated startup analysis should preserve confidence in the proposal snapshot'
-assert proposal['analysis']['diagnostics'] == ['The inline prompt supplied enough repo-change intent even without English implementation keywords.'], 'validated startup analysis should preserve diagnostics in the proposal snapshot'
-assert proposal['analysis']['taskType'] == 'completion-workflow', 'validated startup analysis should ignore analyst-supplied task_type hints and keep the canonical default'
-assert proposal['analysis']['evaluationProfile'] == 'completion-rubric-v1', 'validated startup analysis should ignore analyst-supplied evaluation_profile hints and keep the canonical default'
-assert 'discussion-derived-routing' not in proposal['basisPreview'], 'validated startup analysis should strip discussion-derived task_type hints from basisPreview'
-assert 'custom-analysis-profile' not in proposal['basisPreview'], 'validated startup analysis should strip discussion-derived evaluation_profile hints from basisPreview'
-assert state['mission_anchor'] == proposal['mission'], 'multilingual inline prompt should start workflow from the analyzed mission'
-assert state['task_type'] == 'completion-workflow', 'startup analysis should fall back to canonical task_type when the structured startup output omits or strips it'
-assert state['evaluation_profile'] == 'completion-rubric-v1', 'startup analysis should fall back to canonical evaluation_profile when the structured startup output omits or strips it'
-assert startup_brief['source'] == 'recent_discussion', 'analyzed startup briefs should still persist as recent_discussion intake'
-assert startup_brief['task_type'] == 'completion-workflow', 'analyzed startup briefs should keep the canonical task_type when startup analysis tries to supply a discussion-derived hint'
-assert startup_brief['evaluation_profile'] == 'completion-rubric-v1', 'analyzed startup briefs should keep the canonical evaluation_profile when startup analysis tries to supply a discussion-derived hint'
-assert any(note.startswith('Diagnostic: The inline prompt supplied enough repo-change intent even without English implementation keywords.') for note in startup_brief['notes']), 'startup brief notes should preserve startup-analysis diagnostics canonically'
-assert not state['mission_anchor'].startswith('Drive '), 'startup analysis must not synthesize the generic mission anchor for multilingual startup'
-assert 'Started completion workflow for:' in output, 'multilingual inline prompt should report workflow start after validated startup analysis'
+snapshot = Path(sys.argv[3])
+assert not Path('.agent').exists(), 'multilingual inline prompt should fail closed without writing canonical state when synthesis is unavailable'
+assert not snapshot.exists(), 'multilingual inline prompt should not emit a startup proposal snapshot when synthesis is unavailable'
+assert 'primary-agent startup step could not prepare a workflow startup brief' in output, 'multilingual inline prompt should fail closed when synthesis is unavailable instead of falling back to startup analysis'
+assert 'Started completion workflow for:' not in output, 'multilingual inline prompt should not report workflow start when synthesis is unavailable'
 PY
 
 # Low-confidence startup analysis: /cook should fail closed instead of inventing a generic mission.

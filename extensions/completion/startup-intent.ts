@@ -1,5 +1,4 @@
 import {
-	deriveCookContextProposalFromRecentDiscussion,
 	extractCookHandoffProposalFromText,
 	finalizeContextProposalAnalysis,
 } from "./proposal";
@@ -39,7 +38,6 @@ export type CookSynthesisContext = {
 	recentEntries: RecentDiscussionEntry[];
 	workflowContext?: ContextProposalWorkflowContext;
 	workflowContextLines: string[];
-	shouldAnalyzeRecentDiscussion: boolean;
 };
 
 export type AdvisoryStartupBrief = {
@@ -139,10 +137,6 @@ export function buildCookRecentEntries(args: {
 	];
 }
 
-export function shouldAnalyzeCookRecentDiscussion(recentEntries: RecentDiscussionEntry[]): boolean {
-	return recentEntries.some((entry) => entry.text.trim().length > 0);
-}
-
 function isPrimaryAgentStructuredProposalSource(source: ContextProposal["source"]): boolean {
 	return source === "handoff_capsule" || source === "deferred_primary_agent_handoff";
 }
@@ -210,12 +204,10 @@ export function buildCookSynthesisContext(args: {
 		workflowContextLines.push(`inline /cook startup intent: ${args.inlinePrompt}`);
 		workflowContextLines.push("Treat the inline /cook prompt as the highest-priority explicit startup intent for this workflow entry.");
 	}
-	const shouldAnalyzeRecentDiscussion = shouldAnalyzeCookRecentDiscussion(recentEntries);
 	return {
 		recentEntries,
 		workflowContext,
 		workflowContextLines,
-		shouldAnalyzeRecentDiscussion,
 	};
 }
 
@@ -226,10 +218,6 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 	projectName: string;
 	deps: CookProposalDeps;
 	generateCookHandoff?: (params: { recentEntries: RecentDiscussionEntry[]; workflowContextLines: string[] }) => Promise<string | undefined>;
-	analyzeContextProposal?: (params: {
-		recentEntries: RecentDiscussionEntry[];
-		workflowContextLines: string[];
-	}) => Promise<ContextProposal | undefined>;
 }): Promise<CookContextProposalResult> {
 	const workflowContext = workflowContextFromSnapshot(args.snapshot);
 	const annotateProposal = (proposal: ContextProposal | undefined): ContextProposal | undefined =>
@@ -239,7 +227,7 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 		recentMessages: args.recentMessages,
 		snapshot: args.snapshot,
 	});
-	const { recentEntries, workflowContext: synthesisWorkflowContext, workflowContextLines } = synthesisContext;
+	const { recentEntries, workflowContextLines } = synthesisContext;
 	const raw = await args.generateCookHandoff?.({ recentEntries, workflowContextLines });
 	if (raw) {
 		const generatedProposal = annotateProposal(
@@ -249,16 +237,6 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 			}),
 		);
 		if (generatedProposal) return { proposal: generatedProposal };
-	}
-	if (synthesisContext.shouldAnalyzeRecentDiscussion) {
-		const derivedFromRecentDiscussion = await deriveCookContextProposalFromRecentDiscussion(args.projectName, recentEntries, {
-			...args.deps,
-			analyzeContextProposal: args.analyzeContextProposal
-				? async (candidateEntries) => args.analyzeContextProposal?.({ recentEntries: candidateEntries, workflowContextLines })
-				: undefined,
-			workflowContext: synthesisWorkflowContext,
-		});
-		if (derivedFromRecentDiscussion) return { proposal: annotateProposal(derivedFromRecentDiscussion) };
 	}
 	return {};
 }

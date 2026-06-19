@@ -51,7 +51,7 @@ assertIncludes('extensions/completion/startup-analysis.ts', 'export function par
 assertIncludes('extensions/completion/startup-validation.ts', 'export function validateStartupAnalysisRecord(');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.');
-assertIncludes('extensions/completion/index.ts', 'import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";');
+assertIncludes('extensions/completion/index.ts', 'import { generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";');
 assertIncludes('extensions/completion/index.ts', 'const result = await runCompletionRole({');
 assertIncludes('extensions/completion/index.ts', 'requestedModel: modelArgFromContextModel((ctx as { model?: unknown }).model),');
 assertIncludes('extensions/completion/index.ts', 'generateCookHandoff: async ({ recentEntries, workflowContextLines }) =>');

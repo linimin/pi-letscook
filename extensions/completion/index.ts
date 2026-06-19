@@ -46,7 +46,7 @@ import {
 import { deriveCookContextProposalWithSynthesis } from "./startup-intent";
 import type { CookContextProposalResult, CookProposalDeps } from "./startup-intent";
 import { toolCallBlockReason } from "./policy-guards";
-import { analyzeContextProposalWithAgent, generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";
+import { generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";
 import { canRoleUseCompletionAssist, COMPLETION_ASSIST_TOOL_NAME } from "./helper-policy.ts";
 import { runCompletionAssistTool } from "./helper-runner.ts";
 import { COMPLETION_HELPER_NAMES, type CompletionHelperName } from "./helper-types.ts";
@@ -581,19 +581,6 @@ async function deriveCookContextProposal(
 				getCtxHasUI,
 				getCtxUi,
 			}),
-		analyzeContextProposal: async ({ recentEntries, workflowContextLines }) =>
-			analyzeContextProposalWithAgent({
-				ctx,
-				projectName,
-				recentEntries,
-				workflowContextLines,
-				liveRoleActivityByRoot,
-				completionStatusKey: COMPLETION_STATUS_KEY,
-				safeUiCall,
-				getCtxCwd,
-				getCtxHasUI,
-				getCtxUi,
-			}),
 	});
 }
 
@@ -1078,7 +1065,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: start or replace workflow by first asking the primary agent to synthesize a startup handoff from the current task context or inline prompt, and only then bounded validated recent_discussion startup analysis when no primary-agent handoff is startable (fail closed otherwise); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls",
+			description: "/cook workflow: start or replace workflow by asking the primary agent to synthesize a startup handoff from the current task context or inline prompt (fail closed when no startable handoff is produced); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,
