@@ -83,21 +83,6 @@ function formatToolActivity(toolName: string, args: JsonRecord): string {
 	return `${toolName} ${truncateInline(JSON.stringify(args))}`;
 }
 
-function partialResultText(partialResult: JsonRecord | undefined): string | undefined {
-	const details = isRecord(partialResult?.details) ? partialResult.details : undefined;
-	const helper = asString(details?.helper);
-	const stage = asString(details?.stage) ?? asString(details?.message);
-	if (stage) return stage.startsWith("helper ") || !helper ? stage : `helper ${helper}: ${stage}`;
-	const content = Array.isArray(partialResult?.content) ? partialResult?.content : [];
-	for (const item of content) {
-		if (!isRecord(item) || asString(item.type) !== "text") continue;
-		const text = asString(item.text);
-		if (!text) continue;
-		return text.startsWith("helper ") || !helper ? text : `helper ${helper}: ${text}`;
-	}
-	return undefined;
-}
-
 export function pushRecentActivity(items: string[], line: string, maxItems = 8): string[] {
 	const normalized = truncateInline(line, 160);
 	if (!normalized) return items;
@@ -261,16 +246,7 @@ export function applyLiveRoleEvent(activity: LiveRoleActivity, event: JsonRecord
 		return true;
 	}
 	if (eventType === "tool_execution_update") {
-		const partialResult = isRecord(event.partialResult) ? event.partialResult : undefined;
-		const toolLine = partialResultText(partialResult);
-		if (toolLine) {
-			activity.toolActivity = toolLine;
-			activity.currentAction = toolLine;
-			activity.assistantSummary = toolLine;
-			activity.progress = toolLine;
-			activity.toolRecentActivity = pushRecentActivity(activity.toolRecentActivity, toolLine, 6);
-			activity.recentActivity = pushRecentActivity(activity.recentActivity, toolLine);
-		}
+		// Keep the currently selected tool label stable and suppress streaming tool-output lines.
 		activity.updatedAt = activityAt;
 		return true;
 	}

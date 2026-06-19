@@ -32,9 +32,8 @@ function assertIncludes(file, snippet) {
   } = statusMod;
 
   assertIncludes('extensions/completion/status-surface.ts', 'if (toolName === "completion_assist") {');
-  assertIncludes('extensions/completion/status-surface.ts', 'if (eventType === "tool_execution_update") {');
+  assertIncludes('extensions/completion/status-surface.ts', 'suppress streaming tool-output lines');
   assertIncludes('extensions/completion/helper-runner.ts', 'onProgress: (event) => {');
-  assertIncludes('extensions/completion/helper-runner.ts', 'stage: line,');
   assertIncludes('extensions/completion/helper-runner.ts', 'message: line,');
 
   process.env.PI_COMPLETION_TEST_NOW = '1400';
@@ -76,7 +75,7 @@ function assertIncludes(file, snippet) {
       messages,
     ),
     true,
-    'helper tool updates should refresh live role activity',
+    'helper tool updates should refresh live role activity timestamps without replacing the tool label',
   );
 
   assert.equal(
@@ -96,15 +95,14 @@ function assertIncludes(file, snippet) {
       messages,
     ),
     true,
-    'later helper stages should replace the current nested helper preview',
+    'later helper stages should keep the same top-level tool preview',
   );
 
   const lines = buildInlineRunningLines(activity);
   assert.equal(lines[0], 'running completion role completion-implementer');
-  assert.ok(lines.includes('tool: helper scout: stage: read-source'), lines);
-  assert.ok(lines.includes('progress: helper scout: stage: read-source'), lines);
-  assert.ok(lines.includes('recent tools:'), lines);
-  assert.ok(lines.some((line) => line.includes('helper scout: tool: completion_helper_read')), lines);
+  assert.ok(lines.includes('tool: helper scout: Inspect extensions/completion/index.ts'), lines);
+  assert.ok(!lines.some((line) => line.includes('stage: read-source')), lines);
+  assert.ok(!lines.some((line) => line.includes('completion_helper_read')), lines);
 
   const snapshot = {
     state: {
@@ -127,12 +125,12 @@ function assertIncludes(file, snippet) {
 
   const surface = buildCompletionStatusSurface(snapshot, activity);
   assert.equal(surface.activeRole, 'completion-implementer');
-  assert.equal(surface.livePreview, 'helper scout: stage: read-source');
-  assert.equal(surface.liveProgress, 'helper scout: stage: read-source');
+  assert.equal(surface.livePreview, 'helper scout: Inspect extensions/completion/index.ts');
+  assert.equal(surface.liveProgress, undefined);
   assert.deepEqual(surface.widgetLines, [], 'nested helper progress must not create a second top-level widget');
-  assert.ok(surface.liveDetailsLines.some((line) => line.includes('helper scout: tool: completion_helper_read')), surface.liveDetailsLines);
-  assert.ok(surface.liveDetailsLines.some((line) => line.includes('tool: helper scout: stage: read-source')), surface.liveDetailsLines);
-  assert.ok(surface.liveDetailsLines.some((line) => line.includes('progress: helper scout: stage: read-source')), surface.liveDetailsLines);
+  assert.ok(surface.liveDetailsLines.some((line) => line.includes('tool: helper scout: Inspect extensions/completion/index.ts')), surface.liveDetailsLines);
+  assert.ok(!surface.liveDetailsLines.some((line) => line.includes('stage: read-source')), surface.liveDetailsLines);
+  assert.ok(!surface.liveDetailsLines.some((line) => line.includes('completion_helper_read')), surface.liveDetailsLines);
 
   delete process.env.PI_COMPLETION_TEST_NOW;
 })();

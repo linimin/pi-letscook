@@ -428,16 +428,6 @@ function progressEventFromJsonEvent(event: JsonRecord): CompletionHelperProgress
 			message: `tool: ${asString(event.toolName) ?? "tool"}`,
 		};
 	}
-	if (eventType === "tool_execution_update") {
-		const partial = isRecord(event.partialResult) ? event.partialResult : undefined;
-		const details = isRecord(partial?.details) ? partial?.details : undefined;
-		const stage = asString(details?.stage);
-		if (stage) return { kind: "stage", message: `stage: ${stage}`, details };
-	}
-	if (eventType === "message_update" && isRecord(event.message)) {
-		const text = assistantTextFromMessage(event.message);
-		if (text) return { kind: "stage", message: truncateUtf8(text, 160) };
-	}
 	return undefined;
 }
 
