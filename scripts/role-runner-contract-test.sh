@@ -36,6 +36,12 @@ assertIncludes('extensions/completion/helper-policy.ts', 'export function buildC
 assertIncludes('extensions/completion/role-runner.ts', 'const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);');
 assertIncludes('extensions/completion/role-runner.ts', 'const effectiveToolAllowlist = effectiveRoleToolAllowlist(params.role, agent.tools);');
 assertIncludes('extensions/completion/role-runner.ts', 'const roleEnv = buildCompletionRoleSubprocessEnv(params.role, roleModel);');
+assertIncludes('extensions/completion/role-runner.ts', 'function getInheritedHeadroomWrapPiExtensionArgs(): string[] {');
+assertIncludes('extensions/completion/role-runner.ts', 'const explicitExtensionPath = process.env.HEADROOM_PI_EXTENSION_PATH?.trim();');
+assertIncludes('extensions/completion/role-runner.ts', 'const sessionConfigPath = process.env.HEADROOM_PI_SESSION_CONFIG?.trim();');
+assertIncludes('extensions/completion/role-runner.ts', 'const extensionPath = path.join(path.dirname(sessionConfigPath), "extension.ts");');
+assertIncludes('extensions/completion/role-runner.ts', 'const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();');
+assertIncludes('extensions/completion/role-runner.ts', 'if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);');
 assertIncludes('extensions/completion/role-runner.ts', 'env: roleEnv,');
 assertIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.');
 assertIncludes('extensions/completion/role-runner.ts', 'Use workflow_relation values: new_workflow, continue_current_workflow, replace_current_workflow, or unclear.');

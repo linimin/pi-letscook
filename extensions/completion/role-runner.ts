@@ -610,6 +610,21 @@ export function getPiInvocation(args: string[]): { command: string; args: string
 	return { command: "pi", args };
 }
 
+function getInheritedHeadroomWrapPiExtensionArgs(): string[] {
+	const explicitExtensionPath = process.env.HEADROOM_PI_EXTENSION_PATH?.trim();
+	if (explicitExtensionPath && fs.existsSync(explicitExtensionPath)) {
+		return ["--extension", explicitExtensionPath];
+	}
+
+	const sessionConfigPath = process.env.HEADROOM_PI_SESSION_CONFIG?.trim();
+	if (!sessionConfigPath) return [];
+
+	const extensionPath = path.join(path.dirname(sessionConfigPath), "extension.ts");
+	if (!fs.existsSync(extensionPath)) return [];
+
+	return ["--extension", extensionPath];
+}
+
 export async function runCompletionRole(params: RunCompletionRoleParams): Promise<RunCompletionRoleResult> {
 	const agent = await loadAgentDefinition(params.root, params.role);
 	const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);
@@ -636,6 +651,8 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 		}
 		const prompt = taskLines.join("\n");
 		const args: string[] = ["--mode", "json", "-p", "--no-session", "--append-system-prompt", systemPromptTemp.filePath];
+		const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
+		if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
 		if (roleModel) args.push("--model", roleModel);
 		if (effectiveToolAllowlist && effectiveToolAllowlist.length > 0) args.push("--tools", effectiveToolAllowlist.join(","));
 		args.push(prompt);
