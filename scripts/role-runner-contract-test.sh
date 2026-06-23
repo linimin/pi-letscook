@@ -42,6 +42,8 @@ assertIncludes('extensions/completion/role-runner.ts', 'const sessionConfigPath 
 assertIncludes('extensions/completion/role-runner.ts', 'const extensionPath = path.join(path.dirname(sessionConfigPath), "extension.ts");');
 assertIncludes('extensions/completion/role-runner.ts', 'const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();');
 assertIncludes('extensions/completion/role-runner.ts', 'if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);');
+assertIncludes('extensions/completion/role-runner.ts', 'const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath];');
+assertIncludes('extensions/completion/role-runner.ts', 'args.push("--model", modelArg, prompt);');
 assertIncludes('extensions/completion/role-runner.ts', 'env: roleEnv,');
 assertIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.');
 assertIncludes('extensions/completion/role-runner.ts', 'Use workflow_relation values: new_workflow, continue_current_workflow, replace_current_workflow, or unclear.');

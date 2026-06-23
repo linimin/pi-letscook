@@ -214,7 +214,10 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 	const rootKey = completionRootKey(undefined, cwd);
 	const prompt = buildStartupAnalysisPromptFromEntries(projectName, recentEntries, params.workflowContextLines);
 	const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-proposal-analyst-", CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT);
-	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath, "--model", modelArg, prompt];
+	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath];
+	const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
+	if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
+	args.push("--model", modelArg, prompt);
 	const invocation = getPiInvocation(args);
 	const liveActivity = createLiveRoleActivity(STARTUP_ANALYST_ROLE);
 	liveActivity.toolActivity = undefined;
@@ -387,7 +390,10 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 	const rootKey = completionRootKey(undefined, cwd);
 	const prompt = buildPrimaryAgentHandoffPrompt(projectName, recentEntries, params.workflowContextLines ?? []);
 	const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-primary-agent-handoff-", PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT);
-	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath, "--model", modelArg, prompt];
+	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath];
+	const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
+	if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
+	args.push("--model", modelArg, prompt);
 	const invocation = getPiInvocation(args);
 	const liveActivity = createLiveRoleActivity(PRIMARY_AGENT_HANDOFF_ROLE);
 	liveActivity.toolActivity = undefined;
