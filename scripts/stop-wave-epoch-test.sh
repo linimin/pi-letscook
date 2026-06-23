@@ -237,6 +237,10 @@ import os, subprocess
 env = {**os.environ, 'COMPLETION_REPO_VERIFY_COMMAND': 'npm run verifier-fixture-check >/dev/null'}
 env.pop('PI_COMPLETION_RUNNING_RELEASE_CHECK', None)
 env.pop('COMPLETION_REPO_VERIFY_CWD', None)
+# `npm run -s ...` sets a silent log level in the environment, which can suppress the
+# nested npm ENOENT stderr we assert on below. Force a visible log level for this probe.
+env['npm_config_loglevel'] = 'notice'
+env['NPM_CONFIG_LOGLEVEL'] = 'notice'
 result = subprocess.run(
     ['bash', os.path.join(os.environ['REPO'], 'scripts', 'verify-completion-stop.sh')],
     cwd=os.environ['RECONCILE'],
@@ -268,6 +272,8 @@ env = {
 env.pop('PI_COMPLETION_RUNNING_RELEASE_CHECK', None)
 env.pop('COMPLETION_REPO_VERIFY_COMMAND', None)
 env.pop('COMPLETION_REPO_VERIFY_CWD', None)
+env['npm_config_loglevel'] = 'notice'
+env['NPM_CONFIG_LOGLEVEL'] = 'notice'
 result = subprocess.run(
     ['bash', '.agent/verify_completion_stop.sh'],
     cwd=reconcile,

@@ -1,0 +1,27 @@
+[release-check] running control-plane validation, helper runtime capability probe, packaged helper smoke, helper authority-boundary, artifact-layout, runtime-contract, role-gating, structured-output, observability regressions, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context/worktree-root regressions, agent_end auto-resume delivery coverage, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage
+helper runtime capability probe verified packaged helper-tools loading at /private/var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.3v02IVHj9U/install/node_modules/@linimin/pi-letscook
+helper runtime capability test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.3v02IVHj9U/install/node_modules/@linimin/pi-letscook
+helper packaging smoke test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.UwFiLfqFoE/install/node_modules/@linimin/pi-letscook
+helper authority boundary test passed
+helper artifact layout test passed
+helper runtime contract test passed
+helper role gating test passed
+helper structured output test passed
+helper observability test passed
+[release-check] verifying public /cook parity and primary-agent-handoff docs/help
+smoke test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.6bBxkJsiNx/repo
+agent-end auto-resume test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.ebbFLQI2V9/repo
+refocus test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.t6sMrEyYcf
+context proposal test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.7CuV4av6w3/repo
+worktree root boundary test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.XGiKcrS2xG/lobster/.worktrees/cdn-onboarding-direct and /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.XGiKcrS2xG/lobster/.worktrees/cdn-onboarding-session
+role-runner contract test passed
+canonical evidence artifact test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.cqs7GUa7ZC
+active-slice contract test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.jnTL3FG105
+observability status test passed: /var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.w4U8h9apcA
+completion-role gating test passed
+dirty-worktree policy test passed
+Traceback (most recent call last):
+  File "<stdin>", line 14, in <module>
+AssertionError: [completion] stop-wave policy unanimous-current-head-v1 satisfied for HEAD 0e3d20815e95b58a0f2b8e659caed1651d809c78 in stop_wave_id 2 with 2 valid current-HEAD judgments
+[completion] running repo-level verification from /private/var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.dJXoirC5sy/reconcile: npm run verifier-fixture-check >/dev/null
+
