@@ -544,8 +544,8 @@ async function confirmExistingWorkflowProposal(
 	const continueChoice = "Continue current workflow\n\nKeep the current mission and treat the new goal as extra direction only.";
 	const buildRefocusChoice = (candidate: ContextProposalAlternate, variant: "primary" | "alternate") =>
 		variant === "primary"
-			? `${options.refocusChoiceLabel ?? "Start new workflow from recent discussion\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`
-			: `${options.alternateChoiceLabel ?? "Start alternate workflow from recent discussion\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`;
+			? `${options.refocusChoiceLabel ?? "Start new workflow from this startup brief\n\nReview the proposed replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`
+			: `${options.alternateChoiceLabel ?? "Start alternate workflow from this startup brief\n\nReview this alternate replacement in a final Start/Cancel confirmation before /cook rewrites canonical workflow state."}\n\n${summarizeProposalForChoice(candidate)}`;
 	const refocusChoices = candidateProposals.map((candidate, index) => buildRefocusChoice(candidate, index === 0 ? "primary" : "alternate"));
 	const cancelChoice = `Cancel\n\nKeep the current workflow unchanged. ${deps.mainChatRerunGuidance}`;
 	deps.maybeWriteTestSnapshot(
@@ -739,7 +739,7 @@ export async function runCookEntry(
 			title: "Start a completion workflow from this startup brief?",
 		});
 		if (!decision) {
-			deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled recent-discussion workflow proposal", deps), "info");
+			deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled startup workflow proposal", deps), "info");
 			return;
 		}
 		goal = decision.goalText;

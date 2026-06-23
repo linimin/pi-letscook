@@ -80,7 +80,8 @@ checks = {
         "preserved the confirmed `/cook` startup intent in canonical `.agent/current/startup-brief.json` so workflow entry is durable before regrounding authors canonical slices",
         "moved workflow-session legitimacy away from in-memory routing activation and legacy `/skill:completion-protocol` prompt dependence toward canonical workflow-session state plus explicit `/cook` entry turns",
         "removed the remaining main-path `/cook` free-text `task_type` / `evaluation_profile` inference so startup and refocus now keep the packaged `completion-workflow` / `completion-rubric-v1` defaults unless an explicit structured artifact supplies routing fields",
-        "removed fresh explicit `cook_handoff` capsule precedence from `/cook` startup so every workflow entry now synthesizes a fresh primary-agent handoff from current context or inline prompt before any validated `recent_discussion` fallback runs",
+        "removed fresh explicit `cook_handoff` capsule precedence from `/cook` startup so every workflow entry now synthesizes a fresh primary-agent handoff from current context or inline prompt instead of directly consuming earlier preview capsules",
+        "aligned `/cook` startup docs/help plus smoke/release parity checks with the shipped same-entry handoff-synthesis -> fail-closed contract so public contract text matches startup behavior",
     ],
     "extensions/completion/prompt-surfaces.ts": [
         '"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context or inline /cook prompt, show Start/Cancel confirmation, and persist the confirmed startup brief into .agent/** without making the user rerun /cook."',
