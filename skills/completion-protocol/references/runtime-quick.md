@@ -1,0 +1,54 @@
+# completion runtime quick reference
+
+Use this as the default runtime protocol brief for the workflow driver and all completion roles.
+
+Read the full `../SKILL.md` or `completion.md` only when this quick reference plus canonical `.agent/**` state still leave a protocol detail ambiguous.
+
+## Canonical truth
+
+Read current repo truth plus these canonical workflow inputs as needed:
+
+- package defaults for `task_type`, `evaluation_profile`, and stop policy
+- `.agent/current/state.json`
+- `.agent/current/startup-brief.json`
+- `.agent/current/plan.json`
+- `.agent/current/active-slice.json`
+- `.agent/current/slice-history.jsonl`
+- `.agent/current/stop-check-history.jsonl`
+- `.agent/current/verification-evidence.json`
+
+## Shared runtime rules
+
+- Current repo truth beats stale notes, summaries, or conversation memory.
+- `startup-brief.json` is canonical startup intake, not the canonical slice plan.
+- `plan.json` is the canonical slice backlog.
+- For selected, in-progress, committed, or done slices, `active-slice.json` is the canonical implementation contract.
+- If canonical state is missing, stale, contradictory, or ambiguous, route to `completion-regrounder`.
+- Run exactly one implementation slice at a time, and a slice is not complete until it lands as a new commit.
+- Before next-slice progression after a committed slice, the tracked and unignored worktree must be clean. Auto-preserve unrelated dirt when it can be isolated safely.
+
+## Driver and role boundaries
+
+- The main pi session is the workflow driver and dispatches at most one completion role at a time.
+- Completion roles do not invoke other completion roles.
+- `completion-bootstrapper` is only for missing local helper or canonical-state repair.
+- `completion-regrounder` owns canonical reconciliation, slice selection, post-review/audit reconciliation, and final stop reconciliation.
+- `completion-implementer` owns exactly one selected slice end to end, including the commit.
+- `completion-reviewer`, `completion-auditor`, and `completion-stop-judge` are read-only.
+
+## Continuation and recovery
+
+- `continuation_policy = continue` means the driver keeps dispatching mandatory roles.
+- `await_user_input` means ask only for the exact missing input and then stop.
+- `blocked` means report the blocker and stop.
+- `paused` means the user explicitly paused the workflow.
+- `done` means final reconciliation is complete.
+- Stopped workflows resume with `/cook` or `/cook resume`; `/cook park` unlocks ordinary direct edits and forces reground; `/cook cancel` closes the workflow.
+- After compaction or any ambiguous state, re-read canonical `.agent/current/*.json*` inputs before continuing.
+- Enter `completion-regrounder` whenever `requires_reground` is true or unknown, the next mandatory action is ambiguous, or the active-slice contract drifts from the plan.
+
+## Stop-wave and cleanup reminders
+
+- Under `unanimous-current-head-v1`, only current-HEAD stop-judge records from the current `current_stop_wave_id` count.
+- `.agent/verify_completion_*.sh` are local convenience entrypoints, not tracked repo-contract files.
+- If `.agent/` disappears after canonical state reaches `done` or `cancelled`, treat that as expected cleanup.

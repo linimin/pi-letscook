@@ -215,6 +215,7 @@ Always include all four rubric lines, even when every dimension is `pass`.
 
 ## References
 
-Read these bundled references when you need the full protocol or scaffolding material:
+For normal runtime loading, prefer the concise bundled runtime brief first. Read the fuller protocol reference only when the runtime brief plus canonical `.agent/**` state still leave a detail ambiguous:
 
+- `references/runtime-quick.md`
 - `references/completion.md`
