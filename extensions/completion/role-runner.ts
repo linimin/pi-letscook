@@ -214,7 +214,19 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 	const rootKey = completionRootKey(undefined, cwd);
 	const prompt = buildStartupAnalysisPromptFromEntries(projectName, recentEntries, params.workflowContextLines);
 	const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-proposal-analyst-", CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT);
-	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath];
+	const args: string[] = [
+		"--mode",
+		"json",
+		"-p",
+		"--no-session",
+		"--no-extensions",
+		"--no-builtin-tools",
+		"--no-skills",
+		"--no-prompt-templates",
+		"--no-context-files",
+		"--append-system-prompt",
+		systemPromptTemp.filePath,
+	];
 	const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
 	if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
 	args.push("--model", modelArg, prompt);
@@ -390,7 +402,19 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 	const rootKey = completionRootKey(undefined, cwd);
 	const prompt = buildPrimaryAgentHandoffPrompt(projectName, recentEntries, params.workflowContextLines ?? []);
 	const systemPromptTemp = await writeTempFile(runCwd, "pi-cook-primary-agent-handoff-", PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT);
-	const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath];
+	const args: string[] = [
+		"--mode",
+		"json",
+		"-p",
+		"--no-session",
+		"--no-extensions",
+		"--no-builtin-tools",
+		"--no-skills",
+		"--no-prompt-templates",
+		"--no-context-files",
+		"--append-system-prompt",
+		systemPromptTemp.filePath,
+	];
 	const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
 	if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
 	args.push("--model", modelArg, prompt);
@@ -534,6 +558,12 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 }
 
 export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWithAgentParams): Promise<string | undefined> {
+	if (params.recentEntries.length > 0) {
+		maybeWriteTestTextSnapshot(
+			asString(process.env.PI_COMPLETION_TEST_PRIMARY_HANDOFF_PROMPT_PATH),
+			buildPrimaryAgentHandoffPrompt(params.projectName, params.recentEntries, params.workflowContextLines ?? []),
+		);
+	}
 	if (process.env.PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS === "1") return undefined;
 	const testOutput = asString(process.env.PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT);
 	if (testOutput) return testOutput;
@@ -547,6 +577,12 @@ export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWi
 }
 
 export async function analyzeContextProposalWithAgent(params: AnalyzeContextProposalWithAgentParams): Promise<ContextProposal | undefined> {
+	if (params.recentEntries.length > 0) {
+		maybeWriteTestTextSnapshot(
+			asString(process.env.PI_COMPLETION_TEST_CONTEXT_PROPOSAL_ANALYST_PROMPT_PATH),
+			buildStartupAnalysisPromptFromEntries(params.projectName, params.recentEntries, params.workflowContextLines),
+		);
+	}
 	if (process.env.PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST === "1") return undefined;
 	const testOutput = asString(process.env.PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT);
 	if (testOutput) return parseStartupAnalysisOutput(testOutput, params.projectName);
@@ -631,6 +667,56 @@ function getInheritedHeadroomWrapPiExtensionArgs(): string[] {
 	return ["--extension", extensionPath];
 }
 
+function maybeWriteTestTextSnapshot(snapshotPath: string | undefined, content: string): void {
+	if (!snapshotPath) return;
+	try {
+		fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
+		fs.writeFileSync(snapshotPath, `${content}\n`, "utf8");
+	} catch {
+		// ignore malformed or unwritable test snapshot paths
+	}
+}
+
+function maybeWriteTestRolePromptBundle(
+	snapshotPath: string | undefined,
+	args: {
+		role: CompletionRole;
+		systemPrompt: string;
+		taskPrompt: string;
+		toolAllowlist?: string[];
+		model?: string;
+		repairMode: boolean;
+	},
+): void {
+	if (!snapshotPath) return;
+	const combinedPrompt = `${args.systemPrompt}\n\n${args.taskPrompt}`;
+	try {
+		fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
+		fs.writeFileSync(
+			snapshotPath,
+			`${JSON.stringify(
+				{
+					role: args.role,
+					repair_mode: args.repairMode,
+					model: args.model ?? null,
+					tool_allowlist: args.toolAllowlist ?? null,
+					system_prompt_chars: args.systemPrompt.length,
+					task_prompt_chars: args.taskPrompt.length,
+					combined_prompt_chars: combinedPrompt.length,
+					system_prompt: args.systemPrompt,
+					task_prompt: args.taskPrompt,
+					combined_prompt: combinedPrompt,
+				},
+				null,
+				2,
+			)}\n`,
+			"utf8",
+		);
+	} catch {
+		// ignore malformed or unwritable test snapshot paths
+	}
+}
+
 export async function runCompletionRole(params: RunCompletionRoleParams): Promise<RunCompletionRoleResult> {
 	const agent = await loadAgentDefinition(params.root, params.role);
 	const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);
@@ -656,7 +742,26 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 			);
 		}
 		const prompt = taskLines.join("\n");
-		const args: string[] = ["--mode", "json", "-p", "--no-session", "--append-system-prompt", systemPromptTemp.filePath];
+		maybeWriteTestTextSnapshot(asString(process.env.PI_COMPLETION_TEST_ROLE_PROMPT_PATH), prompt);
+		maybeWriteTestRolePromptBundle(asString(process.env.PI_COMPLETION_TEST_ROLE_PROMPT_BUNDLE_PATH), {
+			role: params.role,
+			systemPrompt: agent.systemPrompt,
+			taskPrompt: prompt,
+			toolAllowlist: effectiveToolAllowlist,
+			model: roleModel,
+			repairMode: Boolean(repairPrompt),
+		});
+		const args: string[] = [
+			"--mode",
+			"json",
+			"-p",
+			"--no-session",
+			"--no-skills",
+			"--no-prompt-templates",
+			"--no-context-files",
+			"--append-system-prompt",
+			systemPromptTemp.filePath,
+		];
 		const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
 		if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
 		if (roleModel) args.push("--model", roleModel);
@@ -668,6 +773,22 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 		const messages: Array<{ role: string; content: Array<{ type: string; text?: string }> }> = [];
 		const liveActivity = params.createLiveRoleActivity(params.role);
 		params.onUpdate?.(liveActivity);
+		if (process.env.PI_COMPLETION_TEST_CAPTURE_ROLE_PROMPT_ONLY === "1") {
+			const output = `Captured ${params.role} prompt snapshot (test mode).`;
+			liveActivity.currentAction = "Captured role prompt snapshot";
+			liveActivity.assistantSummary = output;
+			liveActivity.lastAssistantText = output;
+			return {
+				role: params.role,
+				ok: true,
+				exitCode: 0,
+				output,
+				stderr: "",
+				reportFields: {},
+				transcription: undefined,
+				activity: params.cloneLiveRoleActivity(liveActivity, { status: "ok" }),
+			};
+		}
 		const heartbeat = setInterval(() => params.onUpdate?.(liveActivity), params.heartbeatMs);
 
 		try {

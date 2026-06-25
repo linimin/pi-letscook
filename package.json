@@ -39,6 +39,7 @@
     "agent-end-auto-resume-test": "bash ./scripts/agent-end-auto-resume-test.sh",
     "refocus-test": "bash ./scripts/refocus-test.sh",
     "context-proposal-test": "bash ./scripts/context-proposal-test.sh",
+    "prompt-budget-test": "bash ./scripts/prompt-budget-test.sh",
     "observability-status-test": "bash ./scripts/observability-status-test.sh",
     "completion-role-gating-test": "bash ./scripts/completion-role-gating-test.sh",
     "dirty-worktree-policy-test": "bash ./scripts/dirty-worktree-policy-test.sh",

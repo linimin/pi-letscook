@@ -36,13 +36,21 @@ assertIncludes('extensions/completion/helper-policy.ts', 'export function buildC
 assertIncludes('extensions/completion/role-runner.ts', 'const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);');
 assertIncludes('extensions/completion/role-runner.ts', 'const effectiveToolAllowlist = effectiveRoleToolAllowlist(params.role, agent.tools);');
 assertIncludes('extensions/completion/role-runner.ts', 'const roleEnv = buildCompletionRoleSubprocessEnv(params.role, roleModel);');
+assertIncludes('extensions/completion/role-runner.ts', 'function maybeWriteTestRolePromptBundle(');
+assertIncludes('extensions/completion/role-runner.ts', 'PI_COMPLETION_TEST_ROLE_PROMPT_BUNDLE_PATH');
+assertIncludes('extensions/completion/role-runner.ts', 'PI_COMPLETION_TEST_CAPTURE_ROLE_PROMPT_ONLY');
 assertIncludes('extensions/completion/role-runner.ts', 'function getInheritedHeadroomWrapPiExtensionArgs(): string[] {');
 assertIncludes('extensions/completion/role-runner.ts', 'const explicitExtensionPath = process.env.HEADROOM_PI_EXTENSION_PATH?.trim();');
 assertIncludes('extensions/completion/role-runner.ts', 'const sessionConfigPath = process.env.HEADROOM_PI_SESSION_CONFIG?.trim();');
 assertIncludes('extensions/completion/role-runner.ts', 'const extensionPath = path.join(path.dirname(sessionConfigPath), "extension.ts");');
 assertIncludes('extensions/completion/role-runner.ts', 'const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();');
 assertIncludes('extensions/completion/role-runner.ts', 'if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);');
-assertIncludes('extensions/completion/role-runner.ts', 'const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath];');
+assertIncludes('extensions/completion/role-runner.ts', '"--no-builtin-tools",');
+assertIncludes('extensions/completion/role-runner.ts', '"--no-skills",');
+assertIncludes('extensions/completion/role-runner.ts', '"--no-prompt-templates",');
+assertIncludes('extensions/completion/role-runner.ts', '"--no-context-files",');
+assertIncludes('extensions/completion/role-runner.ts', 'const args: string[] = [\n\t\t\t"--mode",\n\t\t\t"json",\n\t\t\t"-p",\n\t\t\t"--no-session",\n\t\t\t"--no-skills",\n\t\t\t"--no-prompt-templates",\n\t\t\t"--no-context-files",\n\t\t\t"--append-system-prompt",\n\t\t\tsystemPromptTemp.filePath,\n\t\t];');
+assertIncludes('extensions/completion/role-runner.ts', 'const combinedPrompt = `${args.systemPrompt}\\n\\n${args.taskPrompt}`;');
 assertIncludes('extensions/completion/role-runner.ts', 'args.push("--model", modelArg, prompt);');
 assertIncludes('extensions/completion/role-runner.ts', 'env: roleEnv,');
 assertIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.');
@@ -57,14 +65,42 @@ assertIncludes('extensions/completion/startup-analysis.ts', 'export function bui
 assertIncludes('extensions/completion/startup-analysis.ts', 'Do not include task_type or evaluation_profile in discussion-derived startup-analysis output. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.');
 assertIncludes('extensions/completion/startup-analysis.ts', 'export function parseStartupAnalysisOutput(');
 assertIncludes('extensions/completion/startup-validation.ts', 'export function validateStartupAnalysisRecord(');
+for (const file of [
+  'agents/completion-bootstrapper.md',
+  'agents/completion-regrounder.md',
+  'agents/completion-implementer.md',
+  'agents/completion-reviewer.md',
+  'agents/completion-auditor.md',
+  'agents/completion-stop-judge.md',
+]) {
+  assertIncludes(file, 'runtime quick reference');
+}
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.');
 assertIncludes('extensions/completion/index.ts', 'import { generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";');
+assertIncludes('extensions/completion/index.ts', 'const PACKAGE_RUNTIME_QUICK_REFERENCE_PATH = PACKAGE_ROOT');
+assertIncludes('extensions/completion/index.ts', 'const RUNTIME_QUICK_REFERENCE_PATH = PACKAGE_RUNTIME_QUICK_REFERENCE_PATH');
+assertIncludes('extensions/completion/index.ts', 'function completionProtocolReadBlock(): string {');
+assertIncludes('extensions/completion/index.ts', '`- ${RUNTIME_QUICK_REFERENCE_PATH}`');
+assertIncludes('extensions/completion/index.ts', 'Escalate only if runtime protocol details remain ambiguous after the quick reference and canonical .agent/** state:');
 assertIncludes('extensions/completion/index.ts', 'const result = await runCompletionRole({');
 assertIncludes('extensions/completion/index.ts', 'requestedModel: modelArgFromContextModel((ctx as { model?: unknown }).model),');
 assertIncludes('extensions/completion/index.ts', 'generateCookHandoff: async ({ recentEntries, workflowContextLines }) =>');
 assertIncludes('extensions/completion/index.ts', 'generateCookHandoffWithAgent({');
 assertNotIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: mission, scope, constraints, acceptance, critique, risks, task_type, evaluation_profile, confidence, possible_noise.');
+assertNotIncludes('extensions/completion/role-runner.ts', 'const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath];');
+assertNotIncludes('extensions/completion/role-runner.ts', 'const args: string[] = ["--mode", "json", "-p", "--no-session", "--append-system-prompt", systemPromptTemp.filePath];');
+assertNotIncludes('extensions/completion/index.ts', 'Before acting, read the completion protocol skill and reference:');
+for (const file of [
+  'agents/completion-bootstrapper.md',
+  'agents/completion-regrounder.md',
+  'agents/completion-implementer.md',
+  'agents/completion-reviewer.md',
+  'agents/completion-auditor.md',
+  'agents/completion-stop-judge.md',
+]) {
+  assertNotIncludes(file, 'Load `completion-protocol` before acting.');
+}
 assertNotIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise, task_type, evaluation_profile.');
 assertNotIncludes('extensions/completion/role-runner.ts', 'task_type and evaluation_profile should be candidate routing hints only; reuse completion-workflow and completion-rubric-v1 unless the structured startup intent clearly requires another explicit value.');
 assertNotIncludes('extensions/completion/prompt-surfaces.ts', 'Do not invent task_type or evaluation_profile from free text. Omit those fields unless an explicit structured artifact already supplied them.');

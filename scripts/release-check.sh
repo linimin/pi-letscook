@@ -15,7 +15,7 @@ cleanup_release_check_agent_dir() {
 trap cleanup_release_check_agent_dir EXIT
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
-echo "[release-check] running control-plane validation, helper runtime capability probe, packaged helper smoke, helper authority-boundary, artifact-layout, runtime-contract, role-gating, structured-output, observability regressions, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context/worktree-root regressions, agent_end auto-resume delivery coverage, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
+echo "[release-check] running control-plane validation, helper runtime capability probe, packaged helper smoke, helper authority-boundary, artifact-layout, runtime-contract, role-gating, structured-output, observability regressions, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context/worktree-root regressions, prompt-budget coverage, agent_end auto-resume delivery coverage, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
 npm run verify-completion-control-plane
 bash ./scripts/helper-runtime-capability-test.sh
 PI_HELPER_PACKAGING_SKIP_RUNTIME=1 bash ./scripts/helper-packaging-smoke-test.sh
@@ -203,6 +203,7 @@ npm run smoke-test
 npm run agent-end-auto-resume-test
 npm run refocus-test
 npm run context-proposal-test
+npm run prompt-budget-test
 npm run worktree-root-boundary-test
 bash ./scripts/role-runner-contract-test.sh
 if [[ "${PI_COMPLETION_SKIP_CANONICAL_EVIDENCE_ARTIFACT_TEST:-}" != "1" ]]; then
