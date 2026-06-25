@@ -17,11 +17,9 @@ export function buildCookHandoffBoundaryReminder(): string {
 		"/cook is optional workflow mode for resumability, review, audit, canonical .agent state, or deliberate multi-session control; it is not required just to edit repo files in ordinary chat.",
 		"In ordinary chat, do not load or follow completion-protocol, and do not call completion_role.",
 		"If the user wants direct implementation now, stay in ordinary chat and help directly instead of blocking on /cook.",
-		"If the user asks follow-up questions or wants to keep refining scope, continue helping naturally in ordinary chat.",
 		"If the user explicitly runs /cook, the extension should call a primary-agent handoff synthesis step from the current task context or inline /cook prompt, show Start/Cancel confirmation, and persist the confirmed startup brief into .agent/** without making the user rerun /cook.",
 		"If no primary-agent-generated handoff is startable, /cook must fail closed and leave canonical workflow state unchanged.",
-		"Only provide a preview startup brief or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior.",
-		"Any preview capsule is illustrative only: /cook still synthesizes a fresh startup handoff when the user enters workflow mode, and the preview is not canonical .agent state, an active slice, or a persistent repo contract.",
+		"Only provide a preview startup brief or ```cook_handoff``` capsule in ordinary chat when the user explicitly asks for that preview behavior. Any preview capsule is illustrative only: /cook still synthesizes a fresh startup handoff when the user enters workflow mode, and the preview is not canonical .agent state, an active slice, or a persistent repo contract.",
 		"When you continue in ordinary chat, do not pretend /cook already started and do not silently rewrite discussion into canonical workflow state.",
 	].join(" ");
 }
@@ -457,12 +455,9 @@ export function buildSystemReminder(args: {
 	evaluationProfile?: string;
 	currentPhase?: string;
 	continuationPolicy?: string;
-	continuationReason?: string;
 	nextMandatoryRole?: string;
 	nextMandatoryAction?: string;
 	remainingSliceCount: number | string;
-	remainingStopJudges: number | string;
-	history: CompletionHistoryCounts;
 	exactActiveContract: boolean;
 	activeContractDrift: string;
 	activePriority?: number;
@@ -474,28 +469,22 @@ export function buildSystemReminder(args: {
 	implementationSurfacesLine?: string;
 	verificationCommandsLine?: string;
 	evidence: CompletionVerificationEvidenceSummary;
-	evaluationRoleReminderText?: string;
 }): string {
 	const lines = [
 		"Completion workflow detected.",
-		"Canonical truth lives in .agent/current/state.json, .agent/current/plan.json, .agent/current/active-slice.json, .agent/current/slice-history.jsonl, .agent/current/stop-check-history.jsonl, and .agent/current/verification-evidence.json.",
+		"Canonical truth lives in .agent/current/state.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json.",
 		`Mission anchor: ${args.missionAnchor ?? "(unknown)"}`,
 		`Task type: ${args.taskType ?? "(missing)"}`,
 		`Evaluation profile: ${args.evaluationProfile ?? "(missing)"}`,
 		`Current phase: ${args.currentPhase ?? "unknown"}`,
 		`Continuation policy: ${args.continuationPolicy ?? "unknown"}`,
-		`Continuation reason: ${args.continuationReason ?? "(unknown)"}`,
 		`Next mandatory role: ${args.nextMandatoryRole ?? "unknown"}`,
 		`Next mandatory action: ${args.nextMandatoryAction ?? "unknown"}`,
 		`Remaining slice count: ${args.remainingSliceCount}`,
-		`Remaining stop judges: ${args.remainingStopJudges}`,
-		`History counts: reviewed=${args.history.reviewed}, audited=${args.history.audited}, accepted=${args.history.accepted}, reopened=${args.history.reopened}, judgments=${args.history.judgments}.`,
 		"Re-read canonical .agent state after compaction or recovery instead of relying on conversation memory.",
-		"If continuation_policy == continue, do not stop after a slice or ask whether to continue; dispatch the next mandatory role directly.",
+		"If continuation_policy == continue, dispatch the next mandatory role directly.",
 		"Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.",
-		"When canonical state is stopped (await_user_input, blocked, or paused), rerun /cook or /cook resume to continue, /cook park to park for ordinary direct edits after canonical state is updated, or /cook cancel to close the workflow.",
 		"If canonical state is stale, invalid, ambiguous, or missing, route to completion-regrounder.",
-		"When recovering from compaction, prefer a deterministic restart from canonical files over conversational inference.",
 	];
 	if (args.exactActiveContract) {
 		lines.push("Selected/in-progress/committed/done .agent/current/active-slice.json is the canonical implementation contract.");
@@ -510,14 +499,7 @@ export function buildSystemReminder(args: {
 	if (args.verificationCommandsLine) lines.push(args.verificationCommandsLine);
 	else if (args.verificationCommands.length > 0) lines.push(`Active verification commands: ${args.verificationCommands.join(" | ")}`);
 	lines.push(`Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})`);
-	if (args.evidence.subjectType) lines.push(`Verification evidence subject: ${args.evidence.subjectType}`);
-	if (args.evidence.outcome) lines.push(`Verification evidence outcome: ${args.evidence.outcome}`);
-	if (args.evidence.recordedAt) lines.push(`Verification evidence recorded_at: ${args.evidence.recordedAt}`);
-	if (args.evidence.verificationCommands.length > 0) {
-		lines.push(`Verification evidence commands: ${args.evidence.verificationCommands.join(" | ")}`);
-	}
 	lines.push(`Verification evidence summary: ${args.evidence.summary}`);
-	if (args.evaluationRoleReminderText) lines.push(args.evaluationRoleReminderText);
 	return lines.join(" ");
 }
 
