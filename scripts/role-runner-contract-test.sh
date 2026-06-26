@@ -36,8 +36,13 @@ assertIncludes('extensions/completion/helper-policy.ts', 'export function buildC
 assertIncludes('extensions/completion/role-runner.ts', 'const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);');
 assertIncludes('extensions/completion/role-runner.ts', 'const effectiveToolAllowlist = effectiveRoleToolAllowlist(params.role, agent.tools);');
 assertIncludes('extensions/completion/role-runner.ts', 'const roleEnv = buildCompletionRoleSubprocessEnv(params.role, roleModel);');
+assertIncludes('extensions/completion/role-runner.ts', 'function maybeWriteTestPromptBundle(');
 assertIncludes('extensions/completion/role-runner.ts', 'function maybeWriteTestRolePromptBundle(');
 assertIncludes('extensions/completion/role-runner.ts', 'PI_COMPLETION_TEST_ROLE_PROMPT_BUNDLE_PATH');
+assertIncludes('extensions/completion/role-runner.ts', 'PI_COMPLETION_TEST_PRIMARY_HANDOFF_PROMPT_BUNDLE_PATH');
+assertIncludes('extensions/completion/role-runner.ts', 'PI_COMPLETION_TEST_CONTEXT_PROPOSAL_ANALYST_PROMPT_BUNDLE_PATH');
+assertIncludes('extensions/completion/role-runner.ts', 'PI_COMPLETION_TEST_FORCE_REPAIR_PROMPT');
+assertIncludes('extensions/completion/role-runner.ts', 'PI_COMPLETION_TEST_FORCE_PREVIOUS_OUTPUT');
 assertIncludes('extensions/completion/role-runner.ts', 'PI_COMPLETION_TEST_CAPTURE_ROLE_PROMPT_ONLY');
 assertIncludes('extensions/completion/role-runner.ts', 'function getInheritedHeadroomWrapPiExtensionArgs(): string[] {');
 assertIncludes('extensions/completion/role-runner.ts', 'const explicitExtensionPath = process.env.HEADROOM_PI_EXTENSION_PATH?.trim();');
@@ -51,6 +56,10 @@ assertIncludes('extensions/completion/role-runner.ts', '"--no-prompt-templates",
 assertIncludes('extensions/completion/role-runner.ts', '"--no-context-files",');
 assertIncludes('extensions/completion/role-runner.ts', 'const args: string[] = [\n\t\t\t"--mode",\n\t\t\t"json",\n\t\t\t"-p",\n\t\t\t"--no-session",\n\t\t\t"--no-skills",\n\t\t\t"--no-prompt-templates",\n\t\t\t"--no-context-files",\n\t\t\t"--append-system-prompt",\n\t\t\tsystemPromptTemp.filePath,\n\t\t];');
 assertIncludes('extensions/completion/role-runner.ts', 'const combinedPrompt = `${args.systemPrompt}\\n\\n${args.taskPrompt}`;');
+assertIncludes('extensions/completion/role-runner.ts', 'kind: "primary-handoff",');
+assertIncludes('extensions/completion/role-runner.ts', 'kind: "context-proposal-analyst",');
+assertIncludes('extensions/completion/role-runner.ts', 'const forcedRepairPrompt = asString(process.env.PI_COMPLETION_TEST_FORCE_REPAIR_PROMPT);');
+assertIncludes('extensions/completion/role-runner.ts', 'const forcedPreviousOutput = asString(process.env.PI_COMPLETION_TEST_FORCE_PREVIOUS_OUTPUT);');
 assertIncludes('extensions/completion/role-runner.ts', 'args.push("--model", modelArg, prompt);');
 assertIncludes('extensions/completion/role-runner.ts', 'env: roleEnv,');
 assertIncludes('extensions/completion/role-runner.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.');

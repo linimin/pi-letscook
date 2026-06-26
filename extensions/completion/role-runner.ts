@@ -559,10 +559,16 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 
 export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWithAgentParams): Promise<string | undefined> {
 	if (params.recentEntries.length > 0) {
+		const prompt = buildPrimaryAgentHandoffPrompt(params.projectName, params.recentEntries, params.workflowContextLines ?? []);
 		maybeWriteTestTextSnapshot(
 			asString(process.env.PI_COMPLETION_TEST_PRIMARY_HANDOFF_PROMPT_PATH),
-			buildPrimaryAgentHandoffPrompt(params.projectName, params.recentEntries, params.workflowContextLines ?? []),
+			prompt,
 		);
+		maybeWriteTestPromptBundle(asString(process.env.PI_COMPLETION_TEST_PRIMARY_HANDOFF_PROMPT_BUNDLE_PATH), {
+			kind: "primary-handoff",
+			systemPrompt: PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT,
+			taskPrompt: prompt,
+		});
 	}
 	if (process.env.PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS === "1") return undefined;
 	const testOutput = asString(process.env.PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT);
@@ -578,10 +584,16 @@ export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWi
 
 export async function analyzeContextProposalWithAgent(params: AnalyzeContextProposalWithAgentParams): Promise<ContextProposal | undefined> {
 	if (params.recentEntries.length > 0) {
+		const prompt = buildStartupAnalysisPromptFromEntries(params.projectName, params.recentEntries, params.workflowContextLines);
 		maybeWriteTestTextSnapshot(
 			asString(process.env.PI_COMPLETION_TEST_CONTEXT_PROPOSAL_ANALYST_PROMPT_PATH),
-			buildStartupAnalysisPromptFromEntries(params.projectName, params.recentEntries, params.workflowContextLines),
+			prompt,
 		);
+		maybeWriteTestPromptBundle(asString(process.env.PI_COMPLETION_TEST_CONTEXT_PROPOSAL_ANALYST_PROMPT_BUNDLE_PATH), {
+			kind: "context-proposal-analyst",
+			systemPrompt: CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT,
+			taskPrompt: prompt,
+		});
 	}
 	if (process.env.PI_COMPLETION_DISABLE_CONTEXT_PROPOSAL_ANALYST === "1") return undefined;
 	const testOutput = asString(process.env.PI_COMPLETION_CONTEXT_PROPOSAL_ANALYST_OUTPUT);
@@ -677,6 +689,42 @@ function maybeWriteTestTextSnapshot(snapshotPath: string | undefined, content: s
 	}
 }
 
+function maybeWriteTestPromptBundle(
+	snapshotPath: string | undefined,
+	args: {
+		kind: string;
+		systemPrompt: string;
+		taskPrompt: string;
+		extra?: Record<string, unknown>;
+	},
+): void {
+	if (!snapshotPath) return;
+	const combinedPrompt = `${args.systemPrompt}\n\n${args.taskPrompt}`;
+	try {
+		fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
+		fs.writeFileSync(
+			snapshotPath,
+			`${JSON.stringify(
+				{
+					kind: args.kind,
+					system_prompt_chars: args.systemPrompt.length,
+					task_prompt_chars: args.taskPrompt.length,
+					combined_prompt_chars: combinedPrompt.length,
+					system_prompt: args.systemPrompt,
+					task_prompt: args.taskPrompt,
+					combined_prompt: combinedPrompt,
+					...(args.extra ?? {}),
+				},
+				null,
+				2,
+			)}\n`,
+			"utf8",
+		);
+	} catch {
+		// ignore malformed or unwritable test snapshot paths
+	}
+}
+
 function maybeWriteTestRolePromptBundle(
 	snapshotPath: string | undefined,
 	args: {
@@ -688,33 +736,17 @@ function maybeWriteTestRolePromptBundle(
 		repairMode: boolean;
 	},
 ): void {
-	if (!snapshotPath) return;
-	const combinedPrompt = `${args.systemPrompt}\n\n${args.taskPrompt}`;
-	try {
-		fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
-		fs.writeFileSync(
-			snapshotPath,
-			`${JSON.stringify(
-				{
-					role: args.role,
-					repair_mode: args.repairMode,
-					model: args.model ?? null,
-					tool_allowlist: args.toolAllowlist ?? null,
-					system_prompt_chars: args.systemPrompt.length,
-					task_prompt_chars: args.taskPrompt.length,
-					combined_prompt_chars: combinedPrompt.length,
-					system_prompt: args.systemPrompt,
-					task_prompt: args.taskPrompt,
-					combined_prompt: combinedPrompt,
-				},
-				null,
-				2,
-			)}\n`,
-			"utf8",
-		);
-	} catch {
-		// ignore malformed or unwritable test snapshot paths
-	}
+	maybeWriteTestPromptBundle(snapshotPath, {
+		kind: "completion-role",
+		systemPrompt: args.systemPrompt,
+		taskPrompt: args.taskPrompt,
+		extra: {
+			role: args.role,
+			repair_mode: args.repairMode,
+			model: args.model ?? null,
+			tool_allowlist: args.toolAllowlist ?? null,
+		},
+	});
 }
 
 export async function runCompletionRole(params: RunCompletionRoleParams): Promise<RunCompletionRoleResult> {
@@ -855,8 +887,12 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 	};
 
 	try {
-		let result = await runAttempt();
-		const repairPrompt = result.ok && result.transcription?.errors.length
+		const forcedRepairPrompt = asString(process.env.PI_COMPLETION_TEST_FORCE_REPAIR_PROMPT);
+		const forcedPreviousOutput = asString(process.env.PI_COMPLETION_TEST_FORCE_PREVIOUS_OUTPUT);
+		let result = forcedRepairPrompt
+			? await runAttempt(forcedRepairPrompt, forcedPreviousOutput)
+			: await runAttempt();
+		const repairPrompt = !forcedRepairPrompt && result.ok && result.transcription?.errors.length
 			? buildRoleReportRepairPrompt(params.role, result.transcription.errors)
 			: undefined;
 		if (repairPrompt) {

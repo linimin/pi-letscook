@@ -168,10 +168,16 @@ write_startup_repo() {
 WORKFLOW_ROOT="$TMPDIR/workflow-repo"
 STARTUP_ROOT="$TMPDIR/startup-repo"
 ORDINARY_REMINDER="$TMPDIR/ordinary-reminder.txt"
+KICKOFF_PROMPT="$TMPDIR/kickoff-prompt.txt"
+RESUME_PROMPT="$TMPDIR/resume-prompt.txt"
 PRIMARY_HANDOFF_PROMPT="$TMPDIR/primary-handoff-prompt.txt"
+PRIMARY_HANDOFF_PROMPT_BUNDLE="$TMPDIR/primary-handoff-prompt-bundle.json"
+BOOTSTRAPPER_ROLE_PROMPT_BUNDLE="$TMPDIR/bootstrapper-role-prompt.json"
 REGROUNDER_ROLE_PROMPT_BUNDLE="$TMPDIR/regrounder-role-prompt.json"
 REVIEWER_ROLE_PROMPT_BUNDLE="$TMPDIR/reviewer-role-prompt.json"
+REVIEWER_REPAIR_ROLE_PROMPT_BUNDLE="$TMPDIR/reviewer-repair-role-prompt.json"
 AUDITOR_ROLE_PROMPT_BUNDLE="$TMPDIR/auditor-role-prompt.json"
+AUDITOR_REPAIR_ROLE_PROMPT_BUNDLE="$TMPDIR/auditor-repair-role-prompt.json"
 STOP_JUDGE_ROLE_PROMPT_BUNDLE="$TMPDIR/stop-judge-role-prompt.json"
 IMPLEMENTER_ROLE_PROMPT_BUNDLE="$TMPDIR/implementer-role-prompt.json"
 
@@ -224,14 +230,26 @@ PY
   PI_COMPLETION_CONTEXT_PROPOSAL_ACTION=accept \
   PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT="$BOOTSTRAP_HANDOFF" \
   PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+  PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$KICKOFF_PROMPT" \
   PI_COMPLETION_TEST_PRIMARY_HANDOFF_PROMPT_PATH="$PRIMARY_HANDOFF_PROMPT" \
+  PI_COMPLETION_TEST_PRIMARY_HANDOFF_PROMPT_BUNDLE_PATH="$PRIMARY_HANDOFF_PROMPT_BUNDLE" \
   pi -e "$PKG_ROOT" -p "/cook add prompt budget coverage and keep the startup prompt compact" \
     >"$TMPDIR/handoff.out" 2>"$TMPDIR/handoff.err"
+)
+
+(
+  cd "$WORKFLOW_ROOT"
+  PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+  PI_COMPLETION_TEST_DRIVER_PROMPT_PATH="$RESUME_PROMPT" \
+  pi -e "$PKG_ROOT" -p "/cook" \
+    >"$TMPDIR/resume.out" 2>"$TMPDIR/resume.err"
 )
 
 capture_role_prompt_bundle() {
   local role="$1"
   local bundle_path="$2"
+  local repair_prompt="${3:-}"
+  local previous_output="${4:-}"
   local system_prompt_file="$TMPDIR/${role}-capture-system.md"
   local events_file="$TMPDIR/${role}-capture-events.jsonl"
   local stderr_file="$TMPDIR/${role}-capture-stderr.txt"
@@ -241,65 +259,117 @@ Call the completion_role tool exactly once with role ${role} and task "Capture t
 After the tool returns, respond with exactly the tool result text and nothing else.
 Do not add commentary.
 EOF
+  local -a env_args=(
+    "PI_COMPLETION_TEST_CAPTURE_ROLE_PROMPT_ONLY=1"
+    "PI_COMPLETION_TEST_ROLE_PROMPT_BUNDLE_PATH=$bundle_path"
+    "PI_COMPLETION_TEST_FORCE_COMPLETION_ROLE=$role"
+    "PI_COMPLETION_TEST_FORCE_COMPLETION_TASK=Capture the real ${role} role prompt budget."
+  )
+  if [[ -n "$repair_prompt" ]]; then
+    env_args+=("PI_COMPLETION_TEST_FORCE_REPAIR_PROMPT=$repair_prompt")
+    env_args+=("PI_COMPLETION_TEST_FORCE_PREVIOUS_OUTPUT=$previous_output")
+  fi
   (
     cd "$WORKFLOW_ROOT"
-    PI_COMPLETION_TEST_CAPTURE_ROLE_PROMPT_ONLY=1 \
-    PI_COMPLETION_TEST_ROLE_PROMPT_BUNDLE_PATH="$bundle_path" \
-    PI_COMPLETION_TEST_FORCE_COMPLETION_ROLE="$role" \
-    PI_COMPLETION_TEST_FORCE_COMPLETION_TASK="Capture the real ${role} role prompt budget." \
-    pi \
-      --mode json \
-      -p \
-      --thinking off \
-      --no-session \
-      --no-extensions \
-      --no-builtin-tools \
-      --no-skills \
-      --no-prompt-templates \
-      --no-context-files \
-      -e "$PKG_ROOT" \
-      --tools completion_role \
-      --append-system-prompt "$system_prompt_file" \
-      "Continue the completion workflow and run ${role} now." \
-      >"$events_file" 2>"$stderr_file"
+    set +u
+    env "${env_args[@]}" \
+      pi \
+        --mode json \
+        -p \
+        --thinking off \
+        --no-session \
+        --no-extensions \
+        --no-builtin-tools \
+        --no-skills \
+        --no-prompt-templates \
+        --no-context-files \
+        -e "$PKG_ROOT" \
+        --tools completion_role \
+        --append-system-prompt "$system_prompt_file" \
+        "Continue the completion workflow and run ${role} now." \
+        >"$events_file" 2>"$stderr_file"
+    set -u
   )
 }
 
+capture_role_prompt_bundle "completion-bootstrapper" "$BOOTSTRAPPER_ROLE_PROMPT_BUNDLE"
 capture_role_prompt_bundle "completion-regrounder" "$REGROUNDER_ROLE_PROMPT_BUNDLE"
 capture_role_prompt_bundle "completion-reviewer" "$REVIEWER_ROLE_PROMPT_BUNDLE"
+capture_role_prompt_bundle "completion-reviewer" "$REVIEWER_REPAIR_ROLE_PROMPT_BUNDLE" "Reviewer repair prompt for prompt-budget coverage." $'MISSION ANCHOR: test\nRemaining contract IDs: TEST\nRubric:\n- Contract coverage: pass - ok\n- Correctness risk: pass - ok\n- Verification evidence: pass - ok\n- Docs/state parity: pass - ok\nFindings: none.\nAcceptable as-is: yes\nSmallest follow-up slice: tighten verification.'
 capture_role_prompt_bundle "completion-auditor" "$AUDITOR_ROLE_PROMPT_BUNDLE"
+capture_role_prompt_bundle "completion-auditor" "$AUDITOR_REPAIR_ROLE_PROMPT_BUNDLE" "Auditor repair prompt for prompt-budget coverage." $'MISSION ANCHOR: test\nRemaining contract IDs: TEST\nRubric:\n- Contract coverage: concern - open work remains.\n- Correctness risk: concern - more work remains.\n- Verification evidence: concern - more work remains.\n- Docs/state parity: concern - canonical state still active.\nWhy the project is still not done: open work remains.\nOpen top-level contract IDs: TEST\nBlocker count: 1\nHigh-value gap count: 0\nTracked and unignored worktree is clean: yes\nWorktree blockers: modified README.md\nNext mandatory slice: reconcile latest slice\nStale or conflicting canonical state: no - aligned.\nPlan truthfully captures remaining slice backlog: yes - backlog remains aligned.'
 capture_role_prompt_bundle "completion-stop-judge" "$STOP_JUDGE_ROLE_PROMPT_BUNDLE"
 capture_role_prompt_bundle "completion-implementer" "$IMPLEMENTER_ROLE_PROMPT_BUNDLE"
 
-python3 - "$PKG_ROOT" "$ORDINARY_REMINDER" "$PRIMARY_HANDOFF_PROMPT" "$REGROUNDER_ROLE_PROMPT_BUNDLE" "$REVIEWER_ROLE_PROMPT_BUNDLE" "$AUDITOR_ROLE_PROMPT_BUNDLE" "$STOP_JUDGE_ROLE_PROMPT_BUNDLE" "$IMPLEMENTER_ROLE_PROMPT_BUNDLE" <<'PY'
+python3 - "$PKG_ROOT" "$ORDINARY_REMINDER" "$KICKOFF_PROMPT" "$RESUME_PROMPT" "$PRIMARY_HANDOFF_PROMPT" "$PRIMARY_HANDOFF_PROMPT_BUNDLE" "$BOOTSTRAPPER_ROLE_PROMPT_BUNDLE" "$REGROUNDER_ROLE_PROMPT_BUNDLE" "$REVIEWER_ROLE_PROMPT_BUNDLE" "$REVIEWER_REPAIR_ROLE_PROMPT_BUNDLE" "$AUDITOR_ROLE_PROMPT_BUNDLE" "$AUDITOR_REPAIR_ROLE_PROMPT_BUNDLE" "$STOP_JUDGE_ROLE_PROMPT_BUNDLE" "$IMPLEMENTER_ROLE_PROMPT_BUNDLE" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 pkg_root = Path(sys.argv[1])
 ordinary_path = Path(sys.argv[2])
-primary_path = Path(sys.argv[3])
-regrounder_bundle_path = Path(sys.argv[4])
-reviewer_bundle_path = Path(sys.argv[5])
-auditor_bundle_path = Path(sys.argv[6])
-stop_judge_bundle_path = Path(sys.argv[7])
-implementer_bundle_path = Path(sys.argv[8])
+kickoff_prompt_path = Path(sys.argv[3])
+resume_prompt_path = Path(sys.argv[4])
+primary_prompt_path = Path(sys.argv[5])
+primary_bundle_path = Path(sys.argv[6])
+bootstrapper_bundle_path = Path(sys.argv[7])
+regrounder_bundle_path = Path(sys.argv[8])
+reviewer_bundle_path = Path(sys.argv[9])
+reviewer_repair_bundle_path = Path(sys.argv[10])
+auditor_bundle_path = Path(sys.argv[11])
+auditor_repair_bundle_path = Path(sys.argv[12])
+stop_judge_bundle_path = Path(sys.argv[13])
+implementer_bundle_path = Path(sys.argv[14])
 source_path = pkg_root / 'extensions' / 'completion' / 'prompt-surfaces.ts'
-runtime_quick_path = pkg_root / 'skills' / 'completion-protocol' / 'references' / 'runtime-quick.md'
+references_dir = pkg_root / 'skills' / 'completion-protocol' / 'references'
+completion_reference_path = references_dir / 'completion.md'
+shared_runtime_quick_path = references_dir / 'runtime-quick.md'
+quick_reference_paths = {
+    'driver_quick_reference': references_dir / 'runtime-quick-driver.md',
+    'bootstrapper_quick_reference': references_dir / 'runtime-quick-bootstrapper.md',
+    'regrounder_quick_reference': references_dir / 'runtime-quick-regrounder.md',
+    'implementer_quick_reference': references_dir / 'runtime-quick-implementer.md',
+    'reviewer_quick_reference': references_dir / 'runtime-quick-reviewer.md',
+    'auditor_quick_reference': references_dir / 'runtime-quick-auditor.md',
+    'stop_judge_quick_reference': references_dir / 'runtime-quick-stop-judge.md',
+}
 
-for path in (ordinary_path, primary_path, regrounder_bundle_path, reviewer_bundle_path, auditor_bundle_path, stop_judge_bundle_path, implementer_bundle_path, source_path, runtime_quick_path):
+for path in (
+    ordinary_path,
+    kickoff_prompt_path,
+    resume_prompt_path,
+    primary_prompt_path,
+    primary_bundle_path,
+    bootstrapper_bundle_path,
+    regrounder_bundle_path,
+    reviewer_bundle_path,
+    reviewer_repair_bundle_path,
+    auditor_bundle_path,
+    auditor_repair_bundle_path,
+    stop_judge_bundle_path,
+    implementer_bundle_path,
+    source_path,
+    completion_reference_path,
+    shared_runtime_quick_path,
+    *quick_reference_paths.values(),
+):
     if not path.exists():
         raise SystemExit(f'[prompt-budget-test] missing expected prompt-budget surface: {path}')
 
 ordinary = ordinary_path.read_text().strip()
-primary = primary_path.read_text().strip()
+kickoff_prompt = kickoff_prompt_path.read_text().strip()
+resume_prompt = resume_prompt_path.read_text().strip()
+primary = primary_prompt_path.read_text().strip()
+primary_bundle = __import__('json').loads(primary_bundle_path.read_text())
+bootstrapper_bundle = __import__('json').loads(bootstrapper_bundle_path.read_text())
 regrounder_bundle = __import__('json').loads(regrounder_bundle_path.read_text())
 reviewer_bundle = __import__('json').loads(reviewer_bundle_path.read_text())
+reviewer_repair_bundle = __import__('json').loads(reviewer_repair_bundle_path.read_text())
 auditor_bundle = __import__('json').loads(auditor_bundle_path.read_text())
+auditor_repair_bundle = __import__('json').loads(auditor_repair_bundle_path.read_text())
 stop_judge_bundle = __import__('json').loads(stop_judge_bundle_path.read_text())
 implementer_bundle = __import__('json').loads(implementer_bundle_path.read_text())
 source = source_path.read_text()
-runtime_quick = runtime_quick_path.read_text().strip()
 match = re.search(r'export function buildSystemReminder\([\s\S]*?\n}\n\nexport function buildResumeCapsule', source)
 if not match:
     raise SystemExit('[prompt-budget-test] could not locate buildSystemReminder source block')
@@ -307,9 +377,12 @@ system_source = match.group(0)
 
 text_checks = [
     ('ordinary_reminder', ordinary, 1800),
+    ('kickoff_prompt', kickoff_prompt, 3200),
+    ('resume_prompt', resume_prompt, 3000),
     ('primary_handoff_prompt', primary, 700),
-    ('runtime_quick_reference', runtime_quick, 3400),
     ('buildSystemReminder_source', system_source, 3100),
+    ('shared_runtime_quick_reference', shared_runtime_quick_path.read_text().strip(), 4200),
+    ('completion_full_reference', completion_reference_path.read_text().strip(), 18000),
 ]
 for name, text, limit in text_checks:
     size = len(text)
@@ -317,12 +390,33 @@ for name, text, limit in text_checks:
         raise SystemExit(f'[prompt-budget-test] {name} exceeded budget: {size} > {limit}')
     print(f'{name}={size} chars (limit {limit})')
 
+quick_reference_limits = {
+    'driver_quick_reference': 1800,
+    'bootstrapper_quick_reference': 1300,
+    'regrounder_quick_reference': 1800,
+    'implementer_quick_reference': 1600,
+    'reviewer_quick_reference': 1000,
+    'auditor_quick_reference': 1200,
+    'stop_judge_quick_reference': 1400,
+}
+for name, path in quick_reference_paths.items():
+    text = path.read_text().strip()
+    limit = quick_reference_limits[name]
+    size = len(text)
+    if size > limit:
+        raise SystemExit(f'[prompt-budget-test] {name} exceeded budget: {size} > {limit}')
+    print(f'{name}={size} chars (limit {limit})')
+
 bundle_checks = [
-    ('regrounder_role_prompt_combined', regrounder_bundle, 6200),
-    ('reviewer_role_prompt_combined', reviewer_bundle, 5400),
-    ('auditor_role_prompt_combined', auditor_bundle, 6000),
-    ('stop_judge_role_prompt_combined', stop_judge_bundle, 5800),
-    ('implementer_role_prompt_combined', implementer_bundle, 7000),
+    ('primary_handoff_prompt_combined', primary_bundle, 2600),
+    ('bootstrapper_role_prompt_combined', bootstrapper_bundle, 4000),
+    ('regrounder_role_prompt_combined', regrounder_bundle, 5800),
+    ('reviewer_role_prompt_combined', reviewer_bundle, 4500),
+    ('reviewer_repair_role_prompt_combined', reviewer_repair_bundle, 5200),
+    ('auditor_role_prompt_combined', auditor_bundle, 5400),
+    ('auditor_repair_role_prompt_combined', auditor_repair_bundle, 6200),
+    ('stop_judge_role_prompt_combined', stop_judge_bundle, 5300),
+    ('implementer_role_prompt_combined', implementer_bundle, 6800),
 ]
 for name, bundle, limit in bundle_checks:
     size = bundle.get('combined_prompt_chars')
@@ -332,18 +426,26 @@ for name, bundle, limit in bundle_checks:
         raise SystemExit(f'[prompt-budget-test] {name} exceeded budget: {size} > {limit}')
     print(f'{name}={size} chars (limit {limit})')
 
+if primary_bundle.get('kind') != 'primary-handoff':
+    raise SystemExit(f"[prompt-budget-test] primary handoff bundle kind mismatch: {primary_bundle.get('kind')!r}")
+if bootstrapper_bundle.get('role') != 'completion-bootstrapper':
+    raise SystemExit(f"[prompt-budget-test] bootstrapper bundle role mismatch: {bootstrapper_bundle.get('role')!r}")
 if regrounder_bundle.get('role') != 'completion-regrounder':
     raise SystemExit(f"[prompt-budget-test] regrounder bundle role mismatch: {regrounder_bundle.get('role')!r}")
 if reviewer_bundle.get('role') != 'completion-reviewer':
     raise SystemExit(f"[prompt-budget-test] reviewer bundle role mismatch: {reviewer_bundle.get('role')!r}")
+if reviewer_repair_bundle.get('role') != 'completion-reviewer' or reviewer_repair_bundle.get('repair_mode') is not True:
+    raise SystemExit('[prompt-budget-test] reviewer repair bundle should capture completion-reviewer in repair mode')
 if auditor_bundle.get('role') != 'completion-auditor':
     raise SystemExit(f"[prompt-budget-test] auditor bundle role mismatch: {auditor_bundle.get('role')!r}")
+if auditor_repair_bundle.get('role') != 'completion-auditor' or auditor_repair_bundle.get('repair_mode') is not True:
+    raise SystemExit('[prompt-budget-test] auditor repair bundle should capture completion-auditor in repair mode')
 if stop_judge_bundle.get('role') != 'completion-stop-judge':
     raise SystemExit(f"[prompt-budget-test] stop-judge bundle role mismatch: {stop_judge_bundle.get('role')!r}")
 if implementer_bundle.get('role') != 'completion-implementer':
     raise SystemExit(f"[prompt-budget-test] implementer bundle role mismatch: {implementer_bundle.get('role')!r}")
-if any(bundle.get('repair_mode') is not False for bundle in (regrounder_bundle, reviewer_bundle, auditor_bundle, stop_judge_bundle, implementer_bundle)):
-    raise SystemExit('[prompt-budget-test] prompt-budget role capture should stay outside repair mode')
+if any(bundle.get('repair_mode') is not False for bundle in (bootstrapper_bundle, regrounder_bundle, reviewer_bundle, auditor_bundle, stop_judge_bundle, implementer_bundle)):
+    raise SystemExit('[prompt-budget-test] normal role capture should stay outside repair mode')
 PY
 
 echo "prompt budget test passed: $TMPDIR"
