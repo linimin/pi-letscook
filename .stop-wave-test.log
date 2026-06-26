@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "<stdin>", line 14, in <module>
-AssertionError: [completion] stop-wave policy unanimous-current-head-v1 satisfied for HEAD 66235b222f0c995f3e8c079a5ce706ffb60f1d7f in stop_wave_id 2 with 2 valid current-HEAD judgments
-[completion] running repo-level verification from /private/var/folders/2v/jqmqtm4s5vjdqs4b_k_wxwl00000gn/T/tmp.k4LBHTnq8Z/reconcile: npm run verifier-fixture-check >/dev/null
-

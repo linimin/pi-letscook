@@ -6,3 +6,5 @@ npm-debug.log*
 
 # completion workflow local state
 .agent/
+
+.log
