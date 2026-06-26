@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.91
+
 ### Added
 - landed helper-v1-pr3-release-parity: wired full helper regression suite (role-gating, authority-boundary, structured-output, observability, artifact-layout, runtime-contract, capability, packaging) into fail-closed `scripts/release-check.sh`; aligned README, CHANGELOG, PUBLISHING.md and skills/completion-protocol/** with internal non-authoritative `completion_assist` posture beneath `/cook`
 
