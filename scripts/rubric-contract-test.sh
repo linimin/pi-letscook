@@ -65,7 +65,7 @@ assertIncludes('README.md', '## Structured evaluation rubrics');
 assertIncludes('README.md', '- `task_type: completion-workflow`');
 assertIncludes('README.md', '- `evaluation_profile: completion-rubric-v1`');
 assertIncludes('README.md', 'kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.');
-assertIncludes('README.md', 'Reviewer, auditor, and stop-judge dispatch/reminder surfaces now also thread the current active-slice implementation contract');
+assertIncludes('README.md', 'Reviewer, auditor, and stop-judge dispatch/reminder surfaces now thread canonical `evaluation_profile` plus direct-read pointers for the active-slice implementation contract and verification evidence');
 assertIncludes('README.md', 'Canonical reviewer/auditor/stop-judge transcription now fails closed on malformed rubric-bearing reports');
 assertIncludes('README.md', 'npm run rubric-contract-test`, which now exercises reviewer, auditor, and stop-judge transcription paths');
 for (const dimension of rubricDimensions) {
@@ -74,7 +74,7 @@ for (const dimension of rubricDimensions) {
 
 assertIncludes('CHANGELOG.md', 'shared structured evaluation-rubric contract');
 assertIncludes('CHANGELOG.md', 'added canonical `task_type: completion-workflow` and `evaluation_profile: completion-rubric-v1` signaling across the packaged control-plane defaults, verifier schema, and kickoff/reminder/resume surfaces');
-assertIncludes('CHANGELOG.md', 'threaded canonical `evaluation_profile` plus the active-slice implementation contract into reviewer/auditor/stop-judge reminder and dispatch surfaces');
+assertIncludes('CHANGELOG.md', 'threaded canonical `evaluation_profile` plus direct-read pointers for the active-slice implementation contract and verification evidence into reviewer/auditor/stop-judge reminder and dispatch surfaces');
 assertIncludes('CHANGELOG.md', 'made reviewer/auditor/stop-judge transcription fail closed on malformed rubric-bearing outputs while still accepting valid reports');
 assertIncludes('extensions/completion/index.ts', 'Canonical routing profile:\\n- task_type: ${taskType}\\n- evaluation_profile: ${evaluationProfile}');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`Task type: ${args.taskType ?? "(missing)"}`');
@@ -83,6 +83,8 @@ assertIncludes('extensions/completion/prompt-surfaces.ts', '`- task_type: ${deps
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- evaluation_profile: ${deps.currentEvaluationProfile(snapshot) ?? "(missing)"}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- required_stop_judges: ${snapshot.profile?.required_stop_judges ?? "(missing)"}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- stop_aggregation_policy: ${deps.asString(snapshot.profile?.stop_aggregation_policy) ?? "(missing)"}`');
+assertIncludes('extensions/completion/prompt-surfaces.ts', '`- active_slice_contract_path: ${activeSlicePath}`');
+assertIncludes('extensions/completion/prompt-surfaces.ts', '`- canonical_plan_path: ${planPath}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Canonical evaluation handoff for ${role}:');
 assertIncludes('extensions/completion/index.ts', 'buildEvaluationRoleReminderText(snapshot, nextRole)');
 assertIncludes('extensions/completion/role-runner.ts', 'import { buildRoleReportRepairPrompt, parseReportFields, transcribeRoleOutput, type TranscriptionResult } from "./transcription";');

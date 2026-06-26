@@ -385,38 +385,31 @@ export function buildEvaluationRoleContextLines(
 ): string[] {
 	const context = deps.activeSliceContext(snapshot);
 	const evidence = deps.verificationEvidenceContext(snapshot);
-	return [
+	const activeSlicePath = path.relative(snapshot.files.root, snapshot.files.activePath) || ".agent/current/active-slice.json";
+	const planPath = path.relative(snapshot.files.root, snapshot.files.planPath) || ".agent/current/plan.json";
+	const statePath = path.relative(snapshot.files.root, snapshot.files.statePath) || ".agent/current/state.json";
+	const stopHistoryPath = path.relative(snapshot.files.root, snapshot.files.stopHistoryPath) || ".agent/current/stop-check-history.jsonl";
+	const lines = [
 		`Canonical evaluation handoff for ${role}:`,
 		`- task_type: ${deps.currentTaskType(snapshot) ?? "(missing)"}`,
 		`- evaluation_profile: ${deps.currentEvaluationProfile(snapshot) ?? "(missing)"}`,
-		`- required_stop_judges: ${snapshot.profile?.required_stop_judges ?? "(missing)"}`,
-		`- stop_aggregation_policy: ${deps.asString(snapshot.profile?.stop_aggregation_policy) ?? "(missing)"}`,
 		`- latest_completed_slice: ${deps.asString(snapshot.state?.latest_completed_slice) ?? "(none)"}`,
 		`- active_slice_id: ${context.sliceId ?? "(none)"}`,
 		`- active_slice_status: ${context.status ?? "(unknown)"}`,
-		`- active_slice_goal: ${context.goal ?? "(unknown)"}`,
-		`- contract_ids: ${context.contractIds.length > 0 ? context.contractIds.join(", ") : "(none)"}`,
-		`- acceptance_criteria: ${context.acceptance.length > 0 ? context.acceptance.join(" | ") : "(none)"}`,
-		`- implementation_surfaces: ${context.implementationSurfaces.length > 0 ? context.implementationSurfaces.join(" | ") : "(none)"}`,
-		`- verification_commands: ${context.verificationCommands.length > 0 ? context.verificationCommands.join(" | ") : "(none)"}`,
-		`- locked_notes: ${context.lockedNotes.length > 0 ? context.lockedNotes.join(" | ") : "(none)"}`,
-		`- must_fix_findings: ${context.mustFixFindings.length > 0 ? context.mustFixFindings.join(" | ") : "(none)"}`,
-		`- basis_commit: ${context.basisCommit ?? "(none)"}`,
-		`- remaining_contract_ids_before: ${context.remainingBefore.length > 0 ? context.remainingBefore.join(", ") : "(none)"}`,
-		`- release_blocker_count_before: ${context.releaseBlockerCountBefore ?? "(unknown)"}`,
-		`- high_value_gap_count_before: ${context.highValueGapCountBefore ?? "(unknown)"}`,
+		`- active_slice_contract_path: ${activeSlicePath}`,
+		`- active_slice_contract_focus: read acceptance_criteria, implementation_surfaces, verification_commands, locked_notes, must_fix_findings, basis_commit, and before-slice counters directly from ${activeSlicePath}`,
+		`- canonical_plan_path: ${planPath}`,
 		`- verification_evidence_path: ${evidence.path}`,
 		`- verification_evidence_status: ${evidence.status}`,
-		`- verification_evidence_subject_type: ${evidence.subjectType ?? "(missing)"}`,
-		`- verification_evidence_slice_id: ${evidence.sliceId ?? "(none)"}`,
-		`- verification_evidence_contract_ids: ${evidence.contractIds.length > 0 ? evidence.contractIds.join(", ") : "(none)"}`,
-		`- verification_evidence_outcome: ${evidence.outcome ?? "(missing)"}`,
-		`- verification_evidence_recorded_at: ${evidence.recordedAt ?? "(missing)"}`,
-		`- verification_evidence_head_sha: ${evidence.headSha ?? "(missing)"}`,
-		`- verification_evidence_basis_commit: ${evidence.basisCommit ?? "(missing)"}`,
-		`- verification_evidence_commands: ${evidence.verificationCommands.length > 0 ? evidence.verificationCommands.join(" | ") : "(none)"}`,
 		`- verification_evidence_summary: ${evidence.summary}`,
 	];
+	if (role === "completion-stop-judge") {
+		lines.push(`- required_stop_judges: ${snapshot.profile?.required_stop_judges ?? "(missing)"}`);
+		lines.push(`- stop_aggregation_policy: ${deps.asString(snapshot.profile?.stop_aggregation_policy) ?? "(missing)"}`);
+		lines.push(`- canonical_state_path: ${statePath}`);
+		lines.push(`- stop_check_history_path: ${stopHistoryPath}`);
+	}
+	return lines;
 }
 
 export function buildEvaluationRoleReminderText(
