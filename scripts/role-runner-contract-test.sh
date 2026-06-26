@@ -73,15 +73,35 @@ for (const file of [
   'agents/completion-auditor.md',
   'agents/completion-stop-judge.md',
 ]) {
-  assertIncludes(file, 'runtime quick reference');
+  assertIncludes(file, 'role-specific completion runtime quick reference');
+}
+for (const file of [
+  'skills/completion-protocol/references/runtime-quick-driver.md',
+  'skills/completion-protocol/references/runtime-quick-bootstrapper.md',
+  'skills/completion-protocol/references/runtime-quick-regrounder.md',
+  'skills/completion-protocol/references/runtime-quick-implementer.md',
+  'skills/completion-protocol/references/runtime-quick-reviewer.md',
+  'skills/completion-protocol/references/runtime-quick-auditor.md',
+  'skills/completion-protocol/references/runtime-quick-stop-judge.md',
+]) {
+  assertIncludes(file, '# completion runtime quick reference');
 }
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.');
 assertIncludes('extensions/completion/index.ts', 'import { generateCookHandoffWithAgent, runCompletionRole } from "./role-runner";');
-assertIncludes('extensions/completion/index.ts', 'const PACKAGE_RUNTIME_QUICK_REFERENCE_PATH = PACKAGE_ROOT');
-assertIncludes('extensions/completion/index.ts', 'const RUNTIME_QUICK_REFERENCE_PATH = PACKAGE_RUNTIME_QUICK_REFERENCE_PATH');
-assertIncludes('extensions/completion/index.ts', 'function completionProtocolReadBlock(): string {');
-assertIncludes('extensions/completion/index.ts', '`- ${RUNTIME_QUICK_REFERENCE_PATH}`');
+assertIncludes('extensions/completion/index.ts', 'const PACKAGE_RUNTIME_QUICK_REFERENCES_DIR = PACKAGE_ROOT');
+assertIncludes('extensions/completion/index.ts', 'const RUNTIME_QUICK_REFERENCE_DIR = path.join(AGENT_HOME, "skills", "completion-protocol", "references");');
+assertIncludes('extensions/completion/index.ts', 'const ROLE_RUNTIME_QUICK_REFERENCE_FILENAMES: Record<CompletionRole | "driver", string> = {');
+assertIncludes('extensions/completion/index.ts', 'driver: "runtime-quick-driver.md"');
+assertIncludes('extensions/completion/index.ts', '"completion-bootstrapper": "runtime-quick-bootstrapper.md"');
+assertIncludes('extensions/completion/index.ts', '"completion-regrounder": "runtime-quick-regrounder.md"');
+assertIncludes('extensions/completion/index.ts', '"completion-implementer": "runtime-quick-implementer.md"');
+assertIncludes('extensions/completion/index.ts', '"completion-reviewer": "runtime-quick-reviewer.md"');
+assertIncludes('extensions/completion/index.ts', '"completion-auditor": "runtime-quick-auditor.md"');
+assertIncludes('extensions/completion/index.ts', '"completion-stop-judge": "runtime-quick-stop-judge.md"');
+assertIncludes('extensions/completion/index.ts', 'function runtimeQuickReferencePathForRole(role: CompletionRole | "driver"): string {');
+assertIncludes('extensions/completion/index.ts', 'function completionProtocolReadBlock(role: CompletionRole | "driver"): string {');
+assertIncludes('extensions/completion/index.ts', 'const quickReferencePath = runtimeQuickReferencePathForRole(role);');
 assertIncludes('extensions/completion/index.ts', 'Escalate only if runtime protocol details remain ambiguous after the quick reference and canonical .agent/** state:');
 assertIncludes('extensions/completion/index.ts', 'const result = await runCompletionRole({');
 assertIncludes('extensions/completion/index.ts', 'requestedModel: modelArgFromContextModel((ctx as { model?: unknown }).model),');
@@ -91,6 +111,7 @@ assertNotIncludes('extensions/completion/role-runner.ts', 'Return exactly one JS
 assertNotIncludes('extensions/completion/role-runner.ts', 'const args: string[] = ["--mode", "json", "-p", "--no-session", "--no-extensions", "--append-system-prompt", systemPromptTemp.filePath];');
 assertNotIncludes('extensions/completion/role-runner.ts', 'const args: string[] = ["--mode", "json", "-p", "--no-session", "--append-system-prompt", systemPromptTemp.filePath];');
 assertNotIncludes('extensions/completion/index.ts', 'Before acting, read the completion protocol skill and reference:');
+assertNotIncludes('extensions/completion/index.ts', '`- ${RUNTIME_QUICK_REFERENCE_PATH}`');
 for (const file of [
   'agents/completion-bootstrapper.md',
   'agents/completion-regrounder.md',

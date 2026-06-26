@@ -1,8 +1,8 @@
 # completion runtime quick reference
 
-Use this as the default runtime protocol brief for the workflow driver and all completion roles.
+Use this as the shared runtime overview. For normal runtime loading, prefer the role-specific quick refs (`runtime-quick-driver.md`, `runtime-quick-bootstrapper.md`, `runtime-quick-regrounder.md`, `runtime-quick-implementer.md`, `runtime-quick-reviewer.md`, `runtime-quick-auditor.md`, and `runtime-quick-stop-judge.md`).
 
-Read the full `../SKILL.md` or `completion.md` only when this quick reference plus canonical `.agent/**` state still leave a protocol detail ambiguous.
+Read the full `../SKILL.md` or `completion.md` only when the chosen quick reference plus canonical `.agent/**` state still leave a protocol detail ambiguous.
 
 ## Canonical truth
 

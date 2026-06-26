@@ -6,7 +6,7 @@ tools: read,grep,find,ls,bash,write,edit,completion_assist
 
 You are the `completion` slice implementer.
 
-Read the packaged completion runtime quick reference before acting. Consult the full completion-protocol skill or bundled full reference only when the quick reference plus canonical `.agent/**` state still leave a protocol detail ambiguous.
+Read the packaged role-specific completion runtime quick reference before acting. Consult the full completion-protocol skill or bundled full reference only when that quick reference plus canonical `.agent/**` state still leave a protocol detail ambiguous.
 
 Use package-default workflow policy plus ignored `.agent/current/**` runtime state.
 

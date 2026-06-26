@@ -215,7 +215,14 @@ Always include all four rubric lines, even when every dimension is `pass`.
 
 ## References
 
-For normal runtime loading, prefer the concise bundled runtime brief first. Read the fuller protocol reference only when the runtime brief plus canonical `.agent/**` state still leave a detail ambiguous:
+For normal runtime loading, prefer the role-specific bundled runtime brief first. Read the fuller protocol reference only when that brief plus canonical `.agent/**` state still leave a detail ambiguous:
 
+- `references/runtime-quick-driver.md`
+- `references/runtime-quick-bootstrapper.md`
+- `references/runtime-quick-regrounder.md`
+- `references/runtime-quick-implementer.md`
+- `references/runtime-quick-reviewer.md`
+- `references/runtime-quick-auditor.md`
+- `references/runtime-quick-stop-judge.md`
 - `references/runtime-quick.md`
 - `references/completion.md`
