@@ -151,16 +151,34 @@ function validateBasisRegressionMetadata(evidence) {
   if (evidence.basis_regression_required !== undefined && typeof evidence.basis_regression_required !== 'boolean') {
     fail('.agent/current/verification-evidence.json basis_regression_required must be boolean when present');
   }
+  const basisRegressionRequired = evidence.basis_regression_required === true;
+  const status = evidence.basis_regression_status !== undefined && evidence.basis_regression_status !== null
+    ? asString(evidence.basis_regression_status)
+    : undefined;
   if (evidence.basis_regression_status !== undefined && evidence.basis_regression_status !== null) {
-    const status = asString(evidence.basis_regression_status);
     if (!status || !['failed_on_basis', 'passed_on_basis', 'not_run', 'not_applicable'].includes(status)) {
       fail('.agent/current/verification-evidence.json basis_regression_status must be failed_on_basis, passed_on_basis, not_run, or not_applicable when present');
     }
   }
-  if (evidence.basis_regression_reason !== undefined && evidence.basis_regression_reason !== null && !asString(evidence.basis_regression_reason)) {
+  const reason = evidence.basis_regression_reason !== undefined && evidence.basis_regression_reason !== null
+    ? asString(evidence.basis_regression_reason)
+    : undefined;
+  if (evidence.basis_regression_reason !== undefined && evidence.basis_regression_reason !== null && !reason) {
     fail('.agent/current/verification-evidence.json basis_regression_reason must be a non-empty string when present');
   }
-  ensureArtifactPaths(evidence.basis_regression_artifact_paths, '.agent/current/verification-evidence.json basis_regression_artifact_paths');
+  const artifactPaths = ensureArtifactPaths(evidence.basis_regression_artifact_paths, '.agent/current/verification-evidence.json basis_regression_artifact_paths');
+  if (basisRegressionRequired && !status) {
+    fail('.agent/current/verification-evidence.json basis_regression_status must be present when basis_regression_required=true');
+  }
+  if (basisRegressionRequired && !reason) {
+    fail('.agent/current/verification-evidence.json basis_regression_reason must be present when basis_regression_required=true');
+  }
+  if (basisRegressionRequired && status === 'not_applicable') {
+    fail('.agent/current/verification-evidence.json basis_regression_status must not be not_applicable when basis_regression_required=true');
+  }
+  if ((status === 'failed_on_basis' || status === 'passed_on_basis') && artifactPaths.length === 0) {
+    fail('.agent/current/verification-evidence.json basis_regression_artifact_paths must not be empty when basis_regression_status records an executed basis check');
+  }
 }
 
 function validateStructuredVerificationEvidence(evidence, verificationCommands, acceptanceCriteria) {

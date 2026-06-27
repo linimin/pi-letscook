@@ -145,6 +145,8 @@ Optional context only:
 
 Use repo-relative artifact paths only. Prefer concise field summaries plus the canonical artifact path over dumping raw command output into prompts or reports.
 
+Run basis regression selectively for eligible bugfix or regression slices. Use `bash scripts/run-basis-regression-check.sh` to rerun a current-HEAD verification command in a disposable temp worktree at the locked `basis_commit`, and record the truthful result as `failed_on_basis`, `passed_on_basis`, `not_run`, or `not_applicable` together with `basis_regression_required` and `basis_regression_reason`. Do not treat `not_run` or `not_applicable` as implicit passes.
+
 ## Scratch Space
 
 - Use `.agent/current/tmp/` for repo-local temporary files created during completion work.

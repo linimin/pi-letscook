@@ -15,7 +15,7 @@ cleanup_release_check_agent_dir() {
 trap cleanup_release_check_agent_dir EXIT
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
-echo "[release-check] running control-plane validation, helper runtime capability probe, packaged helper smoke, helper authority-boundary, artifact-layout, runtime-contract, role-gating, structured-output, observability regressions, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context/worktree-root regressions, prompt-budget coverage, agent_end auto-resume delivery coverage, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
+echo "[release-check] running control-plane validation, helper runtime capability probe, packaged helper smoke, helper authority-boundary, artifact-layout, runtime-contract, role-gating, structured-output, observability regressions, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context/worktree-root regressions, prompt-budget coverage, agent_end auto-resume delivery coverage, basis-regression proof, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
 npm run verify-completion-control-plane
 bash ./scripts/helper-runtime-capability-test.sh
 PI_HELPER_PACKAGING_SKIP_RUNTIME=1 bash ./scripts/helper-packaging-smoke-test.sh
@@ -35,6 +35,10 @@ checks = {
         'thin `.agent/verify_completion_*.sh` forwarders',
         'npm run verify-completion-control-plane',
         'npm run verify-completion-stop',
+        'bash scripts/run-basis-regression-check.sh',
+        'failed_on_basis',
+        'not_run',
+        'not_applicable',
     ],
     '.gitignore': [
         '# completion workflow local state',
@@ -43,6 +47,8 @@ checks = {
     'scripts/verify-completion-control-plane.js': [
         'const REQUIRED_TRACKED_CONTRACT_FILES = [',
         'subject_type must be selected_slice when active slice exact handoff requires verification evidence',
+        'basis_regression_status must not be not_applicable when basis_regression_required=true',
+        'basis_regression_artifact_paths must not be empty when basis_regression_status records an executed basis check',
     ],
     'scripts/verify-completion-stop.sh': [
         'stop_aggregation_policy must be unanimous-current-head-v1',
@@ -76,6 +82,8 @@ checks = {
         "`task_type` and `evaluation_profile` only come from explicit structured startup artifacts when those fields are present; otherwise `/cook` keeps the packaged `completion-workflow` / `completion-rubric-v1` defaults instead of inferring them from free-text discussion",
         "`recommended_first_slice_kind`",
         "`verifier_scaffolding` first slice",
+        "bash scripts/run-basis-regression-check.sh",
+        "not_run` or `not_applicable` as implicit passes",
     ],
     "CHANGELOG.md": [
         "added explicit stopped-workflow `/cook resume`, `/cook park`, and `/cook cancel` controls so blocked, await-user-input, and paused workflows no longer strand the primary agent in a same-repo dead zone",
@@ -132,6 +140,8 @@ checks = {
         'Use `completion-bootstrapper` only for first-time setup or missing local helper / canonical-state repair.',
         '`recommended_first_slice_kind`',
         '`verifier_scaffolding` first slice',
+        'bash scripts/run-basis-regression-check.sh',
+        'Do not treat `not_run` or `not_applicable` as implicit passes.',
     ],
     "skills/completion-protocol/references/completion.md": [
         'When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, use `/cook park` to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.',
@@ -140,6 +150,8 @@ checks = {
         '`completion-bootstrapper` is used only for first-time setup or missing local helper / canonical-state repair.',
         '`recommended_first_slice_kind`',
         '`verifier_scaffolding` first slice',
+        'bash scripts/run-basis-regression-check.sh',
+        'Do not treat `not_run` or `not_applicable` as implicit passes.',
     ],
     "agents/completion-bootstrapper.md": [
         'description: Bootstrap or repair local completion helper files and canonical execution state, then hand off to completion-regrounder.',
@@ -152,6 +164,8 @@ checks = {
         'refresh local repo-level verifier forwarders such as `.agent/verify_completion_stop.sh`',
         'refresh the local `.agent/verify_completion_stop.sh` forwarder so it remains a truthful repo-level baseline verifier.',
         'verifier_scaffolding',
+        'bash scripts/run-basis-regression-check.sh',
+        '`not_run` or `not_applicable`',
     ],
 }
 
@@ -216,6 +230,7 @@ npm run context-proposal-test
 npm run prompt-budget-test
 npm run worktree-root-boundary-test
 bash ./scripts/role-runner-contract-test.sh
+bash ./scripts/basis-regression-proof-test.sh
 if [[ "${PI_COMPLETION_SKIP_CANONICAL_EVIDENCE_ARTIFACT_TEST:-}" != "1" ]]; then
   bash ./scripts/canonical-evidence-artifact-test.sh
 fi
@@ -239,8 +254,10 @@ required = {
     'extensions/helper-tools/index.ts',
     'helpers/scout.md',
     'helpers/critic.md',
+    'scripts/basis-regression-proof-test.sh',
     'scripts/helper-runtime-capability-test.sh',
     'scripts/helper-packaging-smoke-test.sh',
+    'scripts/run-basis-regression-check.sh',
     'scripts/verify-completion-control-plane.js',
     'scripts/verify-completion-stop.sh',
 }

@@ -1,6 +1,6 @@
 # completion
 
-`completion` is a repo-local control-plane protocol for long-running software-project completion work.
+`completion` is a repo-local control-plane protocol for long-running completion work.
 
 ## Local Helper Files
 
@@ -33,7 +33,7 @@ Read these when making completion decisions:
 - `.agent/current/stop-check-history.jsonl`
 - `.agent/current/verification-evidence.json`
 
-Optional context only:
+Optional context:
 
 - `.agent/backlog.md`
 - `.agent/handoff.md`
@@ -50,15 +50,17 @@ Optional context only:
 - `open_gaps`
 - `basis_regression_required`, `basis_regression_status`, `basis_regression_reason`, and `basis_regression_artifact_paths`
 
-Use repo-relative artifact paths only. Prefer concise field summaries plus the canonical artifact path over dumping raw command output into prompts or reports.
+Use repo-relative artifact paths only. Prefer concise summaries and the canonical artifact path over raw command output.
+
+Run basis regression selectively for eligible bugfix/regression slices. Use `bash scripts/run-basis-regression-check.sh` to rerun a current-HEAD verifier in a disposable worktree at `basis_commit`, recording `failed_on_basis`, `passed_on_basis`, `not_run`, or `not_applicable` with `basis_regression_required` and `basis_regression_reason`. Do not treat `not_run` or `not_applicable` as implicit passes.
 
 ## Scratch Space
 
-- Use repo-local `.agent/current/tmp/` as the default temporary workspace for completion.
-- Keep `.agent/current/tmp/` ignored in `.gitignore` alongside other non-contract `.agent/*` execution artifacts.
-- Do not write scratch artifacts to `/tmp` or `/private/tmp` by default.
-- If a tool explicitly requires OS temp, prefer a scoped path such as `$TMPDIR/pi-completion/<repo-name>/` and treat it as disposable.
-- Do not store canonical state, required verification evidence, or the only copy of a deliverable exclusively in scratch paths.
+- Use repo-local `.agent/current/tmp/` as the default completion scratch space.
+- Keep `.agent/current/tmp/` ignored in `.gitignore` with other non-contract `.agent/*` artifacts.
+- Avoid `/tmp` or `/private/tmp` unless a tool requires OS temp.
+- When OS temp is required, prefer `$TMPDIR/pi-completion/<repo-name>/`.
+- Do not keep canonical state, required verification evidence, or the only copy of a deliverable only in scratch.
 
 ## Fixed Profile Schema
 
@@ -78,7 +80,7 @@ Use repo-relative artifact paths only. Prefer concise field summaries plus the c
 
 ## Fixed State Model
 
-`state.json` carries the current authoritative summary.
+`state.json` carries the authoritative summary.
 
 Required fields:
 
@@ -185,8 +187,8 @@ Each `candidate_slices[]` entry must include:
 
 Rules:
 
-1. Set at re-ground time. Every slice in `candidate_slices` must have `acceptance_criteria` populated during the re-ground wave that first introduces or re-evaluates it. A slice with empty `acceptance_criteria` is invalid.
-2. Immutable after lock. Once a slice's `acceptance_criteria` are set, subsequent re-ground waves must not weaken, replace, or silently drop criteria. The only allowed mutations are:
+1. Set at re-ground time. Every slice in `candidate_slices` must have `acceptance_criteria`. A slice with empty `acceptance_criteria` is invalid.
+2. Immutable after lock. Re-ground waves must not weaken, replace, or silently drop `acceptance_criteria`. The only allowed mutations are:
    - removing a criterion because repo truth already satisfies it, with `evidence` updated to prove it
    - adding a criterion discovered during implementation that was missing from the original assessment
 3. Done requires all satisfied. A slice may only transition to `done` when every acceptance criterion is satisfied and `evidence` contains the proof for each one.
