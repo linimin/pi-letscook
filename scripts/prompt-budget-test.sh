@@ -148,6 +148,44 @@ verification_evidence = {
     'verification_commands': active['verification_commands'],
     'outcome': 'passed',
     'recorded_at': '2026-01-01T00:00:00.000Z',
+    'evidence_quality': {
+        'status': 'structured_complete',
+        'summary': 'Prompt-budget fixture keeps structured evidence concise and fully populated.',
+    },
+    'command_results': [
+        {
+            'command': active['verification_commands'][0],
+            'outcome': 'passed',
+            'summary': 'Prompt-budget regression passed.',
+            'artifact_paths': ['.agent/current/verification-evidence.json'],
+        },
+        {
+            'command': active['verification_commands'][1],
+            'outcome': 'passed',
+            'summary': 'Role-runner contract regression passed.',
+            'artifact_paths': ['.agent/current/active-slice.json'],
+        },
+    ],
+    'acceptance_coverage': [
+        {
+            'criterion': active['acceptance_criteria'][0],
+            'status': 'covered',
+            'summary': 'Ordinary chat reminder remains available in the fixture.',
+            'artifact_paths': ['README.md'],
+        },
+        {
+            'criterion': active['acceptance_criteria'][1],
+            'status': 'covered',
+            'summary': 'Active workflow reminder remains concise in the fixture.',
+            'artifact_paths': ['.agent/current/verification-evidence.json'],
+        },
+    ],
+    'flake_signals': [],
+    'open_gaps': [],
+    'basis_regression_required': False,
+    'basis_regression_status': 'not_applicable',
+    'basis_regression_reason': 'Basis regression is outside the prompt-budget fixture scope.',
+    'basis_regression_artifact_paths': [],
     'summary': 'Prompt-budget fixture verification evidence remains aligned with the selected slice.',
 }
 
@@ -397,9 +435,9 @@ text_checks = [
     ('kickoff_prompt', kickoff_prompt, 3200),
     ('resume_prompt', resume_prompt, 3000),
     ('primary_handoff_prompt', primary, 700),
-    ('buildSystemReminder_source', system_source, 3100),
+    ('buildSystemReminder_source', system_source, 3200),
     ('shared_runtime_quick_reference', shared_runtime_quick_path.read_text().strip(), 4200),
-    ('completion_full_reference', completion_reference_path.read_text().strip(), 18000),
+    ('completion_full_reference', completion_reference_path.read_text().strip(), 18600),
 ]
 for name, text, limit in text_checks:
     size = len(text)
@@ -426,10 +464,18 @@ for name, path in quick_reference_paths.items():
 
 if 'startupVerifierPostureLine' not in system_source:
     raise SystemExit('[prompt-budget-test] buildSystemReminder should accept a startupVerifierPostureLine input')
+if 'Verification evidence structured:' not in system_source:
+    raise SystemExit('[prompt-budget-test] buildSystemReminder should surface a structured verification evidence summary')
+if 'verification_evidence_focus: read structured evidence fields directly from ${evidence.path}' not in source:
+    raise SystemExit('[prompt-budget-test] evaluation handoff source should point roles at the structured verification evidence fields')
+if '`- verification_evidence_structured: ${evidence.structuredSummary}`' not in source:
+    raise SystemExit('[prompt-budget-test] prompt surfaces should expose a concise structured verification evidence summary line')
 if 'Startup verifier posture:' not in index_source:
     raise SystemExit('[prompt-budget-test] index reminder source should label startup verifier posture explicitly')
 if 'recommended_first_slice_kind=' not in index_source or 'deterministic_verifier_ready=' not in index_source:
     raise SystemExit('[prompt-budget-test] startup verifier posture summary should include canonical field names in index.ts')
+if 'Canonical verification evidence structured summary is currently:' not in index_source:
+    raise SystemExit('[prompt-budget-test] post-compaction reminder should expose the structured verification evidence summary in index.ts')
 
 regrounder_quick = quick_reference_paths['regrounder_quick_reference'].read_text().strip()
 implementer_quick = quick_reference_paths['implementer_quick_reference'].read_text().strip()
@@ -442,12 +488,12 @@ bundle_checks = [
     ('primary_handoff_prompt_combined', primary_bundle, 2600),
     ('bootstrapper_role_prompt_combined', bootstrapper_bundle, 4000),
     ('regrounder_role_prompt_combined', regrounder_bundle, 5800),
-    ('reviewer_role_prompt_combined', reviewer_bundle, 4500),
-    ('reviewer_repair_role_prompt_combined', reviewer_repair_bundle, 5200),
-    ('auditor_role_prompt_combined', auditor_bundle, 5400),
-    ('auditor_repair_role_prompt_combined', auditor_repair_bundle, 6200),
-    ('stop_judge_role_prompt_combined', stop_judge_bundle, 5300),
-    ('implementer_role_prompt_combined', implementer_bundle, 6800),
+    ('reviewer_role_prompt_combined', reviewer_bundle, 4700),
+    ('reviewer_repair_role_prompt_combined', reviewer_repair_bundle, 5400),
+    ('auditor_role_prompt_combined', auditor_bundle, 5600),
+    ('auditor_repair_role_prompt_combined', auditor_repair_bundle, 6450),
+    ('stop_judge_role_prompt_combined', stop_judge_bundle, 5500),
+    ('implementer_role_prompt_combined', implementer_bundle, 6820),
 ]
 for name, bundle, limit in bundle_checks:
     size = bundle.get('combined_prompt_chars')
@@ -481,6 +527,14 @@ if 'verifier_scaffolding' not in regrounder_bundle.get('combined_prompt', ''):
     raise SystemExit('[prompt-budget-test] regrounder combined prompt should mention verifier_scaffolding guidance')
 if 'verifier_scaffolding' not in implementer_bundle.get('combined_prompt', ''):
     raise SystemExit('[prompt-budget-test] implementer combined prompt should mention verifier_scaffolding guidance')
+if 'evidence_quality' not in implementer_bundle.get('combined_prompt', '') or 'command_results' not in implementer_bundle.get('combined_prompt', ''):
+    raise SystemExit('[prompt-budget-test] implementer combined prompt should mention the structured verification evidence fields directly')
+if 'verification_evidence_structured' not in reviewer_bundle.get('combined_prompt', '') or 'evidence_quality' not in reviewer_bundle.get('combined_prompt', ''):
+    raise SystemExit('[prompt-budget-test] reviewer combined prompt should include structured verification evidence guidance')
+if 'verification_evidence_structured' not in auditor_bundle.get('combined_prompt', '') or 'evidence_quality' not in auditor_bundle.get('combined_prompt', ''):
+    raise SystemExit('[prompt-budget-test] auditor combined prompt should include structured verification evidence guidance')
+if 'verification_evidence_structured' not in stop_judge_bundle.get('combined_prompt', '') or 'evidence_quality' not in stop_judge_bundle.get('combined_prompt', ''):
+    raise SystemExit('[prompt-budget-test] stop-judge combined prompt should include structured verification evidence guidance')
 PY
 
 echo "prompt budget test passed: $TMPDIR"

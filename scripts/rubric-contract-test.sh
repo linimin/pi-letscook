@@ -55,6 +55,12 @@ for (const file of [
   assertIncludes(file, '`evaluation_profile`');
   assertIncludes(file, '`implementation_surfaces`');
   assertIncludes(file, '`verification_commands`');
+  assertIncludes(file, '`evidence_quality`');
+  assertIncludes(file, '`command_results`');
+  assertIncludes(file, '`acceptance_coverage`');
+  assertIncludes(file, '`flake_signals`');
+  assertIncludes(file, '`open_gaps`');
+  assertIncludes(file, '`basis_regression_*`');
   assertIncludes(file, '- `Rubric:`');
   for (const dimension of rubricDimensions) {
     assertIncludes(file, `- \`- ${dimension}: pass|concern|fail - ...\``);

@@ -19,6 +19,8 @@ Audit current HEAD truth after a committed slice. Focus on remaining work, track
 
 Ground the audit in canonical `.agent/**` routing and active-slice truth, including `evaluation_profile`, locked acceptance criteria, `implementation_surfaces`, `verification_commands`, `locked_notes`, and any `must_fix_findings`, rather than relying on prose-only task summaries.
 
+Read `.agent/current/verification-evidence.json` directly. Ground the `Verification evidence` rubric line in `evidence_quality`, `command_results`, `acceptance_coverage`, `flake_signals`, `open_gaps`, and any `basis_regression_*` metadata instead of summary prose alone.
+
 During long work, emit short operator-facing progress lines when useful using these exact prefixes:
 - `PROGRESS: ...`
 - `RATIONALE: ...`

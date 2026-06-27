@@ -497,6 +497,7 @@ export function defaultStartupBrief(
 }
 
 export function defaultVerificationEvidence(): JsonRecord {
+	const idleSummary = "No deterministic verification evidence is recorded yet because no selected slice or current-HEAD verification subject exists.";
 	return {
 		schema_version: 1,
 		artifact_type: "completion-verification-evidence",
@@ -509,7 +510,19 @@ export function defaultVerificationEvidence(): JsonRecord {
 		verification_commands: [],
 		outcome: "not_recorded",
 		recorded_at: null,
-		summary: "No deterministic verification evidence is recorded yet because no selected slice or current-HEAD verification subject exists.",
+		evidence_quality: {
+			status: "not_recorded",
+			summary: idleSummary,
+		},
+		command_results: [],
+		acceptance_coverage: [],
+		flake_signals: [],
+		open_gaps: [],
+		basis_regression_required: false,
+		basis_regression_status: "not_applicable",
+		basis_regression_reason: "No selected slice or current-HEAD verification subject exists yet.",
+		basis_regression_artifact_paths: [],
+		summary: idleSummary,
 	};
 }
 

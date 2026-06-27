@@ -132,6 +132,19 @@ Optional context only:
 - `.agent/handoff.md`
 - `.agent/compact.md`
 
+## Structured Verification Evidence
+
+`.agent/current/verification-evidence.json` stays additive and legacy-tolerant. Keep top-level `summary` as the terse prose fallback, but when structured evidence is present, roles should read and update:
+
+- `evidence_quality`
+- `command_results`
+- `acceptance_coverage`
+- `flake_signals`
+- `open_gaps`
+- `basis_regression_required`, `basis_regression_status`, `basis_regression_reason`, and `basis_regression_artifact_paths`
+
+Use repo-relative artifact paths only. Prefer concise field summaries plus the canonical artifact path over dumping raw command output into prompts or reports.
+
 ## Scratch Space
 
 - Use `.agent/current/tmp/` for repo-local temporary files created during completion work.

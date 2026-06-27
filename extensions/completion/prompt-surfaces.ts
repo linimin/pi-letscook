@@ -429,6 +429,7 @@ export function buildEvaluationRoleContextLines(
 			headSha?: string;
 			basisCommit?: string;
 			verificationCommands: string[];
+			structuredSummary: string;
 			summary: string;
 		};
 	},
@@ -451,6 +452,8 @@ export function buildEvaluationRoleContextLines(
 		`- canonical_plan_path: ${planPath}`,
 		`- verification_evidence_path: ${evidence.path}`,
 		`- verification_evidence_status: ${evidence.status}`,
+		`- verification_evidence_focus: read structured evidence fields directly from ${evidence.path}`,
+		`- verification_evidence_structured: ${evidence.structuredSummary}`,
 		`- verification_evidence_summary: ${evidence.summary}`,
 	];
 	if (role === "completion-stop-judge") {
@@ -489,6 +492,7 @@ type CompletionVerificationEvidenceSummary = {
 	headSha?: string;
 	basisCommit?: string;
 	verificationCommands: string[];
+	structuredSummary: string;
 	summary: string;
 };
 
@@ -544,6 +548,7 @@ export function buildSystemReminder(args: {
 	else if (args.verificationCommands.length > 0) lines.push(`Active verification commands: ${args.verificationCommands.join(" | ")}`);
 	if (args.startupVerifierPostureLine) lines.push(args.startupVerifierPostureLine);
 	lines.push(`Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})`);
+	lines.push(`Verification evidence structured: ${args.evidence.structuredSummary}`);
 	lines.push(`Verification evidence summary: ${args.evidence.summary}`);
 	return lines.join(" ");
 }
@@ -619,6 +624,7 @@ export function buildResumeCapsule(args: {
 		`- head_sha: ${args.evidence.headSha ?? "(missing)"}`,
 		`- basis_commit: ${args.evidence.basisCommit ?? "(missing)"}`,
 		`- verification_commands: ${args.evidence.verificationCommands.length > 0 ? args.evidence.verificationCommands.join(" | ") : "(none)"}`,
+		`- structured_summary: ${args.evidence.structuredSummary}`,
 		`- summary: ${args.evidence.summary}`,
 		"",
 		"active_slice:",

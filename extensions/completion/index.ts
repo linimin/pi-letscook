@@ -799,6 +799,53 @@ function activeSliceContext(snapshot: CompletionStateSnapshot) {
 	};
 }
 
+function recordArray(value: unknown): JsonRecord[] {
+	return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function structuredStatusSummary(items: JsonRecord[], fieldName: string, orderedStatuses: string[]): string {
+	if (items.length === 0) return "0";
+	const counts = new Map<string, number>();
+	for (const status of orderedStatuses) counts.set(status, 0);
+	let otherCount = 0;
+	for (const item of items) {
+		const status = asString(item[fieldName]);
+		if (!status) continue;
+		if (!counts.has(status)) {
+			otherCount += 1;
+			continue;
+		}
+		counts.set(status, (counts.get(status) ?? 0) + 1);
+	}
+	const parts = orderedStatuses
+		.filter((status) => (counts.get(status) ?? 0) > 0)
+		.map((status) => `${counts.get(status) ?? 0} ${status}`);
+	if (otherCount > 0) parts.push(`${otherCount} other`);
+	return parts.length > 0 ? parts.join("/") : "0";
+}
+
+function verificationEvidenceQualityStatus(evidence: JsonRecord | undefined): string {
+	const evidenceQuality = evidence?.evidence_quality;
+	if (isRecord(evidenceQuality)) return asString(evidenceQuality.status) ?? "unspecified";
+	return evidence ? "legacy_summary" : "missing";
+}
+
+function basisRegressionEvidenceSummary(evidence: JsonRecord | undefined): string {
+	const status = asString(evidence?.basis_regression_status) ?? "unspecified";
+	return asBoolean(evidence?.basis_regression_required) ? `${status}/required` : status;
+}
+
+function structuredVerificationEvidenceSummary(evidence: JsonRecord | undefined): string {
+	return [
+		`evidence_quality=${verificationEvidenceQualityStatus(evidence)}`,
+		`command_results=${structuredStatusSummary(recordArray(evidence?.command_results), "outcome", ["passed", "failed", "not_run"])}`,
+		`acceptance_coverage=${structuredStatusSummary(recordArray(evidence?.acceptance_coverage), "status", ["covered", "partial", "not_covered"])}`,
+		`flake_signals=${structuredStatusSummary(recordArray(evidence?.flake_signals), "status", ["none", "watch", "suspected"])}`,
+		`open_gaps=${structuredStatusSummary(recordArray(evidence?.open_gaps), "status", ["watch", "open", "none"])}`,
+		`basis_regression=${basisRegressionEvidenceSummary(evidence)}`,
+	].join("; ");
+}
+
 function verificationEvidenceContext(snapshot: CompletionStateSnapshot) {
 	const evidence = snapshot.verificationEvidence;
 	return {
@@ -813,6 +860,7 @@ function verificationEvidenceContext(snapshot: CompletionStateSnapshot) {
 		verificationCommands: asStringArray(evidence?.verification_commands),
 		outcome: asString(evidence?.outcome),
 		recordedAt: asString(evidence?.recorded_at),
+		structuredSummary: structuredVerificationEvidenceSummary(evidence),
 		summary:
 			asString(evidence?.summary) ??
 			(evidence ? "Canonical verification evidence is present but its summary is missing." : "Canonical verification evidence is missing."),
@@ -953,6 +1001,7 @@ function buildPostCompactionDriverInstructions(snapshot: CompletionStateSnapshot
 	if (evidence.verificationCommands.length > 0) {
 		lines.push(`Canonical verification evidence commands are currently: ${evidence.verificationCommands.join(" | ")}`);
 	}
+	lines.push(`Canonical verification evidence structured summary is currently: ${evidence.structuredSummary}`);
 	lines.push(`Canonical verification evidence summary is currently: ${evidence.summary}`);
 	if (isRubricEvaluationRole(nextRole)) lines.push(buildEvaluationRoleReminderText(snapshot, nextRole));
 	return lines.join(" ");

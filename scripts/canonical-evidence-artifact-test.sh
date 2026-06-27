@@ -203,28 +203,48 @@ const assertSectionIncludes = (file, heading, snippet) => {
 assertIncludes('README.md', '.agent/current/verification-evidence.json');
 assertIncludes('README.md', 'Fresh scaffolds create an idle placeholder');
 assertIncludes('README.md', 'bash scripts/canonical-evidence-artifact-test.sh');
+assertIncludes('README.md', '`evidence_quality`');
+assertIncludes('README.md', '`command_results`');
+assertIncludes('README.md', '`basis_regression_artifact_paths`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- package defaults for task_type, evaluation_profile, and stop policy');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Structured Verification Evidence', '- `evidence_quality`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Structured Verification Evidence', '- `command_results`');
+assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Structured Verification Evidence', '- `basis_regression_required`, `basis_regression_status`, `basis_regression_reason`, and `basis_regression_artifact_paths`');
 assertIncludes('skills/completion-protocol/SKILL.md', 'package defaults');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work.');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Ignored Canonical Execution State', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- package defaults for task_type, evaluation_profile, and stop policy');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Structured Verification Evidence', '- `evidence_quality`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Structured Verification Evidence', '- `command_results`');
+assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Structured Verification Evidence', '- `basis_regression_required`, `basis_regression_status`, `basis_regression_reason`, and `basis_regression_artifact_paths`');
 assertIncludes('skills/completion-protocol/references/completion.md', 'package defaults plus runtime `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/references/completion.md', '## Compaction And Recovery', '`completion-implementer` must also re-read canonical `.agent/current/state.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` before resuming work.');
+assertIncludes('agents/completion-implementer.md', '`evidence_quality`');
+assertIncludes('agents/completion-reviewer.md', '`command_results`');
+assertIncludes('agents/completion-auditor.md', '`command_results`');
+assertIncludes('agents/completion-stop-judge.md', '`command_results`');
+assertIncludes('helpers/critic.md', '`basis_regression_*`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})');
+assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence structured: ${args.evidence.structuredSummary}');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Verification evidence summary: ${args.evidence.summary}');
 assertIncludes('extensions/completion/index.ts', 'Canonical verification evidence artifact is currently: ${evidence.path} (${evidence.status})');
+assertIncludes('extensions/completion/index.ts', 'Canonical verification evidence structured summary is currently: ${evidence.structuredSummary}');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- verification_evidence_path: ${evidence.path}`');
+assertIncludes('extensions/completion/prompt-surfaces.ts', '`- verification_evidence_focus: read structured evidence fields directly from ${evidence.path}`');
+assertIncludes('extensions/completion/prompt-surfaces.ts', '`- verification_evidence_structured: ${evidence.structuredSummary}`');
 assertIncludes('extensions/completion/prompt-surfaces.ts', '`- verification_evidence_summary: ${evidence.summary}`');
 assertIncludes('extensions/completion/index.ts', 'Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.');
 assertIncludes('scripts/release-check.sh', 'npm run verify-completion-control-plane');
 assertIncludes('scripts/release-check.sh', 'bash ./scripts/canonical-evidence-artifact-test.sh');
 assertIncludes('.agent/verify_completion_control_plane.sh', 'verify-completion-control-plane.js');
 assertIncludes('scripts/verify-completion-control-plane.js', '.agent/current/verification-evidence.json');
+assertIncludes('scripts/verify-completion-control-plane.js', 'command_results');
+assertIncludes('scripts/verify-completion-control-plane.js', 'basis_regression_artifact_paths');
 assertIncludes('scripts/verify-completion-control-plane.js', 'subject_type must be selected_slice when active slice exact handoff requires verification evidence');
 assertIncludes('scripts/verify-completion-stop.sh', 'verify-completion-control-plane.js');
 NODE
@@ -348,6 +368,13 @@ assert evidence['verification_commands'] == [], evidence
 assert evidence['outcome'] == 'not_recorded', evidence
 assert evidence['recorded_at'] is None, evidence
 assert evidence['head_sha'] is None, evidence
+assert evidence['evidence_quality']['status'] == 'not_recorded', evidence
+assert evidence['command_results'] == [], evidence
+assert evidence['acceptance_coverage'] == [], evidence
+assert evidence['flake_signals'] == [], evidence
+assert evidence['open_gaps'] == [], evidence
+assert evidence['basis_regression_required'] is False, evidence
+assert evidence['basis_regression_status'] == 'not_applicable', evidence
 PY
 
 git add .
@@ -556,6 +583,104 @@ import sys
 from pathlib import Path
 
 head_sha = sys.argv[1]
+legacy_valid = {
+    'schema_version': 1,
+    'artifact_type': 'completion-verification-evidence',
+    'subject_type': 'selected_slice',
+    'slice_id': 'evidence-fixture',
+    'goal': 'Persist canonical verification evidence for the selected slice.',
+    'contract_ids': ['CANONICAL-EVIDENCE-ARTIFACTS'],
+    'basis_commit': head_sha,
+    'head_sha': head_sha,
+    'verification_commands': [
+        'bash .agent/verify_completion_control_plane.sh',
+        'bash .agent/verify_completion_stop.sh',
+    ],
+    'outcome': 'passed',
+    'recorded_at': '2026-05-03T00:00:00Z',
+    'summary': 'Legacy selected-slice verification evidence still matches the active slice and current HEAD.',
+}
+Path('.agent/current/verification-evidence.json').write_text(json.dumps(legacy_valid, indent=2) + '\n')
+PY
+
+bash .agent/verify_completion_control_plane.sh >/dev/null
+
+python3 - "$HEAD_SHA" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+head_sha = sys.argv[1]
+unsafe = {
+    'schema_version': 1,
+    'artifact_type': 'completion-verification-evidence',
+    'subject_type': 'selected_slice',
+    'slice_id': 'evidence-fixture',
+    'goal': 'Persist canonical verification evidence for the selected slice.',
+    'contract_ids': ['CANONICAL-EVIDENCE-ARTIFACTS'],
+    'basis_commit': head_sha,
+    'head_sha': head_sha,
+    'verification_commands': [
+        'bash .agent/verify_completion_control_plane.sh',
+        'bash .agent/verify_completion_stop.sh',
+    ],
+    'outcome': 'passed',
+    'recorded_at': '2026-05-03T00:00:00Z',
+    'evidence_quality': {
+        'status': 'structured_complete',
+        'summary': 'Structured evidence is present but carries an unsafe artifact path.',
+    },
+    'command_results': [
+        {
+            'command': 'bash .agent/verify_completion_control_plane.sh',
+            'outcome': 'passed',
+            'summary': 'Control-plane verifier passed.',
+            'artifact_paths': ['../unsafe.log'],
+        },
+        {
+            'command': 'bash .agent/verify_completion_stop.sh',
+            'outcome': 'passed',
+            'summary': 'Stop verifier passed.',
+            'artifact_paths': ['.agent/verify_completion_stop.sh'],
+        },
+    ],
+    'acceptance_coverage': [
+        {
+            'criterion': 'Canonical verification evidence is recorded for the selected slice.',
+            'status': 'covered',
+            'summary': 'Selected-slice evidence is populated for current HEAD.',
+            'artifact_paths': ['.agent/current/verification-evidence.json'],
+        },
+        {
+            'criterion': 'Fail-closed verification rejects missing or stale evidence.',
+            'status': 'covered',
+            'summary': 'The fixture already exercises stale-evidence rejection.',
+            'artifact_paths': ['.agent/verify_completion_control_plane.sh'],
+        },
+    ],
+    'flake_signals': [],
+    'open_gaps': [],
+    'basis_regression_required': False,
+    'basis_regression_status': 'not_applicable',
+    'basis_regression_reason': 'Basis regression is outside this fixture scope.',
+    'basis_regression_artifact_paths': [],
+    'summary': 'Structured evidence carries an unsafe artifact path and should fail closed.',
+}
+Path('.agent/current/verification-evidence.json').write_text(json.dumps(unsafe, indent=2) + '\n')
+PY
+
+ARTIFACT_OUTPUT="$(bash .agent/verify_completion_control_plane.sh 2>&1 || true)"
+[[ "$ARTIFACT_OUTPUT" == *"artifact_paths"* ]] || {
+  echo "expected unsafe-artifact verification failure to mention artifact_paths, got: $ARTIFACT_OUTPUT" >&2
+  exit 1
+}
+
+python3 - "$HEAD_SHA" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+head_sha = sys.argv[1]
 valid = {
     'schema_version': 1,
     'artifact_type': 'completion-verification-evidence',
@@ -571,7 +696,45 @@ valid = {
     ],
     'outcome': 'passed',
     'recorded_at': '2026-05-03T00:00:00Z',
-    'summary': 'Selected-slice verification evidence matches the active slice and current HEAD.',
+    'evidence_quality': {
+        'status': 'structured_complete',
+        'summary': 'Selected-slice structured evidence matches the active slice and current HEAD.',
+    },
+    'command_results': [
+        {
+            'command': 'bash .agent/verify_completion_control_plane.sh',
+            'outcome': 'passed',
+            'summary': 'Control-plane verifier passed.',
+            'artifact_paths': ['.agent/verify_completion_control_plane.sh'],
+        },
+        {
+            'command': 'bash .agent/verify_completion_stop.sh',
+            'outcome': 'passed',
+            'summary': 'Stop verifier passed.',
+            'artifact_paths': ['.agent/verify_completion_stop.sh'],
+        },
+    ],
+    'acceptance_coverage': [
+        {
+            'criterion': 'Canonical verification evidence is recorded for the selected slice.',
+            'status': 'covered',
+            'summary': 'Selected-slice evidence is populated for current HEAD.',
+            'artifact_paths': ['.agent/current/verification-evidence.json'],
+        },
+        {
+            'criterion': 'Fail-closed verification rejects missing or stale evidence.',
+            'status': 'covered',
+            'summary': 'The fixture already exercised missing and stale evidence rejection earlier in this script.',
+            'artifact_paths': ['.agent/verify_completion_control_plane.sh'],
+        },
+    ],
+    'flake_signals': [],
+    'open_gaps': [],
+    'basis_regression_required': False,
+    'basis_regression_status': 'not_applicable',
+    'basis_regression_reason': 'Basis regression is outside this canonical evidence fixture.',
+    'basis_regression_artifact_paths': [],
+    'summary': 'Selected-slice structured verification evidence matches the active slice and current HEAD.',
 }
 Path('.agent/current/verification-evidence.json').write_text(json.dumps(valid, indent=2) + '\n')
 PY

@@ -26,6 +26,8 @@ Prioritize findings over summary prose.
 
 Ground the review in canonical `.agent/**` routing and active-slice truth, including `evaluation_profile`, locked acceptance criteria, `implementation_surfaces`, `verification_commands`, `locked_notes`, and any `must_fix_findings`, rather than relying on prose-only task summaries. Order findings by severity and include file references.
 
+Read `.agent/current/verification-evidence.json` directly. Ground the `Verification evidence` rubric line in `evidence_quality`, `command_results`, `acceptance_coverage`, `flake_signals`, `open_gaps`, and any `basis_regression_*` metadata instead of summary prose alone.
+
 You must explicitly answer whether the slice is acceptable as-is. If it is not acceptable, provide the exact smallest follow-up slice.
 
 Consistency rules:

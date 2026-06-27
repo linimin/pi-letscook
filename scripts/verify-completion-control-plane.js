@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const fs = require('node:fs');
+const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const REQUIRED_TRACKED_CONTRACT_FILES = [];
@@ -31,8 +32,175 @@ function asStringArray(value) {
     : [];
 }
 
+function isRecord(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function sameStringArrays(left, right) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
+function isSafeArtifactPath(value) {
+  const candidate = asString(value);
+  if (!candidate) return false;
+  const withForwardSlashes = candidate.replace(/\\/g, '/');
+  if (withForwardSlashes.startsWith('/')) return false;
+  if (/^[A-Za-z]:\//.test(withForwardSlashes)) return false;
+  const normalized = path.posix.normalize(withForwardSlashes);
+  if (normalized === '.' || normalized.startsWith('../') || normalized.includes('/../')) return false;
+  return true;
+}
+
+function ensureArtifactPaths(value, label) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    fail(`${label} must be an array of repo-relative artifact paths when present`);
+  }
+  for (const [index, item] of value.entries()) {
+    if (!isSafeArtifactPath(item)) {
+      fail(`${label}[${index}] must be a safe repo-relative artifact path`);
+    }
+  }
+  return value;
+}
+
+function validateStructuredEntryArray(value, label) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) fail(`${label} must be an array when present`);
+  return value;
+}
+
+function validateEvidenceQuality(evidence) {
+  if (evidence.evidence_quality === undefined || evidence.evidence_quality === null) return undefined;
+  if (!isRecord(evidence.evidence_quality)) {
+    fail('.agent/current/verification-evidence.json evidence_quality must be an object when present');
+  }
+  const status = asString(evidence.evidence_quality.status);
+  if (!status) {
+    fail('.agent/current/verification-evidence.json evidence_quality.status must be present when evidence_quality is provided');
+  }
+  if (!asString(evidence.evidence_quality.summary)) {
+    fail('.agent/current/verification-evidence.json evidence_quality.summary must be present when evidence_quality is provided');
+  }
+  return status;
+}
+
+function validateCommandResults(evidence, verificationCommands) {
+  const label = '.agent/current/verification-evidence.json command_results';
+  const entries = validateStructuredEntryArray(evidence.command_results, label);
+  const seen = new Set();
+  const allowedCommands = new Set(verificationCommands);
+  for (const [index, entry] of entries.entries()) {
+    const entryLabel = `${label}[${index}]`;
+    if (!isRecord(entry)) fail(`${entryLabel} must be an object`);
+    const command = asString(entry.command);
+    if (!command) fail(`${entryLabel}.command must be a non-empty string`);
+    if (seen.has(command)) fail(`${label} must not repeat command values`);
+    seen.add(command);
+    if (verificationCommands.length > 0 && !allowedCommands.has(command)) {
+      fail(`${entryLabel}.command must match .agent/current/verification-evidence.json verification_commands`);
+    }
+    const outcome = asString(entry.outcome);
+    if (!outcome || !['passed', 'failed', 'not_run'].includes(outcome)) {
+      fail(`${entryLabel}.outcome must be passed, failed, or not_run`);
+    }
+    if (entry.summary !== undefined && !asString(entry.summary)) {
+      fail(`${entryLabel}.summary must be a non-empty string when present`);
+    }
+    ensureArtifactPaths(entry.artifact_paths, `${entryLabel}.artifact_paths`);
+  }
+  return entries;
+}
+
+function validateStructuredStatusEntries(value, label, keyField, allowedStatuses) {
+  const entries = validateStructuredEntryArray(value, label);
+  const seen = new Set();
+  for (const [index, entry] of entries.entries()) {
+    const entryLabel = `${label}[${index}]`;
+    if (!isRecord(entry)) fail(`${entryLabel} must be an object`);
+    const keyValue = asString(entry[keyField]);
+    if (!keyValue) fail(`${entryLabel}.${keyField} must be a non-empty string`);
+    if (seen.has(keyValue)) fail(`${label} must not repeat ${keyField} values`);
+    seen.add(keyValue);
+    const status = asString(entry.status);
+    if (!status || !allowedStatuses.includes(status)) {
+      fail(`${entryLabel}.status must be one of: ${allowedStatuses.join(', ')}`);
+    }
+    if (entry.summary !== undefined && !asString(entry.summary)) {
+      fail(`${entryLabel}.summary must be a non-empty string when present`);
+    }
+    ensureArtifactPaths(entry.artifact_paths, `${entryLabel}.artifact_paths`);
+  }
+  return entries;
+}
+
+function validateAcceptanceCoverage(evidence, acceptanceCriteria) {
+  const label = '.agent/current/verification-evidence.json acceptance_coverage';
+  const entries = validateStructuredStatusEntries(evidence.acceptance_coverage, label, 'criterion', ['covered', 'partial', 'not_covered']);
+  const allowedCriteria = new Set(acceptanceCriteria);
+  for (const [index, entry] of entries.entries()) {
+    const criterion = asString(entry.criterion);
+    if (acceptanceCriteria.length > 0 && criterion && !allowedCriteria.has(criterion)) {
+      fail(`${label}[${index}].criterion must match .agent/current/active-slice.json acceptance_criteria`);
+    }
+  }
+  return entries;
+}
+
+function validateBasisRegressionMetadata(evidence) {
+  if (evidence.basis_regression_required !== undefined && typeof evidence.basis_regression_required !== 'boolean') {
+    fail('.agent/current/verification-evidence.json basis_regression_required must be boolean when present');
+  }
+  if (evidence.basis_regression_status !== undefined && evidence.basis_regression_status !== null) {
+    const status = asString(evidence.basis_regression_status);
+    if (!status || !['failed_on_basis', 'passed_on_basis', 'not_run', 'not_applicable'].includes(status)) {
+      fail('.agent/current/verification-evidence.json basis_regression_status must be failed_on_basis, passed_on_basis, not_run, or not_applicable when present');
+    }
+  }
+  if (evidence.basis_regression_reason !== undefined && evidence.basis_regression_reason !== null && !asString(evidence.basis_regression_reason)) {
+    fail('.agent/current/verification-evidence.json basis_regression_reason must be a non-empty string when present');
+  }
+  ensureArtifactPaths(evidence.basis_regression_artifact_paths, '.agent/current/verification-evidence.json basis_regression_artifact_paths');
+}
+
+function validateStructuredVerificationEvidence(evidence, verificationCommands, acceptanceCriteria) {
+  const qualityStatus = validateEvidenceQuality(evidence);
+  const commandResults = validateCommandResults(evidence, verificationCommands);
+  const acceptanceCoverage = validateAcceptanceCoverage(evidence, acceptanceCriteria);
+  validateStructuredStatusEntries(evidence.flake_signals, '.agent/current/verification-evidence.json flake_signals', 'signal', ['none', 'watch', 'suspected']);
+  validateStructuredStatusEntries(evidence.open_gaps, '.agent/current/verification-evidence.json open_gaps', 'gap', ['watch', 'open', 'none']);
+  validateBasisRegressionMetadata(evidence);
+
+  const overallOutcome = asString(evidence.outcome);
+  if (qualityStatus === 'not_recorded' && overallOutcome && overallOutcome !== 'not_recorded') {
+    fail('.agent/current/verification-evidence.json evidence_quality.status must not stay not_recorded once outcome is recorded');
+  }
+  if (overallOutcome === 'passed' && commandResults.length > 0) {
+    const resultByCommand = new Map(commandResults.map((entry) => [asString(entry.command), asString(entry.outcome)]));
+    for (const command of verificationCommands) {
+      if (!resultByCommand.has(command)) {
+        fail('.agent/current/verification-evidence.json command_results must cover every verification command when outcome=passed');
+      }
+    }
+    for (const outcome of resultByCommand.values()) {
+      if (outcome !== 'passed') {
+        fail('.agent/current/verification-evidence.json command_results outcomes must all be passed when overall outcome=passed');
+      }
+    }
+  }
+  if (overallOutcome === 'passed' && acceptanceCoverage.length > 0) {
+    const coverageByCriterion = new Map(acceptanceCoverage.map((entry) => [asString(entry.criterion), asString(entry.status)]));
+    for (const criterion of acceptanceCriteria) {
+      if (!coverageByCriterion.has(criterion)) {
+        fail('.agent/current/verification-evidence.json acceptance_coverage must cover every active acceptance criterion when outcome=passed');
+      }
+    }
+    for (const status of coverageByCriterion.values()) {
+      if (status !== 'covered') {
+        fail('.agent/current/verification-evidence.json acceptance_coverage statuses must all be covered when overall outcome=passed');
+      }
+    }
+  }
 }
 
 function runGit(args, options = {}) {
@@ -191,6 +359,10 @@ const planSlice = activeSliceId ? planSlices.find((slice) => asString(slice && s
 if (exactHandoff && !planSlice) {
   fail('slice_id must match a slice in .agent/current/plan.json when status carries an exact handoff');
 }
+
+const structuredEvidenceVerificationCommands = exactHandoff ? asStringArray(active.verification_commands) : asStringArray(evidence.verification_commands);
+const structuredEvidenceAcceptanceCriteria = exactHandoff ? asStringArray(active.acceptance_criteria) : [];
+validateStructuredVerificationEvidence(evidence, structuredEvidenceVerificationCommands, structuredEvidenceAcceptanceCriteria);
 
 if (exactHandoff) {
   const requiredStringFields = ['goal', 'why_now', 'basis_commit'];

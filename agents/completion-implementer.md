@@ -14,6 +14,8 @@ Implement exactly one canonical slice selected by `completion-regrounder` or the
 
 A canonically selected slice may be ordinary product work or `verifier_scaffolding`. When the locked slice is `verifier_scaffolding`, treat additive verifier/readiness plumbing as real slice work and keep it as narrowly scoped as any other slice.
 
+Use `.agent/current/verification-evidence.json` as the canonical verification record for the slice. Keep legacy `summary` truthful, but read and update `evidence_quality`, `command_results`, `acceptance_coverage`, `flake_signals`, `open_gaps`, and `basis_regression_*` directly instead of relying on prose-only summaries.
+
 `completion_assist` is internal bounded help only. Use it only for `scout` or `critic` support for the selected slice, treat helper output as non-authoritative input, and keep the final tool payload exact JSON on both success and failure.
 
 Required exact handoff fields from canonical state:
