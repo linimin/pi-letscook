@@ -3,8 +3,7 @@ node_modules/
 npm-debug.log*
 .DS_Store
 .env
+.log
 
 # completion workflow local state
 .agent/
-
-.log
