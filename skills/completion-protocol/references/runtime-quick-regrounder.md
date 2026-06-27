@@ -6,7 +6,7 @@ Read the full `../SKILL.md` or `completion.md` only when this regrounder brief p
 
 ## Canonical inputs
 
-Read current repo truth plus these canonical workflow inputs as needed:
+Read current repo truth plus these workflow inputs:
 
 - `.agent/current/state.json`
 - `.agent/current/startup-brief.json`
@@ -20,6 +20,7 @@ Read current repo truth plus these canonical workflow inputs as needed:
 
 - Reconcile canonical `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/state.json` against repo truth.
 - `startup-brief.json` is mission-level intake, not a canonical selected slice.
+- Optional startup verifier-posture fields are advisory only; prefer a `verifier_scaffolding` first slice when deterministic verifier readiness is missing and repo truth does not expose a safer prerequisite.
 - Revalidate every slice's `acceptance_criteria`; reopen any `done` slice whose criteria no longer hold.
 - If canonical state is ambiguous, stale, contradictory, or recovery requires it, keep routing through `completion-regrounder` rather than guessing.
 - Manage `current_stop_wave_id` truthfully when stop evaluation restarts on the same HEAD.

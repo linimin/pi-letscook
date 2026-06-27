@@ -22,7 +22,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 
 - Current repo truth beats stale notes, stale summaries, and conversation memory.
 - `startup-brief.json` is the persistent machine-readable record of the confirmed `/cook` startup intent. It is canonical workflow intake, not the canonical slice plan.
-- `startup-brief.json` may include optional `*_hint` fields for an initial slice, but those fields are advisory startup hints only; `completion-regrounder` still owns canonical slice planning.
+- `startup-brief.json` may include optional `*_hint` fields for an initial slice plus optional verifier-posture fields `verification_truth_mode`, `deterministic_verifier_ready`, `verification_latency`, `verification_noise_risk`, `verifier_gap`, and `recommended_first_slice_kind`, but those fields are advisory startup input only; `completion-regrounder` still owns canonical slice planning and should prefer a `verifier_scaffolding` first slice when deterministic verifier readiness is missing and repo truth does not expose a safer prerequisite.
 - `plan.json` is the persistent machine-readable slice backlog. Rebuild it during every re-grounding wave and keep it truthful after every committed slice.
 - `state.json` is the persistent machine-readable workflow controller. Keep `current_phase`, `continuation_policy`, `continuation_reason`, `next_mandatory_role`, and `next_mandatory_action` truthful after every transition.
 - Every slice in `plan.json` must have non-empty `acceptance_criteria` — concrete, verifiable conditions that define done. A slice without acceptance criteria is invalid and must not be selected.
@@ -161,7 +161,7 @@ The workflow driver must invoke `completion-regrounder` before continuing whenev
 
 The exact implementer handoff now includes implementation-scope surfaces and expected verification commands in addition to the locked slice goal, acceptance, notes, and before-slice counters.
 
-At workflow start, treat `.agent/current/startup-brief.json` as the confirmed intent anchor that regrounding must reconcile against current repo truth before selecting slices. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional `*_hint` fields are advisory first-slice hints, not a preselected active-slice contract.
+At workflow start, treat `.agent/current/startup-brief.json` as the confirmed intent anchor that regrounding must reconcile against current repo truth before selecting slices. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional `*_hint` fields plus optional verifier-posture fields `verification_truth_mode`, `deterministic_verifier_ready`, `verification_latency`, `verification_noise_risk`, `verifier_gap`, and `recommended_first_slice_kind` are advisory startup input only, not a preselected active-slice contract. When deterministic verifier readiness is missing and repo truth does not expose a safer prerequisite, regrounding should prefer a `verifier_scaffolding` first slice.
 
 The workflow driver must not continue implementation, review, audit, or stop evaluation from compacted conversation memory alone.
 

@@ -19,6 +19,7 @@ Read these canonical inputs before acting:
 - Stop and report a blocker instead of guessing if required handoff fields are missing, stale, or ambiguous.
 - Confirm `.agent/current/active-slice.json` stays in parity with `.agent/current/plan.json` before implementation.
 - Implement exactly one selected slice end to end, including deterministic proof and the commit.
+- A canonically selected slice may be `verifier_scaffolding`; implement that additive verifier/readiness plumbing like any other real slice instead of waiting for a broader product change.
 - Only this role edits tracked product files for the slice and appends exactly one `implemented` record after the commit.
 - If unrelated dirty tracked files can be isolated safely, auto-preserve them with a reversible stash-plus-note flow under `.agent/current/tmp/dirty-worktree-autostash.json`.
 - If roadmap-level drift appears, report it and hand control back to `completion-regrounder` instead of redesigning the plan silently.

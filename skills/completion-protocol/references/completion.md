@@ -12,6 +12,7 @@ These helper files are generated local convenience entrypoints, not tracked repo
 ## Ignored Canonical Execution State
 
 - `.agent/current/state.json`
+- `.agent/current/startup-brief.json`
 - `.agent/current/plan.json`
 - `.agent/current/active-slice.json`
 - `.agent/current/slice-history.jsonl`
@@ -25,6 +26,7 @@ Read these when making completion decisions:
 
 - package defaults for task_type, evaluation_profile, and stop policy
 - `.agent/current/state.json`
+- `.agent/current/startup-brief.json`
 - `.agent/current/plan.json`
 - `.agent/current/active-slice.json`
 - `.agent/current/slice-history.jsonl`
@@ -131,6 +133,14 @@ Rules:
 6. When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, use `/cook park` to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.
 
 After a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory before control returns. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly, and do not recreate local helper files merely to narrate final status.
+
+`startup-brief.json` carries the confirmed `/cook` startup intake.
+
+Rules:
+
+1. Treat mission, scope, constraints, acceptance, risks, and notes there as workflow-level intent, not as a preselected active slice.
+2. Optional `*_hint` fields plus optional verifier-posture fields `verification_truth_mode`, `deterministic_verifier_ready`, `verification_latency`, `verification_noise_risk`, `verifier_gap`, and `recommended_first_slice_kind` are advisory startup input only.
+3. When deterministic verifier readiness is missing and repo truth does not reveal a safer prerequisite, `completion-regrounder` should prefer a `verifier_scaffolding` first slice.
 
 `plan.json` carries the ordered persistent slice backlog.
 
@@ -371,6 +381,7 @@ It must not, while a slice is selected or in progress:
 After context compaction, suspected memory loss, stalled-role recovery, or any ambiguous completion state, the workflow root must re-read:
 
 - `.agent/current/state.json`
+- `.agent/current/startup-brief.json`
 - `.agent/current/plan.json`
 - `.agent/current/active-slice.json`
 - `.agent/current/verification-evidence.json`

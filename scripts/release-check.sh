@@ -74,6 +74,8 @@ checks = {
         "stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow",
         "When a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.",
         "`task_type` and `evaluation_profile` only come from explicit structured startup artifacts when those fields are present; otherwise `/cook` keeps the packaged `completion-workflow` / `completion-rubric-v1` defaults instead of inferring them from free-text discussion",
+        "`recommended_first_slice_kind`",
+        "`verifier_scaffolding` first slice",
     ],
     "CHANGELOG.md": [
         "added explicit stopped-workflow `/cook resume`, `/cook park`, and `/cook cancel` controls so blocked, await-user-input, and paused workflows no longer strand the primary agent in a same-repo dead zone",
@@ -128,20 +130,28 @@ checks = {
         'After canonical state reaches a closed `done` or `cancelled` posture, the extension may delete repo-local `.agent/` before control returns.',
         'These helper files are generated local convenience entrypoints, not tracked repo-contract files.',
         'Use `completion-bootstrapper` only for first-time setup or missing local helper / canonical-state repair.',
+        '`recommended_first_slice_kind`',
+        '`verifier_scaffolding` first slice',
     ],
     "skills/completion-protocol/references/completion.md": [
         'When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, use `/cook park` to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.',
         'After a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory before control returns.',
         'These helper files are generated local convenience entrypoints, not tracked repo-contract files.',
         '`completion-bootstrapper` is used only for first-time setup or missing local helper / canonical-state repair.',
+        '`recommended_first_slice_kind`',
+        '`verifier_scaffolding` first slice',
     ],
     "agents/completion-bootstrapper.md": [
         'description: Bootstrap or repair local completion helper files and canonical execution state, then hand off to completion-regrounder.',
         '- `Local helper files repaired: ...`',
     ],
+    "agents/completion-regrounder.md": [
+        'prefer a `verifier_scaffolding` first slice',
+    ],
     "agents/completion-implementer.md": [
         'refresh local repo-level verifier forwarders such as `.agent/verify_completion_stop.sh`',
         'refresh the local `.agent/verify_completion_stop.sh` forwarder so it remains a truthful repo-level baseline verifier.',
+        'verifier_scaffolding',
     ],
 }
 

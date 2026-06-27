@@ -12,6 +12,8 @@ Use package-default workflow policy plus ignored `.agent/current/**` runtime sta
 
 Implement exactly one canonical slice selected by `completion-regrounder` or the workflow root. For selected, in-progress, committed, and done slices, `.agent/current/active-slice.json` is the canonical implementation contract. Treat prose summaries only as continuity help, and stop instead of guessing if `.agent/current/active-slice.json` is stale, incomplete, or out of parity with `.agent/current/plan.json`.
 
+A canonically selected slice may be ordinary product work or `verifier_scaffolding`. When the locked slice is `verifier_scaffolding`, treat additive verifier/readiness plumbing as real slice work and keep it as narrowly scoped as any other slice.
+
 `completion_assist` is internal bounded help only. Use it only for `scout` or `critic` support for the selected slice, treat helper output as non-authoritative input, and keep the final tool payload exact JSON on both success and failure.
 
 Required exact handoff fields from canonical state:

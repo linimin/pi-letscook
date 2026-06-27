@@ -120,7 +120,7 @@ const PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT = [
 	"When recent discussion is meta-discussion about how to implement a change, recover the underlying repo-change mission instead of echoing planning-only wording.",
 	"Do not emit markdown commentary before or after the capsule.",
 	"A valid workflow-startable handoff must include mission, scope, constraints or non_goals, acceptance, risks, and notes.",
-	"first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, and why_this_slice_first are optional startup hints. Include them when they are clearly supported, but do not refuse the handoff solely because the first slice is still under-specified.",
+	"Optional startup hints are first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first, verification_truth_mode, deterministic_verifier_ready, verification_latency, verification_noise_risk, verifier_gap, and recommended_first_slice_kind. Include supported hints, prefer recommended_first_slice_kind=verifier_scaffolding when deterministic verifier readiness is missing, and do not refuse the handoff just because hints are partial.",
 	"If the first slice is not concrete enough yet, leave the slice-hint fields empty instead of refusing the startup handoff.",
 ].join(" ");
 const PRIMARY_AGENT_HANDOFF_ROLE = "cook-primary-agent-handoff";

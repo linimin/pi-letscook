@@ -62,6 +62,22 @@ export function buildContextProposalGoalText(proposal: {
 	return lines.join("\n");
 }
 
+function formatStartupHintBoolean(value: boolean | undefined): string | undefined {
+	if (value === undefined) return undefined;
+	return value ? "yes" : "no";
+}
+
+function startupHintsHaveVerifierPosture(startupHints: ContextProposal["startupHints"]): boolean {
+	return Boolean(
+		startupHints?.verificationTruthMode ||
+			startupHints?.deterministicVerifierReady !== undefined ||
+			startupHints?.verificationLatency ||
+			startupHints?.verificationNoiseRisk ||
+			startupHints?.verifierGap ||
+			startupHints?.recommendedFirstSliceKind,
+	);
+}
+
 export function buildContextProposalDisplayText(proposal: ContextProposal): string {
 	const lines = ["Mission", proposal.mission];
 	if (proposal.scope.length > 0) {
@@ -78,12 +94,31 @@ export function buildContextProposalDisplayText(proposal: ContextProposal): stri
 	}
 	const startupHints = proposal.startupHints;
 	if (startupHintsPresent(startupHints)) {
-		lines.push("", "Initial slice hints (advisory)");
-		if (startupHints.firstSliceGoal) lines.push(`- First slice goal: ${startupHints.firstSliceGoal}`);
-		if (startupHints.firstSliceNonGoals.length > 0) lines.push(`- First slice non-goals: ${startupHints.firstSliceNonGoals.join(" | ")}`);
-		if (startupHints.implementationSurfaces.length > 0) lines.push(`- Implementation surfaces: ${startupHints.implementationSurfaces.join(" | ")}`);
-		if (startupHints.verificationCommands.length > 0) lines.push(`- Verification commands: ${startupHints.verificationCommands.join(" | ")}`);
-		if (startupHints.whyThisSliceFirst) lines.push(`- Why this slice first: ${startupHints.whyThisSliceFirst}`);
+		const hasInitialSliceHints = Boolean(
+			startupHints?.firstSliceGoal ||
+				startupHints?.firstSliceNonGoals.length ||
+				startupHints?.implementationSurfaces.length ||
+				startupHints?.verificationCommands.length ||
+				startupHints?.whyThisSliceFirst,
+		);
+		if (hasInitialSliceHints) {
+			lines.push("", "Initial slice hints (advisory)");
+			if (startupHints?.firstSliceGoal) lines.push(`- First slice goal: ${startupHints.firstSliceGoal}`);
+			if ((startupHints?.firstSliceNonGoals.length ?? 0) > 0) lines.push(`- First slice non-goals: ${startupHints.firstSliceNonGoals.join(" | ")}`);
+			if ((startupHints?.implementationSurfaces.length ?? 0) > 0) lines.push(`- Implementation surfaces: ${startupHints.implementationSurfaces.join(" | ")}`);
+			if ((startupHints?.verificationCommands.length ?? 0) > 0) lines.push(`- Verification commands: ${startupHints.verificationCommands.join(" | ")}`);
+			if (startupHints?.whyThisSliceFirst) lines.push(`- Why this slice first: ${startupHints.whyThisSliceFirst}`);
+		}
+		if (startupHintsHaveVerifierPosture(startupHints)) {
+			lines.push("", "Verifier posture (advisory)");
+			if (startupHints?.verificationTruthMode) lines.push(`- Verification truth mode: ${startupHints.verificationTruthMode}`);
+			const deterministicVerifierReady = formatStartupHintBoolean(startupHints?.deterministicVerifierReady);
+			if (deterministicVerifierReady) lines.push(`- Deterministic verifier ready: ${deterministicVerifierReady}`);
+			if (startupHints?.verificationLatency) lines.push(`- Verification latency: ${startupHints.verificationLatency}`);
+			if (startupHints?.verificationNoiseRisk) lines.push(`- Verification noise risk: ${startupHints.verificationNoiseRisk}`);
+			if (startupHints?.verifierGap) lines.push(`- Verifier gap: ${startupHints.verifierGap}`);
+			if (startupHints?.recommendedFirstSliceKind) lines.push(`- Recommended first slice kind: ${startupHints.recommendedFirstSliceKind}`);
+		}
 	}
 	return lines.join("\n");
 }
@@ -133,6 +168,7 @@ export function buildContextProposalCritiqueText(analysis: ContextProposalAnalys
 export function buildContextProposalRoutingText(
 	analysis: ContextProposalAnalysis,
 	defaults: { taskType: string; evaluationProfile: string },
+	startupHints?: ContextProposal["startupHints"],
 ): string {
 	const lines = [
 		analysis.startupVerdict ? `- verdict: ${analysis.startupVerdict}` : undefined,
@@ -141,6 +177,16 @@ export function buildContextProposalRoutingText(
 		`- task_type: ${analysis.taskType ?? defaults.taskType}`,
 		`- evaluation_profile: ${analysis.evaluationProfile ?? defaults.evaluationProfile}`,
 	].filter((line): line is string => Boolean(line));
+	if (startupHints?.verificationTruthMode) lines.push(`- verification_truth_mode: ${startupHints.verificationTruthMode}`);
+	if (startupHints?.deterministicVerifierReady !== undefined) {
+		lines.push(`- deterministic_verifier_ready: ${startupHints.deterministicVerifierReady}`);
+	}
+	if (startupHints?.verificationLatency) lines.push(`- verification_latency: ${startupHints.verificationLatency}`);
+	if (startupHints?.verificationNoiseRisk) lines.push(`- verification_noise_risk: ${startupHints.verificationNoiseRisk}`);
+	if (startupHints?.verifierGap) lines.push(`- verifier_gap: ${startupHints.verifierGap}`);
+	if (startupHints?.recommendedFirstSliceKind) {
+		lines.push(`- recommended_first_slice_kind: ${startupHints.recommendedFirstSliceKind}`);
+	}
 	return lines.join("\n");
 }
 
@@ -205,10 +251,14 @@ export function buildContextProposalConfirmationLayout(args: {
 		critiqueHeading: "Notes and risks",
 		critiqueBody: buildContextProposalCritiqueText(args.analysis),
 		routingHeading: "Routing recommendations",
-		routingBody: buildContextProposalRoutingText(args.analysis, {
-			taskType: args.defaultTaskType,
-			evaluationProfile: args.defaultEvaluationProfile,
-		}),
+		routingBody: buildContextProposalRoutingText(
+			args.analysis,
+			{
+				taskType: args.defaultTaskType,
+				evaluationProfile: args.defaultEvaluationProfile,
+			},
+			args.proposal.startupHints,
+		),
 		actionsHeading: "Actions",
 		actions: buildContextProposalConfirmationActions(args.mainChatRerunGuidance),
 		footer: "↑↓ navigate • enter select • esc cancel",
@@ -461,6 +511,7 @@ export function buildSystemReminder(args: {
 	activeWhyNowLine?: string;
 	implementationSurfacesLine?: string;
 	verificationCommandsLine?: string;
+	startupVerifierPostureLine?: string;
 	evidence: CompletionVerificationEvidenceSummary;
 }): string {
 	const lines = [
@@ -491,6 +542,7 @@ export function buildSystemReminder(args: {
 	else if (args.implementationSurfaces.length > 0) lines.push(`Active implementation surfaces: ${args.implementationSurfaces.join(", ")}`);
 	if (args.verificationCommandsLine) lines.push(args.verificationCommandsLine);
 	else if (args.verificationCommands.length > 0) lines.push(`Active verification commands: ${args.verificationCommands.join(" | ")}`);
+	if (args.startupVerifierPostureLine) lines.push(args.startupVerifierPostureLine);
 	lines.push(`Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})`);
 	lines.push(`Verification evidence summary: ${args.evidence.summary}`);
 	return lines.join(" ");
@@ -512,6 +564,7 @@ export function buildResumeCapsule(args: {
 	activeSliceMatchesPlan: "yes" | "no" | "unknown";
 	activeSliceContractDrift: string;
 	implementerHandoffSnapshot: "present" | "missing_or_unclear";
+	startupVerifierPostureLine?: string;
 	evidence: CompletionVerificationEvidenceSummary;
 	activeSlice: {
 		sliceId?: string;
@@ -553,6 +606,7 @@ export function buildResumeCapsule(args: {
 		`active_slice_contract_drift_fields: ${args.activeSliceContractDrift}`,
 		`implementer_handoff_snapshot: ${args.implementerHandoffSnapshot}`,
 		`history_counts: reviewed=${args.history.reviewed}, audited=${args.history.audited}, accepted=${args.history.accepted}, reopened=${args.history.reopened}, judgments=${args.history.judgments}`,
+		...(args.startupVerifierPostureLine ? [args.startupVerifierPostureLine] : []),
 		"",
 		"verification_evidence:",
 		`- path: ${args.evidence.path}`,

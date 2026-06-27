@@ -26,7 +26,7 @@ Execution contract:
 
 1. Read `.agent/current/state.json`, `.agent/current/startup-brief.json`, `.agent/current/plan.json`, `.agent/current/active-slice.json`, and `.agent/current/verification-evidence.json` plus package-default workflow policy before changing canonical state.
 2. Read current git status, recent git history, and repo surfaces relevant to the locked or remaining contract IDs.
-3. Treat `.agent/current/startup-brief.json` as mission-level startup intake, not a selected slice. Use mission, scope, constraints, acceptance, risks, notes, and optional `*_hint` fields only as reconciliation input.
+3. Treat `.agent/current/startup-brief.json` as mission-level startup intake, not a selected slice. Use mission, scope, constraints, acceptance, risks, notes, optional `*_hint` fields, and any verifier-posture fields there only as reconciliation input. When deterministic verifier readiness is missing, prefer a `verifier_scaffolding` first slice unless repo truth shows a safer prerequisite.
 4. Reconcile `.agent/current/plan.json` against repo truth, revalidate every slice's `acceptance_criteria`, update `status` / `evidence`, and reopen any `done` slice whose criteria no longer hold.
 5. If the startup brief still leaves the first slice ambiguous, derive the safest truthful slice you can from repo truth. Switch canonical state to `await_user_input` only when no concrete next slice can be selected without missing information or unsafe guessing.
 6. Keep `.agent/current/state.json` and `.agent/current/active-slice.json` truthful, including `current_phase`, `continuation_policy`, `continuation_reason`, `next_mandatory_role`, and any exact implementer handoff snapshot fields.

@@ -127,6 +127,12 @@ startup_brief = {
     'acceptance': ['Prompt budget regression checks pass.'],
     'risks': ['Over-trimming prompt text could hide critical workflow routing guidance.'],
     'notes': ['This fixture exists only for prompt-budget regression coverage.'],
+    'verification_truth_mode': 'deterministic',
+    'deterministic_verifier_ready': False,
+    'verification_latency': 'fast',
+    'verification_noise_risk': 'low',
+    'verifier_gap': 'Deterministic reminder coverage is still being established for this workflow.',
+    'recommended_first_slice_kind': 'verifier_scaffolding',
     'task_type': state['task_type'],
     'evaluation_profile': state['evaluation_profile'],
 }
@@ -272,8 +278,16 @@ EOF
   (
     cd "$WORKFLOW_ROOT"
     set +u
-    env "${env_args[@]}" \
+    env \
+      -u PI_COMPLETION_ROLE \
+      -u PI_COMPLETION_HELPER \
+      -u PI_COMPLETION_CALLER_ROLE \
+      -u PI_COMPLETION_HELPER_ROOT \
+      -u PI_COMPLETION_HELPER_CWD \
+      -u PI_COMPLETION_ROLE_MODEL \
+      "${env_args[@]}" \
       pi \
+        --no-extensions \
         --mode json \
         -p \
         --thinking off \
@@ -321,6 +335,7 @@ auditor_repair_bundle_path = Path(sys.argv[12])
 stop_judge_bundle_path = Path(sys.argv[13])
 implementer_bundle_path = Path(sys.argv[14])
 source_path = pkg_root / 'extensions' / 'completion' / 'prompt-surfaces.ts'
+index_source_path = pkg_root / 'extensions' / 'completion' / 'index.ts'
 references_dir = pkg_root / 'skills' / 'completion-protocol' / 'references'
 completion_reference_path = references_dir / 'completion.md'
 shared_runtime_quick_path = references_dir / 'runtime-quick.md'
@@ -349,6 +364,7 @@ for path in (
     stop_judge_bundle_path,
     implementer_bundle_path,
     source_path,
+    index_source_path,
     completion_reference_path,
     shared_runtime_quick_path,
     *quick_reference_paths.values(),
@@ -370,6 +386,7 @@ auditor_repair_bundle = __import__('json').loads(auditor_repair_bundle_path.read
 stop_judge_bundle = __import__('json').loads(stop_judge_bundle_path.read_text())
 implementer_bundle = __import__('json').loads(implementer_bundle_path.read_text())
 source = source_path.read_text()
+index_source = index_source_path.read_text()
 match = re.search(r'export function buildSystemReminder\([\s\S]*?\n}\n\nexport function buildResumeCapsule', source)
 if not match:
     raise SystemExit('[prompt-budget-test] could not locate buildSystemReminder source block')
@@ -406,6 +423,20 @@ for name, path in quick_reference_paths.items():
     if size > limit:
         raise SystemExit(f'[prompt-budget-test] {name} exceeded budget: {size} > {limit}')
     print(f'{name}={size} chars (limit {limit})')
+
+if 'startupVerifierPostureLine' not in system_source:
+    raise SystemExit('[prompt-budget-test] buildSystemReminder should accept a startupVerifierPostureLine input')
+if 'Startup verifier posture:' not in index_source:
+    raise SystemExit('[prompt-budget-test] index reminder source should label startup verifier posture explicitly')
+if 'recommended_first_slice_kind=' not in index_source or 'deterministic_verifier_ready=' not in index_source:
+    raise SystemExit('[prompt-budget-test] startup verifier posture summary should include canonical field names in index.ts')
+
+regrounder_quick = quick_reference_paths['regrounder_quick_reference'].read_text().strip()
+implementer_quick = quick_reference_paths['implementer_quick_reference'].read_text().strip()
+if 'verifier_scaffolding' not in regrounder_quick or 'deterministic verifier readiness is missing' not in regrounder_quick:
+    raise SystemExit('[prompt-budget-test] regrounder quick reference should document verifier_scaffolding preference')
+if 'verifier_scaffolding' not in implementer_quick:
+    raise SystemExit('[prompt-budget-test] implementer quick reference should treat verifier_scaffolding as a valid slice kind')
 
 bundle_checks = [
     ('primary_handoff_prompt_combined', primary_bundle, 2600),
@@ -446,6 +477,10 @@ if implementer_bundle.get('role') != 'completion-implementer':
     raise SystemExit(f"[prompt-budget-test] implementer bundle role mismatch: {implementer_bundle.get('role')!r}")
 if any(bundle.get('repair_mode') is not False for bundle in (bootstrapper_bundle, regrounder_bundle, reviewer_bundle, auditor_bundle, stop_judge_bundle, implementer_bundle)):
     raise SystemExit('[prompt-budget-test] normal role capture should stay outside repair mode')
+if 'verifier_scaffolding' not in regrounder_bundle.get('combined_prompt', ''):
+    raise SystemExit('[prompt-budget-test] regrounder combined prompt should mention verifier_scaffolding guidance')
+if 'verifier_scaffolding' not in implementer_bundle.get('combined_prompt', ''):
+    raise SystemExit('[prompt-budget-test] implementer combined prompt should mention verifier_scaffolding guidance')
 PY
 
 echo "prompt budget test passed: $TMPDIR"

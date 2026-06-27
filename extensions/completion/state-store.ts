@@ -29,6 +29,15 @@ function asNumber(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function asBoolean(value: unknown): boolean | undefined {
+	if (typeof value === "boolean") return value;
+	if (typeof value !== "string") return undefined;
+	const normalized = value.trim().toLowerCase();
+	if (normalized === "true") return true;
+	if (normalized === "false") return false;
+	return undefined;
+}
+
 function shellQuote(value: string): string {
 	return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
@@ -476,6 +485,12 @@ export function defaultStartupBrief(
 		implementation_surfaces_hint: asStringArray(advisoryStartupBrief?.implementation_surfaces_hint),
 		verification_commands_hint: asStringArray(advisoryStartupBrief?.verification_commands_hint),
 		why_this_slice_first_hint: asString(advisoryStartupBrief?.why_this_slice_first_hint),
+		verification_truth_mode: asString(advisoryStartupBrief?.verification_truth_mode),
+		deterministic_verifier_ready: asBoolean(advisoryStartupBrief?.deterministic_verifier_ready),
+		verification_latency: asString(advisoryStartupBrief?.verification_latency),
+		verification_noise_risk: asString(advisoryStartupBrief?.verification_noise_risk),
+		verifier_gap: asString(advisoryStartupBrief?.verifier_gap),
+		recommended_first_slice_kind: asString(advisoryStartupBrief?.recommended_first_slice_kind),
 		task_type: asString(advisoryStartupBrief?.task_type) ?? routing?.taskType ?? DEFAULT_TASK_TYPE,
 		evaluation_profile: asString(advisoryStartupBrief?.evaluation_profile) ?? routing?.evaluationProfile ?? DEFAULT_EVALUATION_PROFILE,
 	};

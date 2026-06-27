@@ -74,6 +74,12 @@ export type CookHandoffCapsule = {
 	implementation_surfaces: string[];
 	verification_commands: string[];
 	why_this_slice_first?: string;
+	verification_truth_mode?: string;
+	deterministic_verifier_ready?: boolean;
+	verification_latency?: string;
+	verification_noise_risk?: string;
+	verifier_gap?: string;
+	recommended_first_slice_kind?: string;
 	task_type?: string;
 	evaluation_profile?: string;
 	why_cook_now?: string;
@@ -162,6 +168,15 @@ function localAsStringArray(value: unknown): string[] {
 
 function localAsNumber(value: unknown): number | undefined {
 	return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function localAsBoolean(value: unknown): boolean | undefined {
+	if (typeof value === "boolean") return value;
+	if (typeof value !== "string") return undefined;
+	const normalized = value.trim().toLowerCase();
+	if (normalized === "true") return true;
+	if (normalized === "false") return false;
+	return undefined;
 }
 
 function localIsRecord(value: unknown): value is JsonRecord {
@@ -1250,6 +1265,12 @@ function parseCookHandoffCapsulesFromText(
 		const implementationSurfaces = deps.asStringArray(parsed.implementation_surfaces ?? parsed.implementationSurfaces);
 		const verificationCommands = deps.asStringArray(parsed.verification_commands ?? parsed.verificationCommands);
 		const whyThisSliceFirst = deps.asString(parsed.why_this_slice_first ?? parsed.whyThisSliceFirst);
+		const verificationTruthMode = deps.asString(parsed.verification_truth_mode ?? parsed.verificationTruthMode);
+		const deterministicVerifierReady = localAsBoolean(parsed.deterministic_verifier_ready ?? parsed.deterministicVerifierReady);
+		const verificationLatency = deps.asString(parsed.verification_latency ?? parsed.verificationLatency);
+		const verificationNoiseRisk = deps.asString(parsed.verification_noise_risk ?? parsed.verificationNoiseRisk);
+		const verifierGap = deps.asString(parsed.verifier_gap ?? parsed.verifierGap);
+		const recommendedFirstSliceKind = deps.asString(parsed.recommended_first_slice_kind ?? parsed.recommendedFirstSliceKind);
 		const capturedAt = deps.asString(parsed.captured_at) ?? (timestampMs ? new Date(timestampMs).toISOString() : undefined);
 		const sourceTurnId = deps.asString(parsed.source_turn_id) ?? messageId;
 		if (!capturedAt || !sourceTurnId) continue;
@@ -1271,6 +1292,12 @@ function parseCookHandoffCapsulesFromText(
 			implementation_surfaces: implementationSurfaces,
 			verification_commands: verificationCommands,
 			why_this_slice_first: whyThisSliceFirst,
+			verification_truth_mode: verificationTruthMode,
+			deterministic_verifier_ready: deterministicVerifierReady,
+			verification_latency: verificationLatency,
+			verification_noise_risk: verificationNoiseRisk,
+			verifier_gap: verifierGap,
+			recommended_first_slice_kind: recommendedFirstSliceKind,
 			task_type: deps.asString(parsed.task_type),
 			evaluation_profile: deps.asString(parsed.evaluation_profile),
 			why_cook_now: deps.asString(parsed.why_cook_now),
@@ -1286,6 +1313,12 @@ function buildCookHandoffBasisPreview(capsule: CookHandoffCapsule): string {
 	parts.push(...capsule.implementation_surfaces.map((item) => `implementation_surfaces: ${item}`));
 	parts.push(...capsule.verification_commands.map((item) => `verification_commands: ${item}`));
 	if (capsule.why_this_slice_first) parts.push(`why_this_slice_first: ${capsule.why_this_slice_first}`);
+	if (capsule.verification_truth_mode) parts.push(`verification_truth_mode: ${capsule.verification_truth_mode}`);
+	if (capsule.deterministic_verifier_ready !== undefined) parts.push(`deterministic_verifier_ready: ${capsule.deterministic_verifier_ready}`);
+	if (capsule.verification_latency) parts.push(`verification_latency: ${capsule.verification_latency}`);
+	if (capsule.verification_noise_risk) parts.push(`verification_noise_risk: ${capsule.verification_noise_risk}`);
+	if (capsule.verifier_gap) parts.push(`verifier_gap: ${capsule.verifier_gap}`);
+	if (capsule.recommended_first_slice_kind) parts.push(`recommended_first_slice_kind: ${capsule.recommended_first_slice_kind}`);
 	if (capsule.why_cook_now) parts.push(`why_cook_now: ${capsule.why_cook_now}`);
 	return parts.join("\n").trim();
 }
@@ -1320,6 +1353,16 @@ function buildCookHandoffCritiqueLines(capsule: CookHandoffCapsule): string[] {
 	if (capsule.verification_commands.length > 0) critique.push(`Verification commands: ${capsule.verification_commands.join(" | ")}`);
 	else critique.push("Verification commands were not fixed at /cook entry; completion-regrounder should derive them later.");
 	if (capsule.why_this_slice_first) critique.push(`Why this slice first: ${capsule.why_this_slice_first}`);
+	if (capsule.verification_truth_mode) critique.push(`Verification truth mode: ${capsule.verification_truth_mode}`);
+	if (capsule.deterministic_verifier_ready !== undefined) {
+		critique.push(`Deterministic verifier ready: ${capsule.deterministic_verifier_ready ? "yes" : "no"}`);
+	}
+	if (capsule.verification_latency) critique.push(`Verification latency: ${capsule.verification_latency}`);
+	if (capsule.verification_noise_risk) critique.push(`Verification noise risk: ${capsule.verification_noise_risk}`);
+	if (capsule.verifier_gap) critique.push(`Verifier gap: ${capsule.verifier_gap}`);
+	if (capsule.recommended_first_slice_kind) {
+		critique.push(`Recommended first slice kind: ${capsule.recommended_first_slice_kind}`);
+	}
 	if (capsule.why_cook_now) critique.push(`Primary-agent /cook handoff rationale: ${capsule.why_cook_now}`);
 	return uniqueProposalItems(critique);
 }
@@ -1371,20 +1414,34 @@ function buildContextProposalFromCookHandoffCapsule(
 		constraints,
 		acceptance: capsule.acceptance,
 	});
-	const startupHints: ContextProposalStartupHints | undefined =
+	const hasStartupHints = Boolean(
 		capsule.first_slice_goal ||
-		capsule.first_slice_non_goals.length > 0 ||
-		capsule.implementation_surfaces.length > 0 ||
-		capsule.verification_commands.length > 0 ||
-		capsule.why_this_slice_first
-			? {
-				firstSliceGoal: capsule.first_slice_goal,
-				firstSliceNonGoals: [...capsule.first_slice_non_goals],
-				implementationSurfaces: [...capsule.implementation_surfaces],
-				verificationCommands: [...capsule.verification_commands],
-				whyThisSliceFirst: capsule.why_this_slice_first,
-			}
-			: undefined;
+			capsule.first_slice_non_goals.length > 0 ||
+			capsule.implementation_surfaces.length > 0 ||
+			capsule.verification_commands.length > 0 ||
+			capsule.why_this_slice_first ||
+			capsule.verification_truth_mode ||
+			capsule.deterministic_verifier_ready !== undefined ||
+			capsule.verification_latency ||
+			capsule.verification_noise_risk ||
+			capsule.verifier_gap ||
+			capsule.recommended_first_slice_kind,
+	);
+	const startupHints: ContextProposalStartupHints | undefined = hasStartupHints
+		? {
+			firstSliceGoal: capsule.first_slice_goal,
+			firstSliceNonGoals: [...capsule.first_slice_non_goals],
+			implementationSurfaces: [...capsule.implementation_surfaces],
+			verificationCommands: [...capsule.verification_commands],
+			whyThisSliceFirst: capsule.why_this_slice_first,
+			verificationTruthMode: capsule.verification_truth_mode,
+			deterministicVerifierReady: capsule.deterministic_verifier_ready,
+			verificationLatency: capsule.verification_latency,
+			verificationNoiseRisk: capsule.verification_noise_risk,
+			verifierGap: capsule.verifier_gap,
+			recommendedFirstSliceKind: capsule.recommended_first_slice_kind,
+		}
+		: undefined;
 	const proposal: ContextProposal = {
 		mission,
 		scope: [...capsule.scope],
@@ -1414,6 +1471,12 @@ function buildContextProposalFromCookHandoffCapsule(
 				...capsule.implementation_surfaces,
 				...capsule.verification_commands,
 				capsule.why_this_slice_first ?? "",
+				capsule.verification_truth_mode ?? "",
+				capsule.deterministic_verifier_ready === undefined ? "" : `${capsule.deterministic_verifier_ready}`,
+				capsule.verification_latency ?? "",
+				capsule.verification_noise_risk ?? "",
+				capsule.verifier_gap ?? "",
+				capsule.recommended_first_slice_kind ?? "",
 			],
 		),
 		goalText,

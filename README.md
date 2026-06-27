@@ -130,7 +130,7 @@ Start a new workflow directly from explicit inline startup intent:
 
 When you accept startup or refocus, `/cook` persists the chosen workflow state in canonical `.agent/**` files before the re-ground round begins.
 
-The confirmed startup brief is also preserved there in `.agent/current/startup-brief.json` as canonical intake for later re-grounding. It may carry optional `*_hint` fields for an initial slice, but those hints are advisory and do not replace `.agent/current/plan.json` or `.agent/current/active-slice.json`, which remain under regrounder authority.
+The confirmed startup brief is also preserved there in `.agent/current/startup-brief.json` as canonical intake for later re-grounding. It may carry optional `*_hint` fields for an initial slice plus optional verifier-posture fields (`verification_truth_mode`, `deterministic_verifier_ready`, `verification_latency`, `verification_noise_risk`, `verifier_gap`, `recommended_first_slice_kind`), but all of that data is advisory and does not replace `.agent/current/plan.json` or `.agent/current/active-slice.json`, which remain under regrounder authority. When deterministic verifier readiness is missing, regrounding should usually prefer a `verifier_scaffolding` first slice before broader product work.
 
 Any pre-`/cook` handoff capsule itself is not canonical workflow state. It is only an illustrative preview; `/cook` still synthesizes the actual startup handoff for the current entry.
 

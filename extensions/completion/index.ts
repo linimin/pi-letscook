@@ -819,6 +819,29 @@ function verificationEvidenceContext(snapshot: CompletionStateSnapshot) {
 	};
 }
 
+function startupVerifierPostureSummary(snapshot: CompletionStateSnapshot): string | undefined {
+	const startupBrief = snapshot.startupBrief;
+	const parts = [
+		asString(startupBrief?.verification_truth_mode)
+			? `verification_truth_mode=${asString(startupBrief?.verification_truth_mode)}`
+			: undefined,
+		asBoolean(startupBrief?.deterministic_verifier_ready) !== undefined
+			? `deterministic_verifier_ready=${asBoolean(startupBrief?.deterministic_verifier_ready) ? "yes" : "no"}`
+			: undefined,
+		asString(startupBrief?.verification_latency)
+			? `verification_latency=${asString(startupBrief?.verification_latency)}`
+			: undefined,
+		asString(startupBrief?.verification_noise_risk)
+			? `verification_noise_risk=${asString(startupBrief?.verification_noise_risk)}`
+			: undefined,
+		asString(startupBrief?.verifier_gap) ? `verifier_gap=${asString(startupBrief?.verifier_gap)}` : undefined,
+		asString(startupBrief?.recommended_first_slice_kind)
+			? `recommended_first_slice_kind=${asString(startupBrief?.recommended_first_slice_kind)}`
+			: undefined,
+	].filter((part): part is string => Boolean(part));
+	return parts.length > 0 ? parts.join("; ") : undefined;
+}
+
 function buildEvaluationRoleContextLines(snapshot: CompletionStateSnapshot, role: RubricEvaluationRole): string[] {
 	return buildExtractedEvaluationRoleContextLines(snapshot, role, {
 		asString,
@@ -848,6 +871,7 @@ function composeSystemReminder(snapshot: CompletionStateSnapshot): string {
 	const exactActiveContract = activeCarriesExactHandoff(snapshot.active);
 	const activeContractDrift = activeSliceContractDriftSummary(snapshot);
 	const evidence = verificationEvidenceContext(snapshot);
+	const startupVerifierPosture = startupVerifierPostureSummary(snapshot);
 	const activePriorityLine = activePriority !== undefined ? `Active slice priority: ${activePriority}` : undefined;
 	const activeWhyNowLine = activeWhyNow ? `Active slice why_now: ${activeWhyNow}` : undefined;
 	const implementationSurfacesLine =
@@ -873,6 +897,8 @@ function composeSystemReminder(snapshot: CompletionStateSnapshot): string {
 		activeWhyNowLine,
 		implementationSurfacesLine,
 		verificationCommandsLine,
+		startupVerifierPostureLine:
+			startupVerifierPosture ? `Startup verifier posture: ${startupVerifierPosture}` : undefined,
 		evidence,
 	});
 }
@@ -892,6 +918,7 @@ function buildPostCompactionDriverInstructions(snapshot: CompletionStateSnapshot
 	const exactActiveContract = activeCarriesExactHandoff(snapshot.active);
 	const activeContractDrift = activeSliceContractDriftSummary(snapshot);
 	const evidence = verificationEvidenceContext(snapshot);
+	const startupVerifierPosture = startupVerifierPostureSummary(snapshot);
 	const lines = [
 		"POST-COMPACTION RECOVERY MODE is active.",
 		`Compaction marker time: ${markerAt}`,
@@ -904,6 +931,7 @@ function buildPostCompactionDriverInstructions(snapshot: CompletionStateSnapshot
 		`Canonical continuation policy is currently: ${continuation}`,
 		`Canonical active slice is currently: ${activeSliceId}`,
 		`Canonical verification evidence artifact is currently: ${evidence.path} (${evidence.status})`,
+		...(startupVerifierPosture ? [`Canonical startup verifier posture is currently: ${startupVerifierPosture}`] : []),
 		"Do not trust pre-compaction memory over canonical files.",
 		"If the canonical state is ambiguous, inconsistent, missing, or stale after re-reading it, your first mandatory action is to dispatch completion-regrounder rather than guessing.",
 		"If continuation_policy == continue and canonical state is coherent, continue dispatching the mandatory role directly without asking the user whether to continue.",
@@ -1007,6 +1035,7 @@ function composeResumeCapsule(snapshot: CompletionStateSnapshot, sliceHistory: J
 	const verificationCommands = asStringArray(snapshot.active?.verification_commands);
 	const remainingBefore = asStringArray(snapshot.active?.remaining_contract_ids_before);
 	const evidence = verificationEvidenceContext(snapshot);
+	const startupVerifierPosture = startupVerifierPostureSummary(snapshot);
 	const implementationSurfacesLine =
 		implementationSurfaces.length > 0 ? `- implementation_surfaces: ${implementationSurfaces.join(" | ")}` : undefined;
 	const verificationCommandsLine =
@@ -1027,6 +1056,8 @@ function composeResumeCapsule(snapshot: CompletionStateSnapshot, sliceHistory: J
 		activeSliceMatchesPlan: activeSliceMatchesPlan(snapshot),
 		activeSliceContractDrift: activeSliceContractDriftSummary(snapshot),
 		implementerHandoffSnapshot: handoffSnapshotState(snapshot.active),
+		startupVerifierPostureLine:
+			startupVerifierPosture ? `startup_verifier_posture: ${startupVerifierPosture}` : undefined,
 		evidence,
 		activeSlice: {
 			sliceId: asString(snapshot.active?.slice_id) ?? asString(snapshot.activeSlice?.slice_id),

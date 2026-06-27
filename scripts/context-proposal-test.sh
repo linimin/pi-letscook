@@ -1437,6 +1437,12 @@ capsule = {
     "implementation_surfaces": ["extensions/completion/prompt-surfaces.ts"],
     "verification_commands": ["npm run context-proposal-test"],
     "why_this_slice_first": "The confirmation layout regression is small and directly testable.",
+    "verification_truth_mode": "deterministic",
+    "deterministic_verifier_ready": False,
+    "verification_latency": "fast",
+    "verification_noise_risk": "low",
+    "verifier_gap": "Deterministic confirmation-layout reminder coverage still needs to be locked in.",
+    "recommended_first_slice_kind": "verifier_scaffolding",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "The explicit handoff is concrete enough to exercise the startup confirmation UI."
@@ -1470,12 +1476,17 @@ assert 'approval-only' in snapshot['intro'], 'custom confirmation intro should e
 assert state['task_type'] == 'completion-workflow', 'start action should preserve canonical task_type'
 assert state['evaluation_profile'] == 'completion-rubric-v1', 'start action should preserve canonical evaluation_profile'
 assert 'Mission\nReplace the crowded selector with a clearer action layout.' in snapshot['proposalBody'], 'proposal body should be captured separately from the action list'
+assert 'Verifier posture (advisory)' in snapshot['proposalBody'], 'proposal body should surface verifier posture when present'
+assert '- Recommended first slice kind: verifier_scaffolding' in snapshot['proposalBody'], 'proposal body should surface recommended_first_slice_kind when present'
 assert 'Keep critique details separate from the approval-only proposal summary.' not in snapshot['proposalBody'], 'critique notes should not be embedded in the startup-brief body'
 assert 'Critique\n- Keep critique details separate from the approval-only proposal summary.' in snapshot['critiqueBody'], 'notes section should render accepted critique notes separately'
 assert 'Risks\n- Bundling critique into the action list would make the confirmation harder to scan.' in snapshot['critiqueBody'], 'critique section should render risk notes separately'
 assert '- Possible noise: old selector wording' in snapshot['critiqueBody'], 'critique section should preserve additional operator notes separately from the startup-brief body'
 assert '- task_type: completion-workflow' in snapshot['routingBody'], 'routing section should render the recommended task_type'
 assert '- evaluation_profile: completion-rubric-v1' in snapshot['routingBody'], 'routing section should render the recommended evaluation_profile'
+assert '- verification_truth_mode: deterministic' in snapshot['routingBody'], 'routing section should render verification_truth_mode when present'
+assert '- deterministic_verifier_ready: false' in snapshot['routingBody'], 'routing section should render deterministic_verifier_ready when present'
+assert '- recommended_first_slice_kind: verifier_scaffolding' in snapshot['routingBody'], 'routing section should render recommended_first_slice_kind when present'
 assert [action['id'] for action in snapshot['actions']] == ['start', 'cancel'], 'custom confirmation actions should stay Start/Cancel only'
 assert [action['label'] for action in snapshot['actions']] == ['Start', 'Cancel'], 'custom confirmation action labels should be concise'
 assert 'Discuss changes in the main chat and rerun /cook.' in snapshot['actions'][1]['description'], 'cancel action should redirect users back to the main chat and rerun /cook'
@@ -1596,6 +1607,12 @@ capsule = {
         "npm test -- redirect.spec.ts"
     ],
     "why_this_slice_first": "The redirect callback bug is already bounded enough to start implementation safely.",
+    "verification_truth_mode": "deterministic",
+    "deterministic_verifier_ready": False,
+    "verification_latency": "fast",
+    "verification_noise_risk": "low",
+    "verifier_gap": "The redirect fix still needs verifier scaffolding before broad workflow checks are trustworthy.",
+    "recommended_first_slice_kind": "verifier_scaffolding",
     "task_type": "completion-workflow",
     "evaluation_profile": "completion-rubric-v1",
     "why_cook_now": "The implementation plan is concrete and ready for repo changes."
@@ -1625,6 +1642,9 @@ state = json.loads(Path('.agent/current/state.json').read_text())
 assert snapshot['source'] == 'handoff_capsule', 'explicit handoff startup should snapshot the handoff capsule as the proposal source'
 assert snapshot['mission'] == 'Fix login redirect callback behavior.', 'explicit handoff startup should preserve the primary-agent mission'
 assert state['mission_anchor'] == 'Fix login redirect callback behavior.', 'explicit handoff startup should use the handoff mission as canonical mission_anchor'
+assert snapshot['startupHints']['verificationTruthMode'] == 'deterministic', 'explicit handoff startup should preserve verification_truth_mode in the proposal snapshot'
+assert snapshot['startupHints']['deterministicVerifierReady'] is False, 'explicit handoff startup should preserve deterministic_verifier_ready in the proposal snapshot'
+assert snapshot['startupHints']['recommendedFirstSliceKind'] == 'verifier_scaffolding', 'explicit handoff startup should preserve recommended_first_slice_kind in the proposal snapshot'
 startup_brief = json.loads(Path('.agent/current/startup-brief.json').read_text())
 assert startup_brief['source'] == 'primary_agent_handoff', 'explicit handoff startup should preserve the startup intake source canonically'
 assert startup_brief['risks'] == ['Stale auth discussion could broaden the startup brief if the handoff is ignored.'], 'explicit handoff startup should preserve handoff risks canonically'
@@ -1633,11 +1653,20 @@ assert startup_brief['first_slice_non_goals_hint'] == ['Do not refactor the broa
 assert startup_brief['implementation_surfaces_hint'] == ['src/auth/redirect.ts', 'tests/auth/redirect.spec.ts'], 'explicit handoff startup should preserve implementation_surfaces as structured hints canonically'
 assert startup_brief['verification_commands_hint'] == ['npm test -- redirect.spec.ts'], 'explicit handoff startup should preserve verification_commands as structured hints canonically'
 assert startup_brief['why_this_slice_first_hint'] == 'The redirect callback bug is already bounded enough to start implementation safely.', 'explicit handoff startup should preserve why_this_slice_first as a structured hint canonically'
+assert startup_brief['verification_truth_mode'] == 'deterministic', 'explicit handoff startup should preserve verification_truth_mode canonically'
+assert startup_brief['deterministic_verifier_ready'] is False, 'explicit handoff startup should preserve deterministic_verifier_ready canonically'
+assert startup_brief['verification_latency'] == 'fast', 'explicit handoff startup should preserve verification_latency canonically'
+assert startup_brief['verification_noise_risk'] == 'low', 'explicit handoff startup should preserve verification_noise_risk canonically'
+assert startup_brief['verifier_gap'] == 'The redirect fix still needs verifier scaffolding before broad workflow checks are trustworthy.', 'explicit handoff startup should preserve verifier_gap canonically'
+assert startup_brief['recommended_first_slice_kind'] == 'verifier_scaffolding', 'explicit handoff startup should preserve recommended_first_slice_kind canonically'
 assert 'First slice goal: Land the redirect callback fix and its regression coverage.' in startup_brief['notes'], 'explicit handoff startup should preserve first_slice_goal in startup-brief notes'
 assert 'First slice non-goals: Do not refactor the broader auth flow.' in startup_brief['notes'], 'explicit handoff startup should preserve first_slice_non_goals in startup-brief notes'
 assert 'Implementation surfaces: src/auth/redirect.ts | tests/auth/redirect.spec.ts' in startup_brief['notes'], 'explicit handoff startup should preserve implementation_surfaces in startup-brief notes'
 assert 'Verification commands: npm test -- redirect.spec.ts' in startup_brief['notes'], 'explicit handoff startup should preserve verification_commands in startup-brief notes'
 assert 'Why this slice first: The redirect callback bug is already bounded enough to start implementation safely.' in startup_brief['notes'], 'explicit handoff startup should preserve why_this_slice_first in startup-brief notes'
+assert 'Verification truth mode: deterministic' in startup_brief['notes'], 'explicit handoff startup should preserve verification_truth_mode in startup-brief notes'
+assert 'Deterministic verifier ready: no' in startup_brief['notes'], 'explicit handoff startup should preserve deterministic_verifier_ready in startup-brief notes'
+assert 'Recommended first slice kind: verifier_scaffolding' in startup_brief['notes'], 'explicit handoff startup should preserve recommended_first_slice_kind in startup-brief notes'
 assert 'Primary-agent /cook handoff rationale: The implementation plan is concrete and ready for repo changes.' in startup_brief['notes'], 'explicit handoff startup should preserve why_cook_now as notes canonically'
 assert 'advisory_startup_brief' not in state or state['advisory_startup_brief'] is None, 'state.json should no longer carry advisory_startup_brief now that startup-brief.json is canonical'
 PY

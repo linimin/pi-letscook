@@ -32,6 +32,12 @@ export type StartupIntentHints = {
 	implementationSurfaces: string[];
 	verificationCommands: string[];
 	whyThisSliceFirst?: string;
+	verificationTruthMode?: string;
+	deterministicVerifierReady?: boolean;
+	verificationLatency?: string;
+	verificationNoiseRisk?: string;
+	verifierGap?: string;
+	recommendedFirstSliceKind?: string;
 };
 
 export type CookSynthesisContext = {
@@ -57,6 +63,12 @@ export type AdvisoryStartupBrief = {
 	implementation_surfaces_hint?: string[];
 	verification_commands_hint?: string[];
 	why_this_slice_first_hint?: string;
+	verification_truth_mode?: string;
+	deterministic_verifier_ready?: boolean;
+	verification_latency?: string;
+	verification_noise_risk?: string;
+	verifier_gap?: string;
+	recommended_first_slice_kind?: string;
 	task_type?: string;
 	evaluation_profile?: string;
 };
@@ -87,7 +99,13 @@ export function startupHintsPresent(hints: StartupIntentHints | undefined): bool
 			hints.firstSliceNonGoals.length > 0 ||
 			hints.implementationSurfaces.length > 0 ||
 			hints.verificationCommands.length > 0 ||
-			hints.whyThisSliceFirst,
+			hints.whyThisSliceFirst ||
+			hints.verificationTruthMode ||
+			hints.deterministicVerifierReady !== undefined ||
+			hints.verificationLatency ||
+			hints.verificationNoiseRisk ||
+			hints.verifierGap ||
+			hints.recommendedFirstSliceKind,
 	);
 }
 
@@ -277,6 +295,12 @@ export function buildAdvisoryStartupBrief(args: {
 					? [...args.proposal.startupHints.verificationCommands]
 					: undefined,
 			why_this_slice_first_hint: args.proposal.startupHints?.whyThisSliceFirst,
+			verification_truth_mode: args.proposal.startupHints?.verificationTruthMode,
+			deterministic_verifier_ready: args.proposal.startupHints?.deterministicVerifierReady,
+			verification_latency: args.proposal.startupHints?.verificationLatency,
+			verification_noise_risk: args.proposal.startupHints?.verificationNoiseRisk,
+			verifier_gap: args.proposal.startupHints?.verifierGap,
+			recommended_first_slice_kind: args.proposal.startupHints?.recommendedFirstSliceKind,
 			task_type: args.analysis.taskType,
 			evaluation_profile: args.analysis.evaluationProfile,
 		};
