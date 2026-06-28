@@ -75,6 +75,8 @@ function eventLinesForHelper(details, toolName = 'completion_helper_emit_scout_r
   const {
     extractSubprocessFinalOutput,
     requireSubprocessFinalOutput,
+    shouldParseSubprocessEventLine,
+    shouldRetainSubprocessFinalOutputLine,
     StructuredSubprocessOutputError,
   } = finalOutputMod;
   const { COMPLETION_HELPER_SCOUT_CONTRACT_ID, HELPER_EMIT_SCOUT_TOOL } = contractsMod;
@@ -96,6 +98,43 @@ function eventLinesForHelper(details, toolName = 'completion_helper_emit_scout_r
   });
   assert.equal(structuredResult.source, 'structured_tool');
   assert.equal(structuredResult.payload.summary, structuredDetails.summary);
+
+  const largeMessageUpdateLine = JSON.stringify({
+    type: 'message_update',
+    message: { role: 'assistant', content: [{ type: 'text', text: 'x'.repeat(1024 * 1024) }] },
+  });
+  const regularToolResultLine = JSON.stringify({
+    type: 'tool_execution_end',
+    toolName: 'read',
+    result: { content: [{ type: 'text', text: 'x'.repeat(1024 * 1024) }] },
+  });
+  const largeStructuredToolStartLine = JSON.stringify({
+    type: 'tool_execution_start',
+    toolName: HELPER_EMIT_SCOUT_TOOL,
+    args: { summary: 'x'.repeat(1024 * 1024) },
+  });
+  const largeStructuredToolResultLine = JSON.stringify({
+    type: 'tool_execution_end',
+    toolName: HELPER_EMIT_SCOUT_TOOL,
+    result: {
+      content: [{ type: 'text', text: 'x'.repeat(1024 * 1024) }],
+      details: {
+        contractId: COMPLETION_HELPER_SCOUT_CONTRACT_ID,
+        schemaVersion: 1,
+        ...structuredDetails,
+      },
+    },
+  });
+  assert.equal(shouldParseSubprocessEventLine(largeMessageUpdateLine), false, 'large message snapshots must not be parsed for live status');
+  assert.equal(shouldParseSubprocessEventLine(regularToolResultLine), false, 'large regular tool results must not be parsed for live status');
+  assert.equal(shouldParseSubprocessEventLine(largeStructuredToolStartLine), false, 'large structured emit start events must not be parsed for live status');
+  assert.equal(shouldParseSubprocessEventLine(largeStructuredToolResultLine), true, 'large structured terminating tool results must still be parsed');
+  assert.equal(shouldParseSubprocessEventLine(lines[1]), true, 'structured terminating tool result must still be parsed');
+  assert.equal(shouldRetainSubprocessFinalOutputLine(largeMessageUpdateLine), false, 'large message snapshots must not be retained for final-output parsing');
+  assert.equal(shouldRetainSubprocessFinalOutputLine(regularToolResultLine), false, 'regular tool results must not be retained for final-output parsing');
+  assert.equal(shouldRetainSubprocessFinalOutputLine(largeStructuredToolStartLine), false, 'large structured emit start events must not be retained for final-output parsing');
+  assert.equal(shouldRetainSubprocessFinalOutputLine(largeStructuredToolResultLine), true, 'large structured terminating tool results must be retained');
+  assert.equal(shouldRetainSubprocessFinalOutputLine(lines[1]), true, 'structured terminating tool result must be retained');
 
   assert.throws(
     () =>

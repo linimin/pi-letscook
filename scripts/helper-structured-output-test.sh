@@ -134,6 +134,10 @@ function helperEmitEventLines(output, helper = 'scout') {
     const invocation = await readJson(path.join(successResult.details.artifactDir, 'invocation.json'));
     assert.equal(invocation.env.PI_COMPLETION_ROLE_MODEL, 'openai/gpt-5-mini', 'invocation metadata must record PI_COMPLETION_ROLE_MODEL propagation');
     assert.equal(invocation.usedModel, 'openai/gpt-5-mini', 'invocation metadata must preserve the effective helper model');
+    const helperEvents = await fsp.readFile(path.join(successResult.details.artifactDir, 'events.jsonl'), 'utf8');
+    assert.match(helperEvents, /"tool_execution_start","toolName":"completion_helper_read"/, 'events.jsonl must retain non-terminating helper tool activity');
+    assert.match(helperEvents, /"type":"message_end"/, 'events.jsonl must retain assistant message events');
+    assert.match(helperEvents, /"tool_execution_end","toolName":"completion_helper_emit_scout_result"/, 'events.jsonl must retain the terminating structured tool result');
 
     const invalidOutputResult = await withEnv(
       {
