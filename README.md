@@ -1,14 +1,16 @@
 # @linimin/pi-letscook
 
-`pi-letscook` adds `/cook` to Pi: a workflow mode for long-running repo changes that need to stay reliable, reviewable, and aligned with the original goal.
+Give Pi a workflow mode for long-running coding tasks.
 
-Use ordinary chat for quick answers and simple edits. Switch to `/cook` when you want Pi to carry a larger task across sessions, with an explicit start step, saved local state, and built-in review/audit/verification rounds.
+`pi-letscook` adds `/cook`, a way to keep larger repo changes reliable, reviewable, and aligned with the original goal. It is for the work that does not fit neatly in one chat turn: multi-step fixes, refactors, follow-up rounds, and tasks where you want the agent to keep going without losing the plot.
+
+Use ordinary chat for quick answers and simple edits. Switch to `/cook` when you want Pi to carry a task across sessions, save local workflow state, and run built-in review/audit/verification rounds before calling the work done.
 
 ## When To Use It
 
 Use `/cook` when you want Pi to:
 
-- carry the same coding mission across sessions
+- keep the same coding mission alive across sessions
 - split a repo change into reviewable slices
 - keep each slice tied to the original goal
 - resume, refocus, park, or cancel work explicitly
@@ -29,7 +31,7 @@ Then run `/reload` in Pi.
 
 ## How It Works
 
-1. Describe the repo change you want.
+1. Describe the repo change you want Pi to complete.
 2. Run `/cook` or `/cook <prompt>`.
 3. Pi prepares a startup brief.
 4. Choose **Start** to begin, or **Cancel** to return to ordinary chat.
