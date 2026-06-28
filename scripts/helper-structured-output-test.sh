@@ -42,6 +42,32 @@ async function readJson(filePath) {
   return JSON.parse(await fsp.readFile(filePath, 'utf8'));
 }
 
+function helperEmitEvents(output, helper = 'scout') {
+  const toolName = helper === 'critic' ? 'completion_helper_emit_critic_result' : 'completion_helper_emit_scout_result';
+  const contractId = helper === 'critic' ? 'completion.helper.critic.v1' : 'completion.helper.scout.v1';
+  const toolCallId = 'structured-call';
+  return [
+    { type: 'tool_execution_start', toolName, toolCallId },
+    {
+      type: 'tool_execution_end',
+      toolName,
+      toolCallId,
+      result: {
+        content: [{ type: 'text', text: output.summary }],
+        details: {
+          contractId,
+          schemaVersion: 1,
+          ...output,
+        },
+      },
+    },
+  ];
+}
+
+function helperEmitEventLines(output, helper = 'scout') {
+  return helperEmitEvents(output, helper).map((event) => JSON.stringify(event));
+}
+
 (async () => {
   const pkgRoot = process.env.PKGTST_ROOT;
   const helperRunnerMod = await import(pathToFileURL(path.join(pkgRoot, 'extensions/completion/helper-runner.ts')).href);
@@ -67,6 +93,7 @@ async function readJson(filePath) {
         PI_COMPLETION_ROLE_MODEL: 'openai/gpt-5-mini',
         PI_COMPLETION_TEST_HELPER_SPAWN_RESULT_JSON: JSON.stringify({
           events: [
+            ...helperEmitEvents(successOutput, 'scout'),
             { type: 'tool_execution_start', toolName: 'completion_helper_read' },
             { type: 'tool_execution_update', partialResult: { details: { stage: 'read-source' } } },
             {
@@ -77,6 +104,7 @@ async function readJson(filePath) {
               },
             },
           ],
+          eventLines: helperEmitEventLines(successOutput, 'scout'),
           exitCode: 0,
           assistantText: JSON.stringify(successOutput),
         }),
@@ -130,6 +158,7 @@ async function readJson(filePath) {
     assert.equal(invalidOutputResult.isError, true, 'malformed helper output must fail closed');
     assert.equal(invalidOutputResult.details.ok, false, 'failure details must preserve the helper failure contract');
     assert.equal(invalidOutputResult.details.failureKind, 'invalid_output');
+    assert.match(invalidOutputResult.details.message, /missing terminating tool result|structured helper details/);
     const invalidOutputPayload = JSON.parse(invalidOutputResult.content[0].text);
     assert.deepEqual(
       invalidOutputPayload,
@@ -181,6 +210,50 @@ async function readJson(filePath) {
       },
       'policy failures must also use the exact fixed JSON failure contract',
     );
+
+    const assistantOnlyResult = await withEnv(
+      {
+        PI_COMPLETION_ROLE: 'completion-implementer',
+        PI_COMPLETION_TEST_HELPER_SPAWN_RESULT_JSON: JSON.stringify({
+          exitCode: 0,
+          assistantText: JSON.stringify({ summary: 'legacy ignored', evidence: [], paths: [], open_questions: [] }),
+          eventLines: [],
+        }),
+      },
+      async () =>
+        await runCompletionAssistTool({
+          root: repoRoot,
+          helper: 'scout',
+          callerRole: 'completion-implementer',
+          task: 'Assistant-only helper output must fail closed.',
+          signal: new AbortController().signal,
+        }),
+    );
+
+    assert.equal(assistantOnlyResult.isError, true, 'assistant-only helper output must fail closed without structured tool result');
+    assert.equal(assistantOnlyResult.details.failureKind, 'invalid_output');
+
+    const structuredToolResult = await withEnv(
+      {
+        PI_COMPLETION_ROLE: 'completion-implementer',
+        PI_COMPLETION_TEST_HELPER_SPAWN_RESULT_JSON: JSON.stringify({
+          exitCode: 0,
+          assistantText: JSON.stringify({ summary: 'legacy ignored', evidence: [], paths: [], open_questions: [] }),
+          eventLines: helperEmitEventLines(successOutput, 'scout'),
+        }),
+      },
+      async () =>
+        await runCompletionAssistTool({
+          root: repoRoot,
+          helper: 'scout',
+          callerRole: 'completion-implementer',
+          task: 'Require structured tool output.',
+          signal: new AbortController().signal,
+        }),
+    );
+
+    assert.equal(structuredToolResult.isError, false, 'structured tool-result payload must succeed');
+    assert.deepEqual(JSON.parse(structuredToolResult.content[0].text), successOutput);
   });
 })();
 NODE

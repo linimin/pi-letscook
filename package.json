@@ -55,6 +55,7 @@
     "helper-structured-output-test": "bash ./scripts/helper-structured-output-test.sh",
     "helper-observability-test": "bash ./scripts/helper-observability-test.sh",
     "helper-runtime-contract-test": "bash ./scripts/helper-runtime-contract-test.sh",
+    "subprocess-structured-output-test": "bash ./scripts/subprocess-structured-output-test.sh",
     "release-check": "bash ./scripts/release-check.sh",
     "worktree-root-boundary-test": "bash ./scripts/worktree-root-boundary-test.sh"
   },

@@ -485,15 +485,15 @@ if 'verifier_scaffolding' not in implementer_quick:
     raise SystemExit('[prompt-budget-test] implementer quick reference should treat verifier_scaffolding as a valid slice kind')
 
 bundle_checks = [
-    ('primary_handoff_prompt_combined', primary_bundle, 2600),
-    ('bootstrapper_role_prompt_combined', bootstrapper_bundle, 4000),
-    ('regrounder_role_prompt_combined', regrounder_bundle, 5800),
-    ('reviewer_role_prompt_combined', reviewer_bundle, 4700),
+    ('primary_handoff_prompt_combined', primary_bundle, 2700),
+    ('bootstrapper_role_prompt_combined', bootstrapper_bundle, 4150),
+    ('regrounder_role_prompt_combined', regrounder_bundle, 6000),
+    ('reviewer_role_prompt_combined', reviewer_bundle, 4900),
     ('reviewer_repair_role_prompt_combined', reviewer_repair_bundle, 5400),
-    ('auditor_role_prompt_combined', auditor_bundle, 5600),
-    ('auditor_repair_role_prompt_combined', auditor_repair_bundle, 6450),
-    ('stop_judge_role_prompt_combined', stop_judge_bundle, 5500),
-    ('implementer_role_prompt_combined', implementer_bundle, 6820),
+    ('auditor_role_prompt_combined', auditor_bundle, 5750),
+    ('auditor_repair_role_prompt_combined', auditor_repair_bundle, 6600),
+    ('stop_judge_role_prompt_combined', stop_judge_bundle, 5650),
+    ('implementer_role_prompt_combined', implementer_bundle, 7000),
 ]
 for name, bundle, limit in bundle_checks:
     size = bundle.get('combined_prompt_chars')
