@@ -14,9 +14,11 @@ Preview `/cook` capsules in ordinary chat may still help the conversation, but `
 
 `/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation.
 
-Startup and next-round entry stay confirm-first, following same-entry primary-agent handoff synthesis -> fail closed.
+startup and next-round entry stay confirm-first, following same-entry primary-agent handoff synthesis -> fail closed.
 
-Stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow.
+Only explicit `/cook` enters workflow mode. In ordinary chat, do not load or follow `completion-protocol`, and do not call `completion_role`.
+
+stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow.
 
 When a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.
 
@@ -24,7 +26,11 @@ When a workflow reaches a closed `done` or `cancelled` posture, extension cleanu
 
 The confirmed startup brief may carry optional verifier-posture fields such as `recommended_first_slice_kind`. When deterministic verifier readiness is missing, regrounding should usually prefer a `verifier_scaffolding` first slice before broader product work.
 
-Routine internal re-grounding is not a stopped state by itself: when canonical reconciliation can continue safely, `requires_reground = true` stays under `continuation_policy = continue` and the driver auto-dispatches `completion-regrounder`.
+routine internal re-grounding is not a stopped state by itself: when canonical reconciliation can continue safely, `requires_reground = true` stays under `continuation_policy = continue` and the driver auto-dispatches `completion-regrounder`.
+
+Treat `.agent/current/startup-brief.json` as canonical startup intake, not the canonical slice plan. `completion-regrounder` still authors slices in `.agent/current/plan.json` from repo truth after Start.
+
+While `continuation_policy == continue`, active workflows stay sticky: the driver keeps dispatching mandatory completion roles until canonical state becomes `await_user_input`, `blocked`, `paused`, or `done`.
 
 ## Structured Evaluation Rubrics
 
