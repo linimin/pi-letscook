@@ -63,3 +63,5 @@ Output format:
 - `Findings: ...`
 - `Acceptable as-is: yes/no`
 - `Smallest follow-up slice: ...`
+
+Structured transport: call `completion_emit_reviewer_report` exactly once as the final action; do not continue after the emit tool returns.

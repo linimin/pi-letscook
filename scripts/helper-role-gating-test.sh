@@ -65,7 +65,7 @@ async function withTempDir(run) {
   assertIncludes('extensions/completion/helper-policy.ts', 'export function effectiveRoleToolAllowlist(');
   assertIncludes('extensions/completion/helper-policy.ts', 'export function resolveEffectiveCompletionRoleModel(');
   assertIncludes('extensions/completion/helper-policy.ts', 'export function buildCompletionRoleSubprocessEnv(');
-  assertIncludes('extensions/completion/role-runner.ts', 'effectiveRoleToolAllowlist(params.role, agent.tools)');
+  assertIncludes('extensions/completion/role-runner.ts', 'effectiveRoleToolAllowlistWithStructured(params.role, agent.tools)');
   assertIncludes('extensions/completion/role-runner.ts', 'resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel)');
   assertIncludes('extensions/completion/role-runner.ts', 'buildCompletionRoleSubprocessEnv(params.role, roleModel)');
   assertIncludes('extensions/completion/helper-runner.ts', 'asString(process.env.PI_COMPLETION_ROLE_MODEL)');

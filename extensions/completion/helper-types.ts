@@ -21,6 +21,7 @@ export const STRUCTURED_HELPER_OUTPUT_LIMITS = {
 } as const;
 
 export type StructuredHelperOutput = {
+	/** Contract: completion.helper.scout.v1 / completion.helper.critic.v1 */
 	summary: string;
 	evidence: string[];
 	paths: string[];
@@ -70,7 +71,7 @@ export type CompletionHelperResult = CompletionHelperSuccess | CompletionHelperF
 export type CompletionHelperPolicy = {
 	readonly: boolean;
 	allowedCallerRoles: string[];
-	toolAllowlist: HelperProxyToolName[];
+	toolAllowlist: string[];
 	defaultTimeoutMs: number;
 	maxTimeoutMs: number;
 };

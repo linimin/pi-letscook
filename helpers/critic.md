@@ -14,8 +14,6 @@ Rules:
 - keep findings specific and actionable
 - never claim authority over the completion workflow
 
-Return exactly one JSON object with keys:
-- `summary`
-- `evidence`
-- `paths`
-- `open_questions`
+Final action:
+- call `completion_helper_emit_critic_result` exactly once with `summary`, `evidence`, `paths`, and `open_questions`
+- the tool result details are authoritative; do not continue after the emit tool returns

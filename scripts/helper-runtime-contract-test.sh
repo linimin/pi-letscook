@@ -34,13 +34,39 @@ async function exists(targetPath) {
   }
 }
 
-function validOutput(summary = 'Helper finished.') {
-  return JSON.stringify({
+function validOutputObject(summary = 'Helper finished.') {
+  return {
     summary,
     evidence: ['src/example.ts:1-3'],
     paths: ['src/example.ts'],
     open_questions: [],
-  });
+  };
+}
+
+function validOutput(summary = 'Helper finished.') {
+  return JSON.stringify(validOutputObject(summary));
+}
+
+function helperEmitEventLines(outputObj, helper = 'scout') {
+  const toolName = helper === 'critic' ? 'completion_helper_emit_critic_result' : 'completion_helper_emit_scout_result';
+  const contractId = helper === 'critic' ? 'completion.helper.critic.v1' : 'completion.helper.scout.v1';
+  const toolCallId = 'structured-call';
+  return [
+    JSON.stringify({ type: 'tool_execution_start', toolName, toolCallId }),
+    JSON.stringify({
+      type: 'tool_execution_end',
+      toolName,
+      toolCallId,
+      result: {
+        content: [{ type: 'text', text: outputObj.summary }],
+        details: {
+          contractId,
+          schemaVersion: 1,
+          ...outputObj,
+        },
+      },
+    }),
+  ];
 }
 
 (async () => {
@@ -72,7 +98,7 @@ function validOutput(summary = 'Helper finished.') {
   assert.deepEqual(new Set(allowedHelpersForRole('completion-implementer')), new Set(['scout', 'critic']));
   assert.deepEqual(allowedHelpersForRole('completion-reviewer'), [], 'reviewer helper allowlist should stay empty');
   assert.equal(clampHelperTimeoutMs('scout', 999999), 120000, 'scout timeout should clamp to the V1 max');
-  assert.deepEqual(helperToolAllowlist('critic'), [...HELPER_PROXY_TOOL_NAMES], 'critic must receive the fixed guarded tool allowlist');
+  assert.deepEqual(helperToolAllowlist('critic'), [...HELPER_PROXY_TOOL_NAMES, 'completion_helper_emit_critic_result'], 'critic must receive the fixed guarded tool allowlist plus structured emit tool');
 
   const syntheticHelper = parseHelperDefinitionText('scout', '---\nname: scout\nmodel: helper-model\n---\nSynthetic prompt body.\n', '/synthetic/scout.md');
   const resolvedSyntheticModel = await resolveHelperModel({
@@ -129,6 +155,7 @@ function validOutput(summary = 'Helper finished.') {
       runId: 'success-contract',
       subprocessRunner: async (spec) => {
         capturedSpecs.push(spec);
+        const outputObj = validOutputObject('Critic completed successfully.');
         const events = [
           { type: 'tool_execution_start', toolName: 'completion_helper_read' },
           {
@@ -147,7 +174,7 @@ function validOutput(summary = 'Helper finished.') {
         return {
           exitCode: 0,
           assistantText: validOutput('Critic completed successfully.'),
-          eventLines: events.map((event) => JSON.stringify(event)),
+          eventLines: [...helperEmitEventLines(outputObj, 'critic'), ...events.map((event) => JSON.stringify(event))],
         };
       },
     });
@@ -234,11 +261,14 @@ function validOutput(summary = 'Helper finished.') {
       task: 'Hold the single-helper lock.',
       runId: 'concurrent-one',
       subprocessRunner: () => new Promise((resolve) => {
-        releaseFirstRun = () => resolve({
-          exitCode: 0,
-          assistantText: validOutput('First helper finished.'),
-          eventLines: [],
-        });
+        releaseFirstRun = () => {
+          const outputObj = validOutputObject('First helper finished.');
+          resolve({
+            exitCode: 0,
+            assistantText: validOutput('First helper finished.'),
+            eventLines: helperEmitEventLines(outputObj, 'scout'),
+          });
+        };
       }),
     });
 

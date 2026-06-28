@@ -84,3 +84,5 @@ Return exactly this fixed report format:
 - `Plan adjustment required: yes/no - ...`
 - `Residual risks discovered: ...`
 - `Remaining contract IDs after slice: ...`
+
+Structured transport: call `completion_emit_implementer_handoff` exactly once as the final action; do not continue after the emit tool returns.

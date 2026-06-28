@@ -11,12 +11,25 @@ import {
 } from "./proposal";
 import {
 	buildStartupAnalysisPromptFromEntries,
+	parseStartupAnalysisFromSubprocess,
 	parseStartupAnalysisOutput,
 } from "./startup-analysis";
+import {
+	appendStructuredToolsToPiArgs,
+	cookHandoffEmitToolName,
+	effectiveRoleToolAllowlistWithStructured,
+	formatCookHandoffNoHandoffSummary,
+	resolveCookHandoffSubprocessResult,
+	resolveRoleSubprocessOutput,
+	StructuredSubprocessOutputError,
+	startupAnalystEmitToolName,
+	type CookHandoffGenerationResult,
+} from "./structured-subprocess-wiring.ts";
+import { COMPLETION_COOK_HANDOFF_CONTRACT_ID, COMPLETION_STARTUP_ANALYSIS_CONTRACT_ID } from "./structured-contracts.ts";
+import { hasSubprocessFinalOutput } from "./subprocess-final-output.ts";
 import { contextProposalAnalystProgressLines, primaryAgentHandoffProgressLines } from "./prompt-surfaces";
 import {
 	buildCompletionRoleSubprocessEnv,
-	effectiveRoleToolAllowlist,
 	resolveEffectiveCompletionRoleModel,
 } from "./helper-policy.ts";
 import {
@@ -75,6 +88,8 @@ export type AnalyzeContextProposalWithAgentParams = {
 	getCtxUi: <T extends { ui: any }>(ctx: T) => any | undefined;
 };
 
+export type { CookHandoffGenerationResult } from "./structured-subprocess-wiring.ts";
+
 export type GenerateCookHandoffWithAgentParams = AnalyzeContextProposalWithAgentParams;
 
 const AGENT_HOME = path.join(os.homedir(), ".pi", "agent");
@@ -83,9 +98,9 @@ const PACKAGE_ROOT_CANDIDATE = path.resolve(EXTENSION_DIR, "..", "..");
 const PACKAGE_ROOT = fs.existsSync(path.join(PACKAGE_ROOT_CANDIDATE, "package.json")) ? PACKAGE_ROOT_CANDIDATE : undefined;
 const PACKAGE_AGENTS_DIR = PACKAGE_ROOT ? path.join(PACKAGE_ROOT, "agents") : undefined;
 const CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT = [
-	"You analyze recent /cook startup discussion and return a strict JSON object.",
-	"Do not emit markdown, code fences, or commentary.",
-	"Return exactly one JSON object with keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.",
+	"You analyze recent /cook startup discussion and emit structured startup analysis via completion_emit_startup_analysis.",
+	"Do not emit markdown, code fences, assistant JSON, or commentary outside the emit tool.",
+	"The emit tool record must include keys: verdict, workflow_relation, confidence, mission, scope, constraints, acceptance, diagnostics, critique, risks, possible_noise.",
 	"You may additionally include optional keys alternate_missions, completed_topics, and negated_topics when they are clearly supported by the discussion and canonical workflow context.",
 	"Use verdict values: startable, needs_clarification, planning_only, not_repo_change, or unsafe.",
 	"Use workflow_relation values: new_workflow, continue_current_workflow, replace_current_workflow, or unclear.",
@@ -105,20 +120,22 @@ const CONTEXT_PROPOSAL_ANALYST_SYSTEM_PROMPT = [
 	"Do not include task_type or evaluation_profile in startup-analysis output from free-text discussion. Only explicit structured startup artifacts may supply those routing fields elsewhere in /cook.",
 	"possible_noise should list discussion points that look stale, weakly related, unsafe to promote into scope, or already completed elsewhere.",
 	"When discussion is insufficient, contradictory, planning-only, or low-confidence, prefer a non-startable verdict with diagnostics over invention.",
+	"Call completion_emit_startup_analysis exactly once as the final action.",
 ].join(" ");
 const STARTUP_ANALYST_ROLE = "cook-proposal-analyst";
 const ANALYST_HEARTBEAT_MS = 5_000;
 
 const PRIMARY_AGENT_HANDOFF_SYSTEM_PROMPT = [
 	"You are the primary agent preparing an explicit /cook handoff after the user already chose workflow mode.",
-	"Return either exactly one fenced ```cook_handoff JSON block or one brief plain sentence explaining why no workflow startup handoff can be prepared.",
-	"If you can prepare a handoff, the JSON must use kind cook_handoff, source primary_agent, and handoff_kind implementation_workflow_handoff.",
+	"Call completion_emit_cook_handoff exactly once as the final action.",
+	"When you can prepare a workflow-startable handoff, emit capsule.kind cook_handoff, capsule.source primary_agent, and capsule.handoff_kind implementation_workflow_handoff.",
+	"When you cannot prepare a workflow-startable handoff, still call completion_emit_cook_handoff with capsule.kind cook_handoff, capsule.source primary_agent, capsule.handoff_kind unable_to_prepare, and capsule.reason explaining why.",
 	"Capture the best mission-level startup brief you can from recent discussion and canonical workflow context so /cook can move directly into Start/Cancel confirmation.",
 	"If canonical workflow context includes inline /cook startup intent, treat that inline prompt as the highest-priority explicit mission signal for this generation step.",
 	"When the user has clearly accepted a concrete assistant-proposed slice, carry that slice forward into the handoff instead of broadening or re-guessing the mission.",
 	"Do not make /cook infer or rediscover the mission from recent discussion later; author the handoff now from the primary-agent view of the task.",
 	"When recent discussion is meta-discussion about how to implement a change, recover the underlying repo-change mission instead of echoing planning-only wording.",
-	"Do not emit markdown commentary before or after the capsule.",
+	"Do not emit markdown commentary before or after the emit tool.",
 	"A valid workflow-startable handoff must include mission, scope, constraints or non_goals, acceptance, risks, and notes.",
 	"Optional startup hints are first_slice_goal, first_slice_non_goals, implementation_surfaces, verification_commands, why_this_slice_first, verification_truth_mode, deterministic_verifier_ready, verification_latency, verification_noise_risk, verifier_gap, and recommended_first_slice_kind. Include supported hints, prefer recommended_first_slice_kind=verifier_scaffolding when deterministic verifier readiness is missing, and do not refuse the handoff just because hints are partial.",
 	"If the first slice is not concrete enough yet, leave the slice-hint fields empty instead of refusing the startup handoff.",
@@ -205,7 +222,9 @@ function contextProposalAnalystModelArg(model: unknown): string | undefined {
 	return provider && id ? `${provider}/${id}` : undefined;
 }
 
-async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposalWithAgentParams): Promise<string | undefined> {
+async function runContextProposalAnalystSubprocess(
+	params: AnalyzeContextProposalWithAgentParams,
+): Promise<{ text?: string; eventLines: string[] } | undefined> {
 	const { ctx, projectName, recentEntries } = params;
 	const modelArg = contextProposalAnalystModelArg(ctx.model);
 	if (!modelArg) return undefined;
@@ -229,8 +248,9 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 	];
 	const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
 	if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
-	args.push("--model", modelArg, prompt);
-	const invocation = getPiInvocation(args);
+	const analystArgs = appendStructuredToolsToPiArgs(args, [startupAnalystEmitToolName()]);
+	analystArgs.push("--model", modelArg, prompt);
+	const invocation = getPiInvocation(analystArgs);
 	const liveActivity = createLiveRoleActivity(STARTUP_ANALYST_ROLE);
 	liveActivity.toolActivity = undefined;
 	liveActivity.toolRecentActivity = [];
@@ -241,9 +261,9 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 	liveActivity.recentActivity = pushRecentActivity(liveActivity.recentActivity, `assistant: ${liveActivity.progress}`);
 	const messages: RoleMessage[] = [];
 	let overlay: CookStartupOverlay | undefined;
-	let finishOverlay: ((value: string | undefined) => void) | undefined;
+	let finishOverlay: ((value: { text?: string; eventLines: string[] } | undefined) => void) | undefined;
 	let overlaySettled = false;
-	const settleOverlay = (value: string | undefined) => {
+	const settleOverlay = (value: { text?: string; eventLines: string[] } | undefined) => {
 		if (overlaySettled) return;
 		overlaySettled = true;
 		finishOverlay?.(value);
@@ -263,10 +283,10 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 		overlay?.setLines(contextProposalAnalystProgressLines(liveActivity, buildInlineRunningLines));
 	};
 	const heartbeat = setInterval(() => updateActivity(false), ANALYST_HEARTBEAT_MS);
-	const run = async (): Promise<string | undefined> => {
+	const run = async (): Promise<{ text?: string; eventLines: string[] } | undefined> => {
 		try {
 			updateActivity(true);
-			const output = await new Promise<string | undefined>((resolve) => {
+			const subprocessResult = await new Promise<{ text?: string; eventLines: string[] } | undefined>((resolve) => {
 				const proc = spawn(invocation.command, invocation.args, {
 					cwd: runCwd,
 					env: process.env,
@@ -274,7 +294,7 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 					shell: false,
 				});
 				let settled = false;
-				const resolveOnce = (value: string | undefined) => {
+				const resolveOnce = (value: { text?: string; eventLines: string[] } | undefined) => {
 					if (settled) return;
 					settled = true;
 					resolve(value);
@@ -285,8 +305,11 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 				};
 				const handleSigint = () => abort();
 				let buffer = "";
+				const eventLines: string[] = [];
+				const messages: RoleMessage[] = [];
 				const processLine = (line: string) => {
 					if (!line.trim()) return;
+					eventLines.push(line);
 					try {
 						const event = JSON.parse(line) as JsonRecord;
 						if (applyLiveRoleEvent(liveActivity, event, messages)) updateActivity(true);
@@ -306,7 +329,21 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 				proc.on("close", (code) => {
 					process.off("SIGINT", handleSigint);
 					if (buffer.trim()) processLine(buffer);
-					resolveOnce(code === 0 ? liveActivity.lastAssistantText?.trim() || undefined : undefined);
+					const structuredOk =
+						code === 0 &&
+						hasSubprocessFinalOutput({
+							eventLines,
+							contractId: COMPLETION_STARTUP_ANALYSIS_CONTRACT_ID,
+							assistantText: liveActivity.lastAssistantText?.trim() || undefined,
+						});
+					resolveOnce(
+						structuredOk
+							? {
+									text: liveActivity.lastAssistantText?.trim() || undefined,
+									eventLines: [...eventLines],
+								}
+							: undefined,
+					);
 				});
 				proc.on("error", () => {
 					process.off("SIGINT", handleSigint);
@@ -320,7 +357,10 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 					};
 				}
 			});
-			params.liveRoleActivityByRoot.set(rootKey, cloneLiveRoleActivity(liveActivity, { status: output ? "ok" : "error" }));
+			params.liveRoleActivityByRoot.set(
+				rootKey,
+				cloneLiveRoleActivity(liveActivity, { status: subprocessResult ? "ok" : "error" }),
+			);
 			await refreshCompletionStatus({
 				ctx,
 				liveRoleActivityByRoot: params.liveRoleActivityByRoot,
@@ -330,7 +370,7 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 				getCtxHasUI: params.getCtxHasUI,
 				getCtxUi: params.getCtxUi,
 			});
-			return output;
+			return subprocessResult;
 		} finally {
 			clearInterval(heartbeat);
 			setTimeout(() => {
@@ -354,7 +394,7 @@ async function runContextProposalAnalystSubprocess(params: AnalyzeContextProposa
 	if (params.getCtxHasUI(ctx)) {
 		const ui = params.getCtxUi(ctx);
 		if (ui) {
-			return await ui.custom<string | undefined>((_tui, theme, _kb, done) => {
+			return await ui.custom<{ text?: string; eventLines: string[] } | undefined>((_tui, theme, _kb, done) => {
 				finishOverlay = done;
 				overlay = new CookStartupOverlay(theme, {
 					title: "/cook proposal analyst",
@@ -393,10 +433,10 @@ function buildPrimaryAgentHandoffPrompt(projectName: string, recentEntries: Rece
 	return lines.join("\n");
 }
 
-async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithAgentParams): Promise<string | undefined> {
+async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithAgentParams): Promise<CookHandoffGenerationResult> {
 	const { ctx, projectName, recentEntries } = params;
 	const modelArg = contextProposalAnalystModelArg(ctx.model);
-	if (!modelArg) return undefined;
+	if (!modelArg) return { kind: "failed" };
 	const cwd = params.getCtxCwd(ctx);
 	const runCwd = findCompletionRoot(cwd) ?? findRepoRoot(cwd) ?? cwd;
 	const rootKey = completionRootKey(undefined, cwd);
@@ -417,8 +457,9 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 	];
 	const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
 	if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
-	args.push("--model", modelArg, prompt);
-	const invocation = getPiInvocation(args);
+	const handoffArgs = appendStructuredToolsToPiArgs(args, [cookHandoffEmitToolName()]);
+	handoffArgs.push("--model", modelArg, prompt);
+	const invocation = getPiInvocation(handoffArgs);
 	const liveActivity = createLiveRoleActivity(PRIMARY_AGENT_HANDOFF_ROLE);
 	liveActivity.toolActivity = undefined;
 	liveActivity.toolRecentActivity = [];
@@ -428,9 +469,9 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 	liveActivity.nextStep = "Synthesizing startup plan";
 	liveActivity.verifying = "Waiting for model response...";
 	let overlay: CookStartupOverlay | undefined;
-	let finishOverlay: ((value: string | undefined) => void) | undefined;
+	let finishOverlay: ((value: CookHandoffGenerationResult) => void) | undefined;
 	let overlaySettled = false;
-	const settleOverlay = (value: string | undefined) => {
+	const settleOverlay = (value: CookHandoffGenerationResult) => {
 		if (overlaySettled) return;
 		overlaySettled = true;
 		finishOverlay?.(value);
@@ -450,10 +491,11 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 		overlay?.setLines(primaryAgentHandoffProgressLines(liveActivity, buildInlineRunningLines));
 	};
 	const heartbeat = setInterval(() => updateActivity(false), ANALYST_HEARTBEAT_MS);
-	const run = async (): Promise<string | undefined> => {
+	const run = async (): Promise<CookHandoffGenerationResult> => {
 		try {
 			updateActivity(true);
-			const output = await new Promise<string | undefined>((resolve) => {
+			let handoffResult: CookHandoffGenerationResult = { kind: "failed" };
+			await new Promise<void>((resolve) => {
 				const proc = spawn(invocation.command, invocation.args, {
 					cwd: runCwd,
 					env: process.env,
@@ -461,20 +503,23 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 					shell: false,
 				});
 				let settled = false;
-				const resolveOnce = (value: string | undefined) => {
+				const resolveOnce = () => {
 					if (settled) return;
 					settled = true;
-					resolve(value);
+					resolve();
 				};
 				const abort = () => {
 					proc.kill("SIGTERM");
-					resolveOnce(undefined);
+					handoffResult = { kind: "failed" };
+					resolveOnce();
 				};
 				const handleSigint = () => abort();
 				let buffer = "";
+				const eventLines: string[] = [];
 				const messages: RoleMessage[] = [];
 				const processLine = (line: string) => {
 					if (!line.trim()) return;
+					eventLines.push(line);
 					try {
 						const event = JSON.parse(line) as JsonRecord;
 						if (applyLiveRoleEvent(liveActivity, event, messages)) updateActivity(true);
@@ -489,16 +534,30 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 					for (const line of lines) processLine(line);
 				});
 				proc.stderr.on("data", (_chunk) => {
-					// ignore handoff stderr unless the subprocess exits without assistant output
+					// ignore handoff stderr unless the subprocess exits without structured output
 				});
 				proc.on("close", (code) => {
 					process.off("SIGINT", handleSigint);
 					if (buffer.trim()) processLine(buffer);
-					resolveOnce(code === 0 ? liveActivity.lastAssistantText?.trim() || undefined : undefined);
+					const structuredOk =
+						code === 0 &&
+						hasSubprocessFinalOutput({
+							eventLines,
+							contractId: COMPLETION_COOK_HANDOFF_CONTRACT_ID,
+							assistantText: liveActivity.lastAssistantText?.trim() || undefined,
+						});
+					handoffResult = structuredOk
+						? resolveCookHandoffSubprocessResult({
+								assistantText: liveActivity.lastAssistantText?.trim() || undefined,
+								eventLines: [...eventLines],
+							})
+						: { kind: "failed" };
+					resolveOnce();
 				});
 				proc.on("error", () => {
 					process.off("SIGINT", handleSigint);
-					resolveOnce(undefined);
+					handoffResult = { kind: "failed" };
+					resolveOnce();
 				});
 				process.once("SIGINT", handleSigint);
 				if (overlay) {
@@ -508,7 +567,17 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 					};
 				}
 			});
-			params.liveRoleActivityByRoot.set(rootKey, cloneLiveRoleActivity(liveActivity, { status: output ? "ok" : "error" }));
+			if (handoffResult.kind === "no_handoff") {
+				const summary = formatCookHandoffNoHandoffSummary(handoffResult.reason);
+				liveActivity.assistantSummary = summary;
+				liveActivity.lastAssistantText = summary;
+				liveActivity.currentAction = summary;
+				console.info(`[completion] primary-agent handoff synthesis: ${summary}`);
+			}
+			params.liveRoleActivityByRoot.set(
+				rootKey,
+				cloneLiveRoleActivity(liveActivity, { status: handoffResult.kind === "failed" ? "error" : "ok" }),
+			);
 			await refreshCompletionStatus({
 				ctx,
 				liveRoleActivityByRoot: params.liveRoleActivityByRoot,
@@ -518,7 +587,7 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 				getCtxHasUI: params.getCtxHasUI,
 				getCtxUi: params.getCtxUi,
 			});
-			return output;
+			return handoffResult;
 		} finally {
 			clearInterval(heartbeat);
 			setTimeout(() => {
@@ -542,14 +611,14 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 	if (params.getCtxHasUI(ctx)) {
 		const ui = params.getCtxUi(ctx);
 		if (ui) {
-			return await ui.custom<string | undefined>((_tui, theme, _kb, done) => {
+			return await ui.custom<CookHandoffGenerationResult>((_tui, theme, _kb, done) => {
 				finishOverlay = done;
 				overlay = new CookStartupOverlay(theme, {
 					title: "/cook startup plan",
 					footer: "Esc/Ctrl+C cancel • This startup-plan synthesis runs before /cook writes canonical workflow state",
 				});
 				overlay.setLines(primaryAgentHandoffProgressLines(liveActivity, buildInlineRunningLines));
-				run().then(settleOverlay).catch(() => settleOverlay(undefined));
+				run().then(settleOverlay).catch(() => settleOverlay({ kind: "failed" }));
 				return overlay;
 			});
 		}
@@ -557,7 +626,7 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 	return await run();
 }
 
-export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWithAgentParams): Promise<string | undefined> {
+export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWithAgentParams): Promise<CookHandoffGenerationResult> {
 	if (params.recentEntries.length > 0) {
 		const prompt = buildPrimaryAgentHandoffPrompt(params.projectName, params.recentEntries, params.workflowContextLines ?? []);
 		maybeWriteTestTextSnapshot(
@@ -570,15 +639,15 @@ export async function generateCookHandoffWithAgent(params: GenerateCookHandoffWi
 			taskPrompt: prompt,
 		});
 	}
-	if (process.env.PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS === "1") return undefined;
+	if (process.env.PI_COMPLETION_DISABLE_PRIMARY_HANDOFF_SYNTHESIS === "1") return { kind: "failed" };
 	const testOutput = asString(process.env.PI_COMPLETION_PRIMARY_HANDOFF_OUTPUT);
-	if (testOutput) return testOutput;
-	if (params.recentEntries.length === 0) return undefined;
+	if (testOutput) return { kind: "handoff", text: testOutput };
+	if (params.recentEntries.length === 0) return { kind: "failed" };
 	try {
 		return await runPrimaryAgentHandoffSubprocess(params);
 	} catch (error) {
 		console.warn("[completion] primary-agent handoff generation failed", error);
-		return undefined;
+		return { kind: "failed" };
 	}
 }
 
@@ -600,9 +669,13 @@ export async function analyzeContextProposalWithAgent(params: AnalyzeContextProp
 	if (testOutput) return parseStartupAnalysisOutput(testOutput, params.projectName);
 	if (params.recentEntries.length === 0) return undefined;
 	try {
-		const raw = await runContextProposalAnalystSubprocess(params);
-		if (!raw) return undefined;
-		return parseStartupAnalysisOutput(raw, params.projectName);
+		const subprocessResult = await runContextProposalAnalystSubprocess(params);
+		if (!subprocessResult) return undefined;
+		return parseStartupAnalysisFromSubprocess({
+			raw: subprocessResult.text ?? "",
+			projectName: params.projectName,
+			eventLines: subprocessResult.eventLines,
+		});
 	} catch (error) {
 		console.warn("[completion] context proposal analyst failed", error);
 		return undefined;
@@ -752,7 +825,7 @@ function maybeWriteTestRolePromptBundle(
 export async function runCompletionRole(params: RunCompletionRoleParams): Promise<RunCompletionRoleResult> {
 	const agent = await loadAgentDefinition(params.root, params.role);
 	const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);
-	const effectiveToolAllowlist = effectiveRoleToolAllowlist(params.role, agent.tools);
+	const effectiveToolAllowlist = effectiveRoleToolAllowlistWithStructured(params.role, agent.tools);
 	const roleEnv = buildCompletionRoleSubprocessEnv(params.role, roleModel);
 	const systemPromptTemp = await writeTempFile(params.root, "pi-completion-role-", agent.systemPrompt);
 	const baseTaskLines = [...params.systemPromptPreamble];
@@ -788,6 +861,7 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 			"json",
 			"-p",
 			"--no-session",
+			"--no-extensions",
 			"--no-skills",
 			"--no-prompt-templates",
 			"--no-context-files",
@@ -798,11 +872,16 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 		if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
 		if (roleModel) args.push("--model", roleModel);
 		if (effectiveToolAllowlist && effectiveToolAllowlist.length > 0) args.push("--tools", effectiveToolAllowlist.join(","));
-		args.push(prompt);
+		const roleArgs = appendStructuredToolsToPiArgs(
+			args,
+			effectiveToolAllowlist?.filter((tool) => tool.startsWith("completion_emit_")) ?? [],
+		);
+		roleArgs.push(prompt);
 
-		const invocation = getPiInvocation(args);
+		const invocation = getPiInvocation(roleArgs);
 		let stderr = "";
 		const messages: Array<{ role: string; content: Array<{ type: string; text?: string }> }> = [];
+		const eventLines: string[] = [];
 		const liveActivity = params.createLiveRoleActivity(params.role);
 		params.onUpdate?.(liveActivity);
 		if (process.env.PI_COMPLETION_TEST_CAPTURE_ROLE_PROMPT_ONLY === "1") {
@@ -835,6 +914,7 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 
 				const processLine = (line: string) => {
 					if (!line.trim()) return;
+					eventLines.push(line);
 					try {
 						const event = JSON.parse(line) as JsonRecord;
 						if (params.applyLiveRoleEvent(liveActivity, event, messages)) params.onUpdate?.(liveActivity);
@@ -868,9 +948,43 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 				}
 			});
 
-			const output = liveActivity.lastAssistantText || stderr.trim() || `${params.role} finished with no text output.`;
-			const reportFields = parseReportFields(output);
-			const transcription = exitCode === 0 ? await transcribeRoleOutput(params.role, params.root, output, reportFields) : undefined;
+			const fallbackOutput = liveActivity.lastAssistantText || stderr.trim() || `${params.role} finished with no text output.`;
+			let resolved;
+			try {
+				resolved = resolveRoleSubprocessOutput({
+					role: params.role,
+					assistantText: liveActivity.lastAssistantText,
+					eventLines,
+					fallbackOutput,
+				});
+			} catch (error) {
+				const message =
+					error instanceof StructuredSubprocessOutputError
+						? error.message
+						: error instanceof Error
+							? error.message
+							: String(error);
+				const output = `${params.role} structured output error: ${message}`;
+				return {
+					role: params.role,
+					ok: false,
+					exitCode,
+					output,
+					stderr: stderr.trim(),
+					reportFields: {},
+					transcription: undefined,
+					activity: params.cloneLiveRoleActivity(liveActivity, { status: "error" }),
+				};
+			}
+			const output = resolved.output;
+			const reportFields = Object.keys(resolved.reportFields).length > 0 ? resolved.reportFields : parseReportFields(output);
+			const transcription =
+				exitCode === 0
+					? await transcribeRoleOutput(params.role, params.root, output, reportFields, {
+							structuredEvaluatorReport: resolved.structuredEvaluatorReport,
+							structuredRoleHandoffReport: resolved.structuredRoleHandoffReport,
+						})
+					: undefined;
 			return {
 				role: params.role,
 				ok: exitCode === 0,

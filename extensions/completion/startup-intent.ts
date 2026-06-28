@@ -11,6 +11,9 @@ import type {
 	RecentSessionMessage,
 } from "./proposal";
 import type { CompletionStateSnapshot, StartupAnalysisConfidence, StartupWorkflowRelation } from "./types";
+import type { CookHandoffGenerationResult } from "./structured-subprocess-wiring.ts";
+
+export type { CookHandoffGenerationResult };
 
 export type CookProposalDeps = {
 	asString: (value: unknown) => string | undefined;
@@ -24,6 +27,7 @@ export type CookProposalDeps = {
 
 export type CookContextProposalResult = {
 	proposal?: ContextProposal;
+	handoffSynthesis?: CookHandoffGenerationResult;
 };
 
 export type StartupIntentHints = {
@@ -235,7 +239,10 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 	snapshot?: CompletionStateSnapshot;
 	projectName: string;
 	deps: CookProposalDeps;
-	generateCookHandoff?: (params: { recentEntries: RecentDiscussionEntry[]; workflowContextLines: string[] }) => Promise<string | undefined>;
+	generateCookHandoff?: (params: {
+		recentEntries: RecentDiscussionEntry[];
+		workflowContextLines: string[];
+	}) => Promise<CookHandoffGenerationResult>;
 }): Promise<CookContextProposalResult> {
 	const workflowContext = workflowContextFromSnapshot(args.snapshot);
 	const annotateProposal = (proposal: ContextProposal | undefined): ContextProposal | undefined =>
@@ -246,17 +253,17 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 		snapshot: args.snapshot,
 	});
 	const { recentEntries, workflowContextLines } = synthesisContext;
-	const raw = await args.generateCookHandoff?.({ recentEntries, workflowContextLines });
-	if (raw) {
+	const handoffResult = await args.generateCookHandoff?.({ recentEntries, workflowContextLines });
+	if (handoffResult?.kind === "handoff") {
 		const generatedProposal = annotateProposal(
-			extractCookHandoffProposalFromText(raw, args.projectName, args.deps, {
+			extractCookHandoffProposalFromText(handoffResult.text, args.projectName, args.deps, {
 				messageId: "generated-primary-agent-handoff",
 				timestampMs: Date.now(),
 			}),
 		);
-		if (generatedProposal) return { proposal: generatedProposal };
+		if (generatedProposal) return { proposal: generatedProposal, handoffSynthesis: handoffResult };
 	}
-	return {};
+	return { handoffSynthesis: handoffResult };
 }
 
 export function buildAdvisoryStartupBrief(args: {

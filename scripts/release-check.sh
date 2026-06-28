@@ -24,6 +24,7 @@ bash ./scripts/helper-artifact-layout-test.sh
 bash ./scripts/helper-runtime-contract-test.sh
 bash ./scripts/helper-role-gating-test.sh
 bash ./scripts/helper-structured-output-test.sh
+bash ./scripts/subprocess-structured-output-test.sh
 bash ./scripts/helper-observability-test.sh
 
 python3 - <<'PY'

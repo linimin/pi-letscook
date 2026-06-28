@@ -10,6 +10,8 @@ import {
 	type RecentDiscussionEntry,
 } from "./proposal";
 import { validateStartupAnalysisRecord, startupAnalysisValidationDefaults } from "./startup-validation";
+import { COMPLETION_STARTUP_ANALYSIS_CONTRACT_ID, type StructuredStartupAnalysisPayload } from "./structured-contracts.ts";
+import { requireSubprocessFinalOutput } from "./subprocess-final-output.ts";
 import type { JsonRecord } from "./types";
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -40,16 +42,7 @@ export function buildStartupAnalysisPromptFromEntries(
 	return buildStartupAnalysisPrompt(projectName, serializeEntries(recentEntries), contextLines);
 }
 
-export function parseStartupAnalysisOutput(raw: string, projectName: string): ContextProposal | undefined {
-	const jsonText = extractJsonObjectFromText(raw);
-	if (!jsonText) return undefined;
-	let parsed: unknown;
-	try {
-		parsed = JSON.parse(jsonText);
-	} catch {
-		return undefined;
-	}
-	if (!isRecord(parsed)) return undefined;
+function parseStartupAnalysisFromValidatedRecord(parsed: JsonRecord, projectName: string): ContextProposal | undefined {
 	const validated = validateStartupAnalysisRecord(parsed, projectName, {
 		...startupAnalysisValidationDefaults,
 		assessMissionAnchor,
@@ -91,4 +84,35 @@ export function parseStartupAnalysisOutput(raw: string, projectName: string): Co
 			[proposal.goalText, proposal.mission, ...validated.diagnostics],
 		),
 	};
+}
+
+export function parseStartupAnalysisOutput(raw: string, projectName: string): ContextProposal | undefined {
+	const jsonText = extractJsonObjectFromText(raw);
+	if (!jsonText) return undefined;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(jsonText);
+	} catch {
+		return undefined;
+	}
+	if (!isRecord(parsed)) return undefined;
+	return parseStartupAnalysisFromValidatedRecord(parsed, projectName);
+}
+
+export function parseStartupAnalysisFromSubprocess(args: {
+	raw: string;
+	projectName: string;
+	eventLines?: string[];
+}): ContextProposal | undefined {
+	try {
+		const { payload } = requireSubprocessFinalOutput<StructuredStartupAnalysisPayload>({
+			eventLines: args.eventLines,
+			contractId: COMPLETION_STARTUP_ANALYSIS_CONTRACT_ID,
+			assistantText: args.raw,
+		});
+		if (!isRecord(payload.record)) return undefined;
+		return parseStartupAnalysisFromValidatedRecord(payload.record, args.projectName);
+	} catch {
+		return undefined;
+	}
 }

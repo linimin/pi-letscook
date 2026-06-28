@@ -1,6 +1,14 @@
 import { spawn } from "node:child_process";
 import * as roleReporting from "./role-reporting.js";
 import { loadCompletionSnapshot } from "./state-store";
+import {
+	renderEvaluatorReport,
+	renderRoleHandoffReport,
+} from "./structured-renderers.ts";
+import type {
+	StructuredEvaluatorReport,
+	StructuredRoleHandoffReport,
+} from "./structured-contracts.ts";
 import type { CompletionRole, JsonRecord } from "./types";
 
 function asString(value: unknown): string | undefined {
@@ -35,12 +43,36 @@ async function gitHeadSha(cwd: string): Promise<string | undefined> {
 	});
 }
 
+export type TranscriptionOptions = {
+	structuredEvaluatorReport?: StructuredEvaluatorReport;
+	structuredRoleHandoffReport?: StructuredRoleHandoffReport;
+};
+
+export function validateStructuredRoleReport(role: CompletionRole, structured: StructuredEvaluatorReport | StructuredRoleHandoffReport) {
+	const output =
+		"rubric" in structured && Array.isArray(structured.rubric)
+			? renderEvaluatorReport(structured as StructuredEvaluatorReport)
+			: renderRoleHandoffReport(structured as StructuredRoleHandoffReport);
+	const reportFields = parseReportFields(output);
+	return roleReporting.validateRoleReport(role, output, reportFields);
+}
+
 export async function transcribeRoleOutput(
 	role: CompletionRole,
 	cwd: string,
 	output: string,
 	reportFields: Record<string, string>,
+	options?: TranscriptionOptions,
 ): Promise<TranscriptionResult> {
+	let effectiveOutput = output;
+	let effectiveFields = reportFields;
+	if (options?.structuredEvaluatorReport) {
+		effectiveOutput = renderEvaluatorReport(options.structuredEvaluatorReport);
+		effectiveFields = parseReportFields(effectiveOutput);
+	} else if (options?.structuredRoleHandoffReport) {
+		effectiveOutput = renderRoleHandoffReport(options.structuredRoleHandoffReport);
+		effectiveFields = parseReportFields(effectiveOutput);
+	}
 	const snapshot = await loadCompletionSnapshot(cwd);
 	if (!snapshot) {
 		return { appended: [], skipped: ["No canonical completion snapshot found."], errors: [] };
@@ -57,8 +89,9 @@ export async function transcribeRoleOutput(
 
 	return await roleReporting.transcribeCanonicalRoleReport({
 		role,
-		output,
-		reportFields,
+		output: effectiveOutput,
+		reportFields: effectiveFields,
+		structuredReport: options?.structuredEvaluatorReport ?? options?.structuredRoleHandoffReport,
 		snapshotFiles: snapshot.files,
 		headSha,
 		sliceId,

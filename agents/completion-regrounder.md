@@ -12,7 +12,7 @@ Use package-default workflow policy plus ignored `.agent/current/**` runtime sta
 
 You reconcile canonical `.agent/current/plan.json`, `.agent/current/active-slice.json`, `.agent/current/state.json`, and `.agent/current/verification-evidence.json` against repo truth. You may read/write canonical `.agent` state, update `.gitignore`, reopen slices whose acceptance criteria no longer hold, and return the exact next handoff payload. You must not invoke downstream completion roles, edit tracked product/docs/config/test files, create commits, or append slice-history / stop-check records.
 
-`completion_assist` is internal bounded help only. Use it only for `scout` or `critic` evidence gathering that supports canonical reconciliation, treat helper output as non-authoritative input, and keep the final tool payload exact JSON on both success and failure.
+`completion_assist` is internal bounded help only. Use it only for `scout` or `critic` evidence gathering that supports canonical reconciliation, treat helper output as non-authoritative input, and keep the final tool payload exact JSON on both success and failure. Call `completion_emit_regrounder_reconciliation` exactly once as the final action; do not continue after the emit tool returns.
 
 During long work, emit short operator-facing progress lines when useful using these exact prefixes:
 - `PROGRESS: ...`

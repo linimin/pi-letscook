@@ -57,6 +57,12 @@ async function pathExists(targetPath) {
     const helperRoot = helperArtifactsDir(realRepoRoot);
     await fsp.writeFile(path.join(repoRoot, '.pi', 'helpers', 'scout.md'), 'override should be ignored\n', 'utf8');
 
+    const outputObj = {
+      summary: 'Collected bounded evidence.',
+      evidence: ['top.txt:1-1'],
+      paths: ['top.txt'],
+      open_questions: [],
+    };
     const result = await runCompletionHelper({
       root: repoRoot,
       helper: 'scout',
@@ -67,13 +73,24 @@ async function pathExists(targetPath) {
       runId: 'artifact-layout',
       subprocessRunner: async () => ({
         exitCode: 0,
-        assistantText: JSON.stringify({
-          summary: 'Collected bounded evidence.',
-          evidence: ['top.txt:1-1'],
-          paths: ['top.txt'],
-          open_questions: [],
-        }),
-        eventLines: [JSON.stringify({ type: 'tool_execution_start', toolName: 'completion_helper_read' })],
+        assistantText: JSON.stringify(outputObj),
+        eventLines: [
+          JSON.stringify({ type: 'tool_execution_start', toolName: 'completion_helper_read' }),
+          JSON.stringify({ type: 'tool_execution_start', toolName: 'completion_helper_emit_scout_result', toolCallId: 'structured-call' }),
+          JSON.stringify({
+            type: 'tool_execution_end',
+            toolName: 'completion_helper_emit_scout_result',
+            toolCallId: 'structured-call',
+            result: {
+              content: [{ type: 'text', text: outputObj.summary }],
+              details: {
+                contractId: 'completion.helper.scout.v1',
+                schemaVersion: 1,
+                ...outputObj,
+              },
+            },
+          }),
+        ],
       }),
     });
 
@@ -104,7 +121,7 @@ async function pathExists(targetPath) {
     assert.equal(invocation.env.PI_COMPLETION_HELPER_ROOT, realRepoRoot);
     assert.equal(invocation.env.PI_COMPLETION_HELPER_CWD, path.join(realRepoRoot, 'subdir'));
     assert.equal(invocation.env.PI_COMPLETION_ROLE_MODEL, 'role-model-alpha');
-    assert.ok(Array.isArray(invocation.toolAllowlist) && invocation.toolAllowlist.length === 4, 'invocation must persist the fixed helper tool allowlist');
+    assert.ok(Array.isArray(invocation.toolAllowlist) && invocation.toolAllowlist.length === 5, 'invocation must persist the fixed helper tool allowlist plus structured emit tool');
 
     const artifactResult = await readJson(resultPath);
     assert.equal(artifactResult.ok, true, 'successful result.json should preserve the success contract');

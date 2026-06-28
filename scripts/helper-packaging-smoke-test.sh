@@ -52,6 +52,7 @@ required = {
     'package/helpers/scout.md',
     'package/helpers/critic.md',
     'package/extensions/helper-tools/index.ts',
+    'package/extensions/completion-structured-tools/index.ts',
     'package/scripts/helper-runtime-capability-test.sh',
     'package/scripts/helper-packaging-smoke-test.sh',
 }
