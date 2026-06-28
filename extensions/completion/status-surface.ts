@@ -114,12 +114,6 @@ function liveActivitySignal(activity: { status?: string; startedAt?: number; upd
 	};
 }
 
-function formatLiveActivitySignal(signal: LiveActivitySignal | undefined): string | undefined {
-	if (!signal) return undefined;
-	if (signal.state === "active") return "activity: active";
-	return `activity: ${signal.state} (${formatElapsed(signal.idleMs)} since update)`;
-}
-
 function livePreviewForStatus(activity: LiveRoleActivity | undefined): string | undefined {
 	if (!activity || activity.status !== "running") return undefined;
 	return truncateInline(
@@ -301,6 +295,165 @@ export function maybeInjectTestLiveRoleActivity(liveRoleActivityByRoot: Map<stri
 	}
 }
 
+export type InlineRunningDetails = {
+	role?: string;
+	startedAt?: number;
+	updatedAt?: number;
+	currentAction?: string;
+	toolActivity?: string;
+	toolRecentActivity?: string[];
+	recentActivity?: string[];
+	assistantSummary?: string;
+	progress?: string;
+	rationale?: string;
+	nextStep?: string;
+	verifying?: string;
+	stateDeltas?: string[];
+};
+
+export type InlineRunningMode = "compact" | "expanded";
+
+function isStartingPlaceholder(text: string | undefined): boolean {
+	return text === "Starting role subprocess";
+}
+
+function runningActivitySignal(details: Pick<InlineRunningDetails, "startedAt" | "updatedAt">): LiveActivitySignal | undefined {
+	return liveActivitySignal({ status: "running", startedAt: details.startedAt, updatedAt: details.updatedAt });
+}
+
+export function formatRoleHeaderLine(
+	details: Pick<InlineRunningDetails, "role" | "startedAt" | "updatedAt">,
+	signal = runningActivitySignal(details),
+): string {
+	const role = details.role ?? "completion-role";
+	const chunks = [role];
+	if (details.startedAt !== undefined) chunks.push(formatElapsed(nowMs() - details.startedAt));
+	const activity = signal?.state ?? "active";
+	if (signal && signal.state !== "active") {
+		chunks.push(`${activity} (${formatElapsed(signal.idleMs)} since update)`);
+	} else {
+		chunks.push(activity);
+	}
+	return chunks.join(" · ");
+}
+
+export function pickNowLine(details: InlineRunningDetails): string | undefined {
+	const toolLine = details.toolActivity?.trim();
+	const hasActiveTool = Boolean(toolLine && !isStartingPlaceholder(toolLine));
+	if (hasActiveTool && toolLine) return toolLine;
+	if (details.progress?.trim()) return details.progress.trim();
+	if (details.verifying?.trim()) return details.verifying.trim();
+	const assistant = details.assistantSummary?.trim();
+	if (assistant) return assistant;
+	const currentAction = details.currentAction?.trim();
+	if (currentAction && currentAction !== toolLine) {
+		return currentAction.replace(/^assistant:\s*/, "");
+	}
+	return undefined;
+}
+
+function shouldShowPlan(signal: LiveActivitySignal | undefined, mode: InlineRunningMode): boolean {
+	if (mode === "expanded") return true;
+	return signal?.state === "waiting" || signal?.state === "stalled";
+}
+
+function pickPlanHintLine(details: InlineRunningDetails): string | undefined {
+	if (details.nextStep?.trim()) return `next: ${details.nextStep.trim()}`;
+	if (details.rationale?.trim()) return `rationale: ${details.rationale.trim()}`;
+	return undefined;
+}
+
+function nowLineUsesTool(details: InlineRunningDetails): boolean {
+	const toolLine = details.toolActivity?.trim();
+	return Boolean(toolLine && !isStartingPlaceholder(toolLine) && pickNowLine(details) === toolLine);
+}
+
+export function roleOutcomeSummaryLines(
+	role: string | undefined,
+	reportFields: Record<string, string>,
+	ok: boolean,
+	exitCode?: number,
+): string[] {
+	if (!ok) return [`exit ${exitCode ?? 1} · expand for details`];
+	const field = (key: string) => reportFields[key]?.trim();
+	const lines: string[] = [];
+	switch (role) {
+		case "completion-bootstrapper": {
+			const bootstrap = field("Bootstrap applied");
+			const nextRole = field("Next role to invoke");
+			if (bootstrap) lines.push(bootstrap);
+			if (nextRole) lines.push(`→ ${nextRole}`);
+			break;
+		}
+		case "completion-regrounder": {
+			const decision = field("Reconciliation decision");
+			const slice = field("Current selected slice");
+			if (decision) lines.push(decision);
+			if (slice) lines.push(`slice: ${slice}`);
+			break;
+		}
+		case "completion-implementer": {
+			const sliceId = field("Slice ID");
+			const commit = field("Commit SHA");
+			const verification = field("Verification results");
+			if (sliceId && commit) lines.push(`${sliceId} · ${commit}`);
+			else if (sliceId) lines.push(sliceId);
+			else if (commit) lines.push(commit);
+			if (verification && /fail|error|block/i.test(verification)) {
+				lines.push(truncateInline(verification, 120));
+			} else if (lines.length < 2) {
+				lines.push("→ completion-reviewer");
+			}
+			break;
+		}
+		case "completion-reviewer": {
+			const acceptable = field("Acceptable as-is");
+			const followUp = field("Smallest follow-up slice");
+			if (acceptable) lines.push(`acceptable: ${acceptable}`);
+			if (followUp) lines.push(followUp === "none" ? "no follow-up slice" : followUp);
+			break;
+		}
+		case "completion-auditor": {
+			const nextSlice = field("Next mandatory slice");
+			const blockers = field("Blocker count");
+			const worktree = field("Tracked and unignored worktree is clean");
+			if (nextSlice) lines.push(`next slice: ${nextSlice}`);
+			if (blockers) lines.push(`${blockers} blocker(s)`);
+			else if (worktree) lines.push(`worktree clean: ${worktree}`);
+			break;
+		}
+		case "completion-stop-judge": {
+			const canStop = field("Can the project stop now");
+			const justification = field("Brief justification");
+			if (canStop) lines.push(`stop: ${canStop}`);
+			if (justification) lines.push(truncateInline(justification, 120));
+			break;
+		}
+		default: {
+			const nextRole = field("Next role to invoke");
+			if (nextRole) lines.push(`→ ${nextRole}`);
+			break;
+		}
+	}
+	if (lines.length === 0) {
+		const nextRole = field("Next role to invoke");
+		if (nextRole) lines.push(`→ ${nextRole}`);
+	}
+	return lines.slice(0, 2);
+}
+
+function formatTranscriptionLines(
+	transcription: { appended?: string[]; skipped?: string[]; errors?: string[] } | undefined,
+	expanded: boolean,
+): string[] {
+	if (!transcription) return [];
+	const lines: string[] = [];
+	if (transcription.appended?.length) lines.push(`state updated: ${transcription.appended.join(", ")}`);
+	if (transcription.errors?.length) lines.push(`warnings: ${transcription.errors.join(" | ")}`);
+	if (expanded && transcription.skipped?.length) lines.push(`skipped: ${transcription.skipped.join(" | ")}`);
+	return lines;
+}
+
 export function maybeReplayTestLiveRoleEvents(liveRoleActivityByRoot: Map<string, LiveRoleActivity>, rootKey: string): void {
 	const raw = asString(process.env.PI_COMPLETION_TEST_ROLE_EVENT_STREAM_JSON);
 	if (!raw) return;
@@ -329,47 +482,51 @@ export function maybeReplayTestLiveRoleEvents(liveRoleActivityByRoot: Map<string
 	}
 }
 
-export function buildInlineRunningLines(details: {
-	role?: string;
-	startedAt?: number;
-	updatedAt?: number;
-	currentAction?: string;
-	toolActivity?: string;
-	toolRecentActivity?: string[];
-	recentActivity?: string[];
-	assistantSummary?: string;
-	progress?: string;
-	rationale?: string;
-	nextStep?: string;
-	verifying?: string;
-	stateDeltas?: string[];
-}): string[] {
-	const lines: string[] = [];
-	let header = "running completion role";
-	if (details.role) header += ` ${details.role}`;
-	lines.push(header);
-	if (details.startedAt !== undefined) lines.push(`elapsed: ${formatElapsed(nowMs() - details.startedAt)}`);
-	const signalLine = formatLiveActivitySignal(
-		liveActivitySignal({ status: "running", startedAt: details.startedAt, updatedAt: details.updatedAt }),
-	);
-	if (signalLine) lines.push(signalLine);
-	const toolLine = details.toolActivity;
-	if (toolLine) lines.push(`tool: ${toolLine}`);
-	if (details.progress) lines.push(`progress: ${details.progress}`);
-	else if (details.assistantSummary) lines.push(`assistant: ${details.assistantSummary}`);
-	else if (details.currentAction && details.currentAction !== toolLine) {
-		lines.push(`assistant: ${details.currentAction.replace(/^assistant:\s*/, "")}`);
+export function buildInlineRunningLines(details: InlineRunningDetails, options?: { mode?: InlineRunningMode }): string[] {
+	const mode = options?.mode ?? "compact";
+	const signal = runningActivitySignal(details);
+	const lines: string[] = [formatRoleHeaderLine(details, signal)];
+	const nowLine = pickNowLine(details);
+	if (nowLine) lines.push(`now: ${nowLine}`);
+	if (mode === "compact") {
+		if (shouldShowPlan(signal, mode)) {
+			const planLine = pickPlanHintLine(details);
+			if (planLine) lines.push(planLine);
+		}
+		return lines;
 	}
-	if (details.rationale) lines.push(`rationale: ${details.rationale}`);
-	if (details.nextStep) lines.push(`next: ${details.nextStep}`);
-	if (details.verifying) lines.push(`verifying: ${details.verifying}`);
-	for (const delta of (details.stateDeltas ?? []).slice(-4)) lines.push(`state-delta: ${delta}`);
-	const recentTools = collapseRecentActivity(details.toolRecentActivity ?? details.recentActivity ?? []);
+	const toolLine = details.toolActivity?.trim();
+	if (details.progress?.trim() && nowLineUsesTool(details)) lines.push(`progress: ${details.progress.trim()}`);
+	if (details.rationale?.trim()) lines.push(`rationale: ${details.rationale.trim()}`);
+	if (details.nextStep?.trim()) lines.push(`next: ${details.nextStep.trim()}`);
+	if (details.verifying?.trim() && pickNowLine(details) !== details.verifying.trim()) {
+		lines.push(`verifying: ${details.verifying.trim()}`);
+	}
+	for (const delta of (details.stateDeltas ?? []).slice(-2)) lines.push(`state-delta: ${delta}`);
+	const recentTools = collapseRecentActivity(details.toolRecentActivity ?? details.recentActivity ?? [], 3);
 	const recentWithoutCurrent = recentTools.filter((item) => item !== toolLine);
 	if (recentWithoutCurrent.length > 0) {
-		lines.push("recent tools:");
+		lines.push("recent:");
 		for (const item of recentWithoutCurrent) lines.push(`- ${item}`);
 	}
+	return lines;
+}
+
+export function buildCompletionRoleDoneLines(
+	details: InlineRunningDetails & {
+		status?: string;
+		exitCode?: number;
+		reportFields?: Record<string, string>;
+		transcription?: { appended?: string[]; skipped?: string[]; errors?: string[] };
+	},
+	options: { expanded: boolean; isError: boolean },
+): string[] {
+	const role = details.role ?? "completion-role";
+	const ok = details.status === "ok" && !options.isError;
+	const elapsed = details.startedAt !== undefined ? formatElapsed(nowMs() - details.startedAt) : undefined;
+	const lines: string[] = [`${ok ? "done" : "error"}: ${role}${elapsed ? ` · ${elapsed}` : ""}`];
+	lines.push(...roleOutcomeSummaryLines(role, details.reportFields ?? {}, ok, details.exitCode));
+	lines.push(...formatTranscriptionLines(details.transcription, options.expanded));
 	return lines;
 }
 
@@ -377,21 +534,31 @@ export function formatInlineRunningText(theme: any, lines: string[], options?: {
 	let text = "";
 	for (const [index, line] of lines.entries()) {
 		if (index > 0) text += "\n";
+		if (index === 0 && (line.startsWith("done:") || line.startsWith("error:"))) {
+			const [status, ...rest] = line.split(": ");
+			const ok = status === "done";
+			text += `${theme.fg(ok ? "success" : "error", status)}: ${theme.fg("toolTitle", theme.bold(rest.join(": ")))}`;
+			continue;
+		}
 		if (index === 0) {
-			const [prefix, ...rest] = line.split(" ");
-			text += theme.fg("warning", prefix);
-			if (rest.length > 0) text += ` ${theme.fg("accent", rest.join(" "))}`;
+			const segments = line.split(" · ");
+			text += theme.fg("accent", segments[0] ?? line);
+			for (const segment of segments.slice(1)) {
+				const stalled = segment.startsWith("stalled") || segment.startsWith("waiting");
+				text += theme.fg("muted", " · ");
+				text += stalled ? theme.fg("warning", segment) : theme.fg("muted", segment);
+			}
+			continue;
+		}
+		if (line.startsWith("now: ")) {
+			text += theme.fg("toolOutput", line.slice(5));
 			continue;
 		}
 		if (line.startsWith("tool:") || line.startsWith("progress:")) {
 			text += theme.fg("toolOutput", line);
 			continue;
 		}
-		if (line.startsWith("activity:")) {
-			text += line.includes("stalled") ? theme.fg("warning", line) : line;
-			continue;
-		}
-		if (line === "recent tools:") {
+		if (line === "recent:" || line === "recent tools:") {
 			text += theme.fg("muted", line);
 			continue;
 		}
@@ -399,23 +566,59 @@ export function formatInlineRunningText(theme: any, lines: string[], options?: {
 			text += `${theme.fg("muted", "- ")}${theme.fg("muted", line.slice(2))}`;
 			continue;
 		}
-		if (line.startsWith("elapsed:")) {
-			text += line;
+		if (line.startsWith("next:") || line.startsWith("verifying:") || line.startsWith("rationale:") || line.startsWith("state-delta:")) {
+			text += theme.fg("muted", line);
+			continue;
+		}
+		if (line.startsWith("state updated:") || line.startsWith("warnings:") || line.startsWith("skipped:")) {
+			const [label, ...rest] = line.split(": ");
+			const value = rest.join(": ");
+			const color = line.startsWith("warnings:") ? "warning" : line.startsWith("state updated:") ? "success" : "muted";
+			text += `${theme.fg("muted", `${label}: `)}${theme.fg(color, value)}`;
+			continue;
+		}
+		if (line.startsWith("exit ")) {
+			text += theme.fg("error", line);
+			continue;
+		}
+		if (line.startsWith("→ ") || line.startsWith("acceptable:") || line.startsWith("stop:") || line.startsWith("slice:") || line.startsWith("next slice:")) {
+			text += options?.primaryAssistant ? line : theme.fg("muted", line);
+			continue;
+		}
+		if (line.includes(": ") && !line.startsWith("assistant:")) {
+			const colonIndex = line.indexOf(": ");
+			const label = line.slice(0, colonIndex);
+			const value = line.slice(colonIndex + 2);
+			text += `${theme.fg("muted", `${label}: `)}${value}`;
 			continue;
 		}
 		if (line.startsWith("assistant:")) {
 			text += options?.primaryAssistant ? line : theme.fg("muted", line);
 			continue;
 		}
-		if (line.startsWith("next:") || line.startsWith("verifying:")) {
-			text += theme.fg("muted", line);
-			continue;
-		}
-		if (line.startsWith("rationale:") || line.startsWith("state-delta:")) {
-			text += line;
-			continue;
-		}
 		text += theme.fg("muted", line);
+	}
+	return text;
+}
+
+export function formatCompletionRoleResultText(
+	theme: any,
+	details: InlineRunningDetails & {
+		status?: string;
+		exitCode?: number;
+		stderr?: string;
+		reportFields?: Record<string, string>;
+		transcription?: { appended?: string[]; skipped?: string[]; errors?: string[] };
+	},
+	options: { expanded: boolean; isError: boolean; bodyText?: string },
+): string {
+	const lines = buildCompletionRoleDoneLines(details, options);
+	let text = formatInlineRunningText(theme, lines);
+	if (options.expanded && options.bodyText) {
+		text += `\n\n${options.bodyText}`;
+	}
+	if (options.expanded && details.stderr) {
+		text += `\n${theme.fg("error", details.stderr)}`;
 	}
 	return text;
 }

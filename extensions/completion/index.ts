@@ -55,7 +55,7 @@ import {
 	buildInlineRunningLines,
 	cloneLiveRoleActivity,
 	createLiveRoleActivity,
-	formatElapsed,
+	formatCompletionRoleResultText,
 	formatInlineRunningText,
 	nowMs,
 	refreshCompletionStatus,
@@ -1531,54 +1531,15 @@ export default function completionExtension(pi: ExtensionAPI) {
 				updatedAt?: number;
 			};
 			if (isPartial) {
-				const lines = buildInlineRunningLines(details);
+				const lines = buildInlineRunningLines(details, { mode: expanded ? "expanded" : "compact" });
 				return new Text(formatInlineRunningText(theme, lines), 0, 0);
 			}
-			const role = details.role ?? "completion-role";
-			const ok = details.status === "ok" && !result.isError;
-			let text = `${theme.fg(ok ? "success" : "error", ok ? "done" : "error")} ${theme.fg("toolTitle", theme.bold(role))}`;
-			if (details.startedAt !== undefined) text += `\n${theme.fg("muted", `elapsed: ${formatElapsed(nowMs() - details.startedAt)}`)}`;
-			if (details.toolActivity) text += `\n${theme.fg("toolOutput", `tool: ${details.toolActivity}`)}`;
-			if (details.progress) text += `\n${theme.fg("toolOutput", `progress: ${details.progress}`)}`;
-			else if (details.assistantSummary) text += `\nassistant: ${details.assistantSummary}`;
-			if (details.rationale) text += `\n${theme.fg("muted", `rationale: ${details.rationale}`)}`;
-			if (details.nextStep) text += `\n${theme.fg("muted", `next: ${details.nextStep}`)}`;
-			if (details.verifying) text += `\n${theme.fg("muted", `verifying: ${details.verifying}`)}`;
-			if (details.stateDeltas?.length) {
-				for (const delta of details.stateDeltas.slice(-4)) text += `\n${theme.fg("muted", `state-delta: ${delta}`)}`;
-			}
-			if (details.transcription?.appended?.length) {
-				text += `\n${theme.fg("success", `transcribed: ${details.transcription.appended.join(", ")}`)}`;
-			}
-			if (details.transcription?.skipped?.length && expanded) {
-				text += `\n${theme.fg("muted", `skipped: ${details.transcription.skipped.join(" | ")}`)}`;
-			}
-			if (details.transcription?.errors?.length) {
-				text += `\n${theme.fg("warning", `warnings: ${details.transcription.errors.join(" | ")}`)}`;
-			}
-			const reportFields = details.reportFields ?? {};
-			const summaryKeys = [
-				"MISSION ANCHOR",
-				"Remaining contract IDs",
-				"Next role to invoke",
-				"Reconciliation decision",
-				"Can the project stop now",
-				"Acceptable as-is",
-				"Plan adjustment required",
-			];
-			for (const key of summaryKeys) {
-				const value = reportFields[key];
-				if (!value) continue;
-				text += `\n${theme.fg("muted", `${key}: `)}${value}`;
-			}
 			const body = result.content.find((item) => item.type === "text");
-			if (expanded && body?.type === "text") {
-				text += `\n\n${body.text}`;
-			} else if (!expanded && body?.type === "text") {
-				const preview = body.text.split("\n").slice(0, 4).join("\n");
-				text += `\n${theme.fg("muted", preview)}`;
-			}
-			if (details.stderr && expanded) text += `\n${theme.fg("error", details.stderr)}`;
+			const text = formatCompletionRoleResultText(theme, details, {
+				expanded,
+				isError: Boolean(result.isError),
+				bodyText: expanded && body?.type === "text" ? body.text : undefined,
+			});
 			return new Text(text, 0, 0);
 		},
 	});

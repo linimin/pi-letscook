@@ -316,39 +316,45 @@ export function buildContextProposalAnalystPrompt(projectName: string, discussio
 
 function buildCookStartupProgressLines(
 	activity: LiveRoleActivity,
-	buildInlineRunningLines: (details: {
-		role?: string;
-		startedAt?: number;
-		updatedAt?: number;
-		currentAction?: string;
-		toolActivity?: string;
-		toolRecentActivity?: string[];
-		recentActivity?: string[];
-		assistantSummary?: string;
-		progress?: string;
-		rationale?: string;
-		nextStep?: string;
-		verifying?: string;
-		stateDeltas?: string[];
-	}) => string[],
+	buildInlineRunningLines: (
+		details: {
+			role?: string;
+			startedAt?: number;
+			updatedAt?: number;
+			currentAction?: string;
+			toolActivity?: string;
+			toolRecentActivity?: string[];
+			recentActivity?: string[];
+			assistantSummary?: string;
+			progress?: string;
+			rationale?: string;
+			nextStep?: string;
+			verifying?: string;
+			stateDeltas?: string[];
+		},
+		options?: { mode?: "compact" | "expanded" },
+	) => string[],
 	footerLine: string,
 ): string[] {
 	return [
-		...buildInlineRunningLines({
-			role: activity.role,
-			startedAt: activity.startedAt,
-			updatedAt: activity.updatedAt,
-			currentAction: activity.currentAction,
-			toolActivity: activity.toolActivity,
-			toolRecentActivity: activity.toolRecentActivity,
-			recentActivity: activity.recentActivity,
-			assistantSummary: activity.assistantSummary,
-			progress: activity.progress,
-			rationale: activity.rationale,
-			nextStep: activity.nextStep,
-			verifying: activity.verifying,
-			stateDeltas: activity.stateDeltas,
-		}),
+		...buildInlineRunningLines(
+			{
+				role: activity.role,
+				startedAt: activity.startedAt,
+				updatedAt: activity.updatedAt,
+				currentAction: activity.currentAction,
+				toolActivity: activity.toolActivity,
+				toolRecentActivity: activity.toolRecentActivity,
+				recentActivity: activity.recentActivity,
+				assistantSummary: activity.assistantSummary,
+				progress: activity.progress,
+				rationale: activity.rationale,
+				nextStep: activity.nextStep,
+				verifying: activity.verifying,
+				stateDeltas: activity.stateDeltas,
+			},
+			{ mode: "expanded" },
+		),
 		"",
 		footerLine,
 	];
@@ -356,42 +362,48 @@ function buildCookStartupProgressLines(
 
 export function contextProposalAnalystProgressLines(
 	activity: LiveRoleActivity,
-	buildInlineRunningLines: (details: {
-		role?: string;
-		startedAt?: number;
-		updatedAt?: number;
-		currentAction?: string;
-		toolActivity?: string;
-		toolRecentActivity?: string[];
-		recentActivity?: string[];
-		assistantSummary?: string;
-		progress?: string;
-		rationale?: string;
-		nextStep?: string;
-		verifying?: string;
-		stateDeltas?: string[];
-	}) => string[],
+	buildInlineRunningLines: (
+		details: {
+			role?: string;
+			startedAt?: number;
+			updatedAt?: number;
+			currentAction?: string;
+			toolActivity?: string;
+			toolRecentActivity?: string[];
+			recentActivity?: string[];
+			assistantSummary?: string;
+			progress?: string;
+			rationale?: string;
+			nextStep?: string;
+			verifying?: string;
+			stateDeltas?: string[];
+		},
+		options?: { mode?: "compact" | "expanded" },
+	) => string[],
 ): string[] {
 	return buildCookStartupProgressLines(activity, buildInlineRunningLines, "This step only prepares a proposal for confirmation.");
 }
 
 export function primaryAgentHandoffProgressLines(
 	activity: LiveRoleActivity,
-	buildInlineRunningLines: (details: {
-		role?: string;
-		startedAt?: number;
-		updatedAt?: number;
-		currentAction?: string;
-		toolActivity?: string;
-		toolRecentActivity?: string[];
-		recentActivity?: string[];
-		assistantSummary?: string;
-		progress?: string;
-		rationale?: string;
-		nextStep?: string;
-		verifying?: string;
-		stateDeltas?: string[];
-	}) => string[],
+	buildInlineRunningLines: (
+		details: {
+			role?: string;
+			startedAt?: number;
+			updatedAt?: number;
+			currentAction?: string;
+			toolActivity?: string;
+			toolRecentActivity?: string[];
+			recentActivity?: string[];
+			assistantSummary?: string;
+			progress?: string;
+			rationale?: string;
+			nextStep?: string;
+			verifying?: string;
+			stateDeltas?: string[];
+		},
+		options?: { mode?: "compact" | "expanded" },
+	) => string[],
 ): string[] {
 	return buildCookStartupProgressLines(activity, buildInlineRunningLines, "This step only synthesizes the startup plan for Start/Cancel confirmation.");
 }
