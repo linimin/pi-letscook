@@ -520,7 +520,7 @@ export function buildSystemReminder(args: {
 }): string {
 	const lines = [
 		"Completion workflow detected.",
-		"Canonical truth lives in .agent/current/state.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json.",
+		"Canonical truth lives in .agent/current/{state,plan,active-slice,verification-evidence}.json.",
 		`Mission anchor: ${args.missionAnchor ?? "(unknown)"}`,
 		`Task type: ${args.taskType ?? "(missing)"}`,
 		`Evaluation profile: ${args.evaluationProfile ?? "(missing)"}`,
@@ -529,13 +529,14 @@ export function buildSystemReminder(args: {
 		`Next mandatory role: ${args.nextMandatoryRole ?? "unknown"}`,
 		`Next mandatory action: ${args.nextMandatoryAction ?? "unknown"}`,
 		`Remaining slice count: ${args.remainingSliceCount}`,
-		"Re-read canonical .agent state after compaction or recovery instead of relying on conversation memory.",
+		"After compaction or recovery, re-read canonical .agent state instead of relying on memory.",
 		"If continuation_policy == continue, dispatch the next mandatory role directly.",
-		"Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.",
-		"If canonical state is stale, invalid, ambiguous, or missing, route to completion-regrounder.",
+		"If requires_reground == true and next_mandatory_role == completion-regrounder, auto-dispatch regrounder unless canonical state proves a real external blocker.",
+		"Stop only when continuation_policy is await_user_input, blocked, paused, or done.",
+		"If canonical state is stale, invalid, ambiguous, or missing, use completion-regrounder.",
 	];
 	if (args.exactActiveContract) {
-		lines.push("Selected/in-progress/committed/done .agent/current/active-slice.json is the canonical implementation contract.");
+		lines.push("For selected/in-progress/committed/done slices, .agent/current/active-slice.json is the canonical contract.");
 		lines.push(`Active slice contract drift: ${args.activeContractDrift}`);
 	}
 	if (args.activePriorityLine) lines.push(args.activePriorityLine);
@@ -543,13 +544,13 @@ export function buildSystemReminder(args: {
 	if (args.activeWhyNowLine) lines.push(args.activeWhyNowLine);
 	else if (args.activeWhyNow) lines.push(`Active slice why_now: ${args.activeWhyNow}`);
 	if (args.implementationSurfacesLine) lines.push(args.implementationSurfacesLine);
-	else if (args.implementationSurfaces.length > 0) lines.push(`Active implementation surfaces: ${args.implementationSurfaces.join(", ")}`);
+	else if (args.implementationSurfaces.length > 0) lines.push(`Implementation surfaces: ${args.implementationSurfaces.join(", ")}`);
 	if (args.verificationCommandsLine) lines.push(args.verificationCommandsLine);
-	else if (args.verificationCommands.length > 0) lines.push(`Active verification commands: ${args.verificationCommands.join(" | ")}`);
+	else if (args.verificationCommands.length > 0) lines.push(`Verification commands: ${args.verificationCommands.join(" | ")}`);
 	if (args.startupVerifierPostureLine) lines.push(args.startupVerifierPostureLine);
-	lines.push(`Verification evidence artifact: ${args.evidence.path} (${args.evidence.status})`);
-	lines.push(`Verification evidence structured: ${args.evidence.structuredSummary}`);
-	lines.push(`Verification evidence summary: ${args.evidence.summary}`);
+	lines.push(`Evidence artifact: ${args.evidence.path} (${args.evidence.status})`);
+	lines.push(`Evidence structured: ${args.evidence.structuredSummary}`);
+	lines.push(`Evidence summary: ${args.evidence.summary}`);
 	return lines.join(" ");
 }
 
@@ -667,7 +668,9 @@ export function buildResumeCapsule(args: {
 		"- Invoke completion-regrounder before continuing when next_mandatory_role or next_mandatory_action is unknown or ambiguous.",
 		"- Invoke completion-regrounder before continuing when active_slice_matches_plan is no, active_slice_contract_drift_fields is not none, or implementer_handoff_snapshot is missing_or_unclear.",
 		"- If continuation_policy is continue, do not stop after a slice or ask whether to continue. Dispatch the next mandatory role directly.",
+		"- requires_reground == true with next_mandatory_role == completion-regrounder is still a continue-state handoff when canonical reconciliation can proceed safely without new user input.",
 		"- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.",
+		"- Reserve blocked for cases where canonical reconciliation still needs user input, conflict resolution, ownership clarification, or another external unblock action.",
 		"- When canonical state is stopped (await_user_input, blocked, or paused), rerun /cook or /cook resume to continue, /cook park to record a parked paused posture for ordinary direct edits, or /cook cancel to close the workflow.",
 		"- If you are completion-implementer after compaction, resume from the canonical active-slice implementation contract instead of asking the user to resend the original caller payload.",
 		"- Do not replace canonical .agent state with summary inference.",

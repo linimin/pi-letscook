@@ -23,6 +23,7 @@ Read current repo truth plus these workflow inputs:
 - Optional startup verifier-posture fields are advisory only; prefer a `verifier_scaffolding` first slice when deterministic verifier readiness is missing and repo truth does not expose a safer prerequisite.
 - Revalidate every slice's `acceptance_criteria`; reopen any `done` slice whose criteria no longer hold.
 - If canonical state is ambiguous, stale, contradictory, or recovery requires it, keep routing through `completion-regrounder` rather than guessing.
+- When implementer-raised roadmap drift arrives as `requires_reground = true` with `continuation_policy = continue`, treat that as a normal auto-chained reconciliation entrypoint; switch to `blocked` only if canonical reconciliation still cannot proceed safely without external unblock action.
 - Manage `current_stop_wave_id` truthfully when stop evaluation restarts on the same HEAD.
 - If unrelated dirty tracked files can be isolated safely, auto-preserve them with a reversible stash-plus-note flow under `.agent/current/tmp/dirty-worktree-autostash.json`.
 - If overlap or stash/restore risk makes isolation unsafe, reopen or continue the latest slice and route back to `completion-implementer`.

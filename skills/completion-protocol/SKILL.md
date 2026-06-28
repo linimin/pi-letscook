@@ -28,6 +28,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - Every slice in `plan.json` must have non-empty `acceptance_criteria` — concrete, verifiable conditions that define done. A slice without acceptance criteria is invalid and must not be selected.
 - Acceptance criteria are immutable after lock except for removing a criterion already satisfied with evidence or adding a missing criterion discovered during implementation.
 - If implementation discovers roadmap-level drift — such as invalid slice boundaries, missing prerequisite slices, dependency reordering, or a blocker that changes the current slice contract — the implementer must not silently redesign the plan. It must report the new truth and return control for canonical reconciliation by `completion-regrounder`.
+- When that roadmap-level drift can be canonically reconciled without new user input or another unsafe external unblock step, keep `requires_reground = true`, set `next_mandatory_role = completion-regrounder`, and keep `continuation_policy = continue` so the workflow driver auto-dispatches re-grounding instead of stopping.
 - During re-ground, evaluate each slice's `acceptance_criteria` against current repo truth and update `status` and `evidence` accordingly.
 - A slice may only transition to `done` when every acceptance criterion is satisfied with proof in `evidence`.
 - Run exactly one implementation slice at a time.
@@ -45,6 +46,7 @@ This skill defines shared protocol facts only. Role-specific behavior belongs in
 - `continuation_policy == continue` means the workflow root must not stop after a slice or ask the user whether to continue. It must dispatch the next mandatory role directly.
 - `continuation_policy == await_user_input` means the workflow root must ask only for the exact missing input and then stop.
 - `continuation_policy == blocked` means the workflow root must report the blocker and stop.
+- Reserve `continuation_policy == blocked` for cases where canonical reconciliation cannot proceed safely without user input, conflict resolution, ownership clarification, or another external unblock action. `requires_reground = true` by itself is not a stop condition.
 - `continuation_policy == paused` means the user explicitly paused the workflow.
 - `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
 - When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, use `/cook park` to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.

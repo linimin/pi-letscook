@@ -141,11 +141,13 @@ Required fields:
 Rules:
 
 1. `continuation_policy == continue` means the workflow root must keep advancing and must not stop after a slice to ask whether to continue.
-2. `continuation_policy == await_user_input` means the workflow root must ask only for the exact missing input and then stop.
-3. `continuation_policy == blocked` means the workflow root must report the blocker and stop.
-4. `continuation_policy == paused` means the user explicitly paused the workflow.
-5. `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
-6. When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, use `/cook park` to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.
+2. `requires_reground == true` with `next_mandatory_role == completion-regrounder` still belongs under `continuation_policy == continue` when canonical reconciliation can proceed without new user input or another unsafe external unblock step.
+3. `continuation_policy == await_user_input` means the workflow root must ask only for the exact missing input and then stop.
+4. `continuation_policy == blocked` means the workflow root must report the blocker and stop.
+5. Reserve `continuation_policy == blocked` for cases where canonical reconciliation cannot proceed safely without user input, conflict resolution, ownership clarification, or another external unblock action.
+6. `continuation_policy == paused` means the user explicitly paused the workflow.
+7. `continuation_policy == done` means canonical final stop reconciliation is complete and the workflow may stop.
+8. When canonical state is stopped (`await_user_input`, `blocked`, or `paused`), rerun `/cook` or `/cook resume` to continue from canonical state, use `/cook park` to record a parked paused posture with `requires_reground = true` and a cleared active-slice handoff before ordinary direct edits, or use `/cook cancel` to close the workflow and disable stale hard locks / auto-resume.
 
 After a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory before control returns. Treat disappearance of `.agent/current/**` and `.agent/verify_completion_*.sh` after closure as expected cleanup, not as a missing tracked-file anomaly, and do not recreate local helper files merely to narrate final status.
 

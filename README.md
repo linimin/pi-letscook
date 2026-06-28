@@ -37,6 +37,8 @@ Then run `/reload` in Pi.
 5. Review the startup brief and choose **Start** or **Cancel**.
 6. Later, run `/cook` or `/cook resume` to continue from canonical state, `/cook park` to park a stopped workflow for ordinary direct edits, or `/cook cancel` to close a stopped workflow.
 
+Routine internal re-grounding does not usually need a manual resume step: when canonical state can keep moving safely, `requires_reground = true` stays under `continuation_policy = continue` and the driver auto-dispatches `completion-regrounder`.
+
 ```text
 /cook
 /cook tighten the login redirect fix and land the missing tests
@@ -87,6 +89,7 @@ Important behavior:
 - `/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation
 - startup and next-round entry stay confirm-first, following same-entry primary-agent handoff synthesis -> fail closed
 - active workflows resume from canonical `.agent/**` state unless a concrete replacement proposal is available from primary-agent synthesis in the same `/cook` entry
+- routine internal re-grounding is not a stopped state by itself: when canonical reconciliation can continue safely, `requires_reground = true` stays under `continuation_policy = continue` and the driver auto-dispatches `completion-regrounder`
 - stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow
 - explicit slash commands other than `/cook` continue normally in the main chat
 - ordinary main-chat discussion may clarify, propose, or directly implement repo changes without entering workflow mode

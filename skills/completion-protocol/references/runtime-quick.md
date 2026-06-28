@@ -39,8 +39,9 @@ Read current repo truth plus these canonical workflow inputs as needed:
 ## Continuation and recovery
 
 - `continuation_policy = continue` means the driver keeps dispatching mandatory roles.
+- `requires_reground = true` with `next_mandatory_role = completion-regrounder` still belongs under `continuation_policy = continue` when canonical reconciliation can proceed safely without new user input.
 - `await_user_input` means ask only for the exact missing input and then stop.
-- `blocked` means report the blocker and stop.
+- `blocked` means report the blocker and stop; reserve it for cases that still need user input or another external unblock step.
 - `paused` means the user explicitly paused the workflow.
 - `done` means final reconciliation is complete.
 - Stopped workflows resume with `/cook` or `/cook resume`; `/cook park` unlocks ordinary direct edits and forces reground; `/cook cancel` closes the workflow.

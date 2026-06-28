@@ -24,6 +24,7 @@ Read current repo truth plus these canonical workflow inputs as needed:
 - Use `completion-regrounder` for canonical reconciliation, slice selection, post-review/audit reconciliation, and final stop reconciliation.
 - Use `completion_role` for all completion-* role work. Do not directly implement tracked product changes yourself while workflow is active.
 - `continuation_policy = continue` means keep dispatching mandatory roles.
+- `requires_reground = true` plus `next_mandatory_role = completion-regrounder` is still a continue-state handoff when canonical reconciliation can proceed without new user input.
 - Stop only when canonical state is `await_user_input`, `blocked`, `paused`, or `done`.
 - If canonical state is missing, stale, contradictory, or ambiguous, route to `completion-regrounder`.
 - If `.agent/` disappears after canonical state reaches `done` or `cancelled`, treat that as expected cleanup.

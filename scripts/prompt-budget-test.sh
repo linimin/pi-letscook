@@ -437,7 +437,7 @@ text_checks = [
     ('primary_handoff_prompt', primary, 700),
     ('buildSystemReminder_source', system_source, 3200),
     ('shared_runtime_quick_reference', shared_runtime_quick_path.read_text().strip(), 4200),
-    ('completion_full_reference', completion_reference_path.read_text().strip(), 18600),
+    ('completion_full_reference', completion_reference_path.read_text().strip(), 19100),
 ]
 for name, text, limit in text_checks:
     size = len(text)

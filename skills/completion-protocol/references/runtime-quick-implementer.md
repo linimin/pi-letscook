@@ -23,3 +23,5 @@ Read these canonical inputs before acting:
 - Only this role edits tracked product files for the slice and appends exactly one `implemented` record after the commit.
 - If unrelated dirty tracked files can be isolated safely, auto-preserve them with a reversible stash-plus-note flow under `.agent/current/tmp/dirty-worktree-autostash.json`.
 - If roadmap-level drift appears, report it and hand control back to `completion-regrounder` instead of redesigning the plan silently.
+- When that drift can be reconciled canonically without new user input, keep `requires_reground = true`, set `next_mandatory_role = completion-regrounder`, and keep `continuation_policy = continue` so the driver auto-dispatches re-grounding.
+- Use `continuation_policy = blocked` only when canonical reconciliation cannot proceed safely without user input or another external unblock step.

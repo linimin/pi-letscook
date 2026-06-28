@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- clarified completion drift handling so routine implementer-discovered re-ground now stays under `continuation_policy = continue` with `requires_reground = true` and auto-dispatches `completion-regrounder`, while `blocked` remains reserved for true external or unsafe unblock cases
+- added prompt/protocol/docs/test parity for the auto-reground continuation rule so the workflow driver no longer implies that every re-ground must stop for a manual `/cook resume`
+
 ## 0.1.91
 
 ### Added

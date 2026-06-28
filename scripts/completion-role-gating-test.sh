@@ -48,6 +48,9 @@ assertIncludes('extensions/completion/policy-guards.ts', 'workflowHardLockActive
 assertIncludes('extensions/completion/policy-guards.ts', 'while the completion workflow is hard-locked.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'export function buildStoppedWorkflowBoundaryReminder(');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Supported same-repo controls are: rerun /cook or /cook resume to continue from canonical state; run /cook park');
+assertIncludes('extensions/completion/prompt-surfaces.ts', 'If requires_reground == true and next_mandatory_role == completion-regrounder, auto-dispatch regrounder unless canonical state proves a real external blocker.');
+assertIncludes('extensions/completion/index.ts', 'If requires_reground == true and next_mandatory_role == completion-regrounder, treat that as a continue-state auto-reground handoff unless canonical state also proves a real external blocker.');
+assertIncludes('README.md', 'routine internal re-grounding is not a stopped state by itself');
 assertIncludes('CHANGELOG.md', 'added explicit stopped-workflow `/cook resume`, `/cook park`, and `/cook cancel` controls');
 
 assertNotIncludes('extensions/completion/index.ts', 'return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);');
@@ -104,6 +107,9 @@ write_stopped_fixture() {
   local current_phase="$3"
   local workflow_entry_status="${4:-active}"
   local continuation_reason="${5:-Stopped workflow regression fixture.}"
+  local requires_reground="${6:-__default__}"
+  local next_mandatory_role="${7:-__default__}"
+  local next_mandatory_action="${8:-Resume or park the stopped workflow fixture.}"
 
   rm -rf "$repo"
   mkdir -p "$repo"
@@ -117,7 +123,7 @@ write_stopped_fixture() {
   local basis_sha
   basis_sha="$(git -C "$repo" rev-parse HEAD)"
 
-  python3 - "$repo" "$basis_sha" "$continuation_policy" "$current_phase" "$workflow_entry_status" "$continuation_reason" <<'PY'
+  python3 - "$repo" "$basis_sha" "$continuation_policy" "$current_phase" "$workflow_entry_status" "$continuation_reason" "$requires_reground" "$next_mandatory_role" "$next_mandatory_action" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -128,6 +134,19 @@ continuation_policy = sys.argv[3]
 current_phase = sys.argv[4]
 workflow_entry_status = sys.argv[5]
 continuation_reason = sys.argv[6]
+requires_reground_raw = sys.argv[7]
+next_mandatory_role_raw = sys.argv[8]
+next_mandatory_action = sys.argv[9]
+
+if requires_reground_raw == '__default__':
+    requires_reground = workflow_entry_status != 'active'
+else:
+    requires_reground = requires_reground_raw.lower() == 'true'
+
+if next_mandatory_role_raw == '__default__':
+    next_mandatory_role = 'completion-regrounder' if workflow_entry_status != 'active' else 'completion-implementer'
+else:
+    next_mandatory_role = next_mandatory_role_raw
 current_dir = repo / '.agent' / 'current'
 current_dir.mkdir(parents=True, exist_ok=True)
 (current_dir / 'tmp').mkdir(parents=True, exist_ok=True)
@@ -183,14 +202,14 @@ state = {
     'project_done': False,
     'task_type': 'completion-workflow',
     'evaluation_profile': 'completion-rubric-v1',
-    'requires_reground': workflow_entry_status != 'active',
+    'requires_reground': requires_reground,
     'slices_since_last_reground': 0,
     'remaining_release_blockers': 1,
     'remaining_high_value_gaps': 1,
     'unsatisfied_contract_ids': [contract_id],
     'release_blocker_ids': [contract_id],
-    'next_mandatory_action': 'Resume or park the stopped workflow fixture.',
-    'next_mandatory_role': 'completion-regrounder' if workflow_entry_status != 'active' else 'completion-implementer',
+    'next_mandatory_action': next_mandatory_action,
+    'next_mandatory_role': next_mandatory_role,
     'remaining_stop_judges': 2,
     'current_stop_wave_id': 0,
     'last_reground_at': '2026-06-11T00:00:00Z',
@@ -268,6 +287,38 @@ evidence = {
 (current_dir / 'stop-check-history.jsonl').write_text('')
 PY
 }
+
+ACTIVE_REGROUND_ROOT="$TMPDIR/active-reground-repo"
+write_stopped_fixture "$ACTIVE_REGROUND_ROOT" continue reground active 'Active auto-reground workflow regression fixture.' true completion-regrounder 'Reconcile canonical state from current repo truth before continuing the active auto-reground fixture.'
+
+ACTIVE_REGROUND_REMINDER="$TMPDIR/active-reground-reminder.txt"
+ACTIVE_REGROUND_AUTO_RESUME="$TMPDIR/active-reground-auto-resume.txt"
+(
+  cd "$ACTIVE_REGROUND_ROOT"
+  PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+  PI_COMPLETION_TEST_COOK_HANDOFF_REMINDER_PATH="$ACTIVE_REGROUND_REMINDER" \
+  PI_COMPLETION_TEST_AUTO_CONTINUE_ON_SESSION_START=1 \
+  PI_COMPLETION_TEST_AUTO_CONTINUE_PROMPT_PATH="$ACTIVE_REGROUND_AUTO_RESUME" \
+  pi -e "$ROOT" -p 'Please keep going on the workflow.' \
+    >"$TMPDIR/pi-active-reground-ordinary.out" 2>"$TMPDIR/pi-active-reground-ordinary.err"
+)
+
+python3 - "$ACTIVE_REGROUND_REMINDER" "$ACTIVE_REGROUND_AUTO_RESUME" "$TMPDIR/pi-active-reground-ordinary.out" "$TMPDIR/pi-active-reground-ordinary.err" <<'PY'
+import sys
+from pathlib import Path
+
+reminder = Path(sys.argv[1])
+auto_resume = Path(sys.argv[2])
+output = Path(sys.argv[3]).read_text() + Path(sys.argv[4]).read_text()
+if reminder.exists():
+    text = reminder.read_text()
+    assert 'currently stopped but still canonically active' not in text, text
+assert auto_resume.exists(), 'active continue-state auto-reground should still auto-resume ordinary follow-up'
+prompt = auto_resume.read_text()
+assert 'Resume the completion workflow from canonical state.' in prompt, prompt
+assert 'If requires_reground == true and next_mandatory_role == completion-regrounder, treat that as a continue-state auto-reground handoff unless canonical state also proves a real external blocker.' in prompt, prompt
+assert 'Skipped completion workflow auto-resume prompt (test mode)' in output, output
+PY
 
 BLOCKED_ROOT="$TMPDIR/blocked-repo"
 write_stopped_fixture "$BLOCKED_ROOT" blocked blocked active 'Blocked stopped-workflow regression fixture.'
