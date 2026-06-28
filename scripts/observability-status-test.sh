@@ -63,8 +63,8 @@ elif mode == 'live':
     widget = data['widgetLines']
     assert widget == [], widget
     live_details = data['liveDetailsLines']
-    assert live_details[0] == 'running completion role completion-implementer', live_details
-    assert 'tool: read .agent/current/state.json' in live_details, live_details
+    assert live_details[0] == 'completion-implementer · 00:01 · active', live_details
+    assert 'now: read .agent/current/state.json' in live_details, live_details
 elif mode == 'waiting':
     assert data['liveState'] == 'waiting', data
     assert data['liveIdleMs'] == 20000, data

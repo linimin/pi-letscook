@@ -98,9 +98,14 @@ function assertIncludes(file, snippet) {
     'later helper stages should keep the same top-level tool preview',
   );
 
-  const lines = buildInlineRunningLines(activity);
-  assert.equal(lines[0], 'running completion role completion-implementer');
-  assert.ok(lines.includes('tool: helper scout: Inspect extensions/completion/index.ts'), lines);
+  const lines = buildInlineRunningLines({
+    role: activity.role,
+    startedAt: activity.startedAt,
+    updatedAt: activity.updatedAt,
+    toolActivity: activity.toolActivity,
+  });
+  assert.equal(lines[0], 'completion-implementer · 00:00 · active');
+  assert.ok(lines.some((line) => line === 'now: helper scout: Inspect extensions/completion/index.ts'), lines);
   assert.ok(!lines.some((line) => line.includes('stage: read-source')), lines);
   assert.ok(!lines.some((line) => line.includes('completion_helper_read')), lines);
 
@@ -128,7 +133,7 @@ function assertIncludes(file, snippet) {
   assert.equal(surface.livePreview, 'helper scout: Inspect extensions/completion/index.ts');
   assert.equal(surface.liveProgress, undefined);
   assert.deepEqual(surface.widgetLines, [], 'nested helper progress must not create a second top-level widget');
-  assert.ok(surface.liveDetailsLines.some((line) => line.includes('tool: helper scout: Inspect extensions/completion/index.ts')), surface.liveDetailsLines);
+  assert.ok(surface.liveDetailsLines.some((line) => line === 'now: helper scout: Inspect extensions/completion/index.ts'), surface.liveDetailsLines);
   assert.ok(!surface.liveDetailsLines.some((line) => line.includes('stage: read-source')), surface.liveDetailsLines);
   assert.ok(!surface.liveDetailsLines.some((line) => line.includes('completion_helper_read')), surface.liveDetailsLines);
 
