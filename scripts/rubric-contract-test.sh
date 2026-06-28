@@ -67,15 +67,15 @@ for (const file of [
   }
 }
 
-assertIncludes('README.md', '## Structured evaluation rubrics');
-assertIncludes('README.md', '- `task_type: completion-workflow`');
-assertIncludes('README.md', '- `evaluation_profile: completion-rubric-v1`');
-assertIncludes('README.md', 'kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.');
-assertIncludes('README.md', 'Reviewer, auditor, and stop-judge dispatch/reminder surfaces now thread canonical `evaluation_profile` plus direct-read pointers for the active-slice implementation contract and verification evidence');
-assertIncludes('README.md', 'Canonical reviewer/auditor/stop-judge transcription now fails closed on malformed rubric-bearing reports');
-assertIncludes('README.md', 'npm run rubric-contract-test`, which now exercises reviewer, auditor, and stop-judge transcription paths');
+assertIncludes('docs/PROTOCOL.md', '## Structured Evaluation Rubrics');
+assertIncludes('docs/PROTOCOL.md', '- `task_type: completion-workflow`');
+assertIncludes('docs/PROTOCOL.md', '- `evaluation_profile: completion-rubric-v1`');
+assertIncludes('docs/PROTOCOL.md', 'kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.');
+assertIncludes('docs/PROTOCOL.md', 'Reviewer, auditor, and stop-judge dispatch/reminder surfaces now thread canonical `evaluation_profile` plus direct-read pointers for the active-slice implementation contract and verification evidence');
+assertIncludes('docs/PROTOCOL.md', 'Canonical reviewer/auditor/stop-judge transcription now fails closed on malformed rubric-bearing reports');
+assertIncludes('docs/PROTOCOL.md', 'npm run rubric-contract-test`, which now exercises reviewer, auditor, and stop-judge transcription paths');
 for (const dimension of rubricDimensions) {
-  assertIncludes('README.md', `- \`${dimension}\``);
+  assertIncludes('docs/PROTOCOL.md', `- \`${dimension}\``);
 }
 
 assertIncludes('CHANGELOG.md', 'shared structured evaluation-rubric contract');

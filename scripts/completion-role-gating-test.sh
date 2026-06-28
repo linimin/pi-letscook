@@ -50,7 +50,7 @@ assertIncludes('extensions/completion/prompt-surfaces.ts', 'export function buil
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'Supported same-repo controls are: rerun /cook or /cook resume to continue from canonical state; run /cook park');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'If requires_reground == true and next_mandatory_role == completion-regrounder, auto-dispatch regrounder unless canonical state proves a real external blocker.');
 assertIncludes('extensions/completion/index.ts', 'If requires_reground == true and next_mandatory_role == completion-regrounder, treat that as a continue-state auto-reground handoff unless canonical state also proves a real external blocker.');
-assertIncludes('README.md', 'routine internal re-grounding is not a stopped state by itself');
+assertIncludes('docs/PROTOCOL.md', 'routine internal re-grounding is not a stopped state by itself');
 assertIncludes('CHANGELOG.md', 'added explicit stopped-workflow `/cook resume`, `/cook park`, and `/cook cancel` controls');
 
 assertNotIncludes('extensions/completion/index.ts', 'return hasCompletionRoutingActivation(snapshot) || hasActiveWorkflowEntry(snapshot);');
