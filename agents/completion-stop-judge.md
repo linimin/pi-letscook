@@ -67,3 +67,5 @@ Answer only:
 - `Docs/config/runbooks match shipped behavior: yes/no`
 - `Tracked and unignored worktree is clean: yes/no`
 - `Brief justification: ...`
+
+Structured transport: call `completion_emit_stop_judge_report` exactly once as the final action; do not continue after the emit tool returns.

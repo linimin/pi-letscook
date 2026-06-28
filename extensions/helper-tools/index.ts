@@ -4,6 +4,22 @@ import * as path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "typebox";
 import { buildHelperProxyToolDefinitions } from "../completion/helper-proxy-tools.ts";
+import {
+	COMPLETION_HELPER_CRITIC_CONTRACT_ID,
+	COMPLETION_HELPER_SCOUT_CONTRACT_ID,
+	HELPER_EMIT_CRITIC_TOOL,
+	HELPER_EMIT_SCOUT_TOOL,
+} from "../completion/structured-contracts.ts";
+
+const HelperEmitSchema = Type.Object(
+	{
+		summary: Type.String(),
+		evidence: Type.Array(Type.String()),
+		paths: Type.Array(Type.String()),
+		open_questions: Type.Array(Type.String()),
+	},
+	{ additionalProperties: false },
+);
 
 type JsonRecord = Record<string, unknown>;
 
@@ -182,4 +198,47 @@ export default function helperToolsExtension(pi: ExtensionAPI) {
 	for (const tool of buildHelperProxyToolDefinitions(Type)) {
 		pi.registerTool(tool as any);
 	}
+
+	const buildHelperEmitTool = (args: {
+		name: string;
+		label: string;
+		contractId: string;
+	}) =>
+		pi.registerTool({
+			name: args.name,
+			label: args.label,
+			description: `Emit structured ${args.label} result as the terminating helper output.`,
+			terminate: true,
+			promptSnippet: `Call ${args.name} once as the final helper action.`,
+			promptGuidelines: [
+				`Use ${args.name} exactly once after gathering evidence.`,
+				"The tool result details are authoritative; do not continue after the emit tool returns.",
+			],
+			parameters: HelperEmitSchema,
+			async execute(_toolCallId, params) {
+				const payload = {
+					contractId: args.contractId,
+					schemaVersion: 1,
+					summary: params.summary,
+					evidence: params.evidence,
+					paths: params.paths,
+					open_questions: params.open_questions,
+				};
+				return {
+					content: [{ type: "text" as const, text: params.summary }],
+					details: payload,
+				};
+			},
+		});
+
+	buildHelperEmitTool({
+		name: HELPER_EMIT_SCOUT_TOOL,
+		label: "Scout Result",
+		contractId: COMPLETION_HELPER_SCOUT_CONTRACT_ID,
+	});
+	buildHelperEmitTool({
+		name: HELPER_EMIT_CRITIC_TOOL,
+		label: "Critic Result",
+		contractId: COMPLETION_HELPER_CRITIC_CONTRACT_ID,
+	});
 }

@@ -363,7 +363,7 @@ function buildRoleReportRepairPrompt(role, errors) {
   return undefined;
 }
 
-async function transcribeCanonicalRoleReport({ role, output, reportFields = parseReportFields(output), snapshotFiles, headSha, sliceId, recordedAt = Date.now() }) {
+async function transcribeCanonicalRoleReport({ role, output, reportFields = parseReportFields(output), structuredReport, snapshotFiles, headSha, sliceId, recordedAt = Date.now() }) {
   const result = { appended: [], skipped: [], errors: [] };
 
   if (!snapshotFiles || !headSha) {
@@ -403,6 +403,7 @@ async function transcribeCanonicalRoleReport({ role, output, reportFields = pars
       role,
       report_fields: reportFields,
       report_text: output.trim(),
+      ...(structuredReport ? { structured_report: structuredReport } : {}),
     });
     result.appended.push(`${type}:${sliceId}`);
     return result;
@@ -442,6 +443,7 @@ async function transcribeCanonicalRoleReport({ role, output, reportFields = pars
       role,
       report_fields: reportFields,
       report_text: output.trim(),
+      ...(structuredReport ? { structured_report: structuredReport } : {}),
     });
     result.appended.push(`judgment:${headSha.slice(0, 12)}:wave:${currentStopWaveId}`);
     return result;
@@ -477,6 +479,7 @@ async function transcribeCanonicalRoleReport({ role, output, reportFields = pars
       role,
       report_fields: reportFields,
       report_text: output.trim(),
+      ...(structuredReport ? { structured_report: structuredReport } : {}),
     });
     result.appended.push(`${decision}:${reconciledSliceId}`);
     return result;

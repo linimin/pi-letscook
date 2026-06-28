@@ -19,7 +19,7 @@ import {
 	writeJsonFile,
 } from "./state-store";
 import { buildAdvisoryStartupBrief } from "./startup-intent";
-import type { CookContextProposalResult } from "./startup-intent";
+import type { CookContextProposalResult, CookHandoffGenerationResult } from "./startup-intent";
 import type {
 	ContextProposal,
 	ContextProposalAlternate,
@@ -43,9 +43,14 @@ type ActiveWorkflowProposalAssessmentReason =
 
 type ActiveWorkflowRoutingSignalSource = "none" | "startup_analysis" | "explicit_structured_artifact";
 
-function buildCookStartupBriefRequiredMessage(deps: CompletionDriverDeps, prefix?: string): string {
+function buildCookStartupBriefRequiredMessage(deps: CompletionDriverDeps, prefix?: string, handoffSynthesis?: CookHandoffGenerationResult): string {
+	const noHandoffPrefix =
+		handoffSynthesis?.kind === "no_handoff"
+			? `Primary agent returned structured no-handoff: ${handoffSynthesis.reason}.`
+			: undefined;
+	const mergedPrefix = [prefix, noHandoffPrefix].filter(Boolean).join(" ").trim();
 	const requirement = deps.structuredDiscussionFailureDetail;
-	return prefix ? `${prefix} ${requirement}` : requirement;
+	return mergedPrefix ? `${mergedPrefix} ${requirement}` : requirement;
 }
 
 type ActiveWorkflowProposalAssessment = {
@@ -732,7 +737,7 @@ export async function runCookEntry(
 		const derived = await deps.deriveCookContextProposal(ctx, projectName);
 		const proposal = derived.proposal;
 		if (!proposal) {
-			deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps), "info");
+			deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps, undefined, derived.handoffSynthesis), "info");
 			return;
 		}
 		const decision = await deps.confirmContextProposal(ctx, proposal, {
@@ -781,7 +786,11 @@ export async function runCookEntry(
 			const derived = await deps.deriveCookContextProposal(ctx, projectName);
 			const proposal = derived.proposal;
 			if (!proposal) {
-				deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps, "The previous completion workflow is already done."), "info");
+				deps.emitCommandText(
+					ctx,
+					buildCookStartupBriefRequiredMessage(deps, "The previous completion workflow is already done.", derived.handoffSynthesis),
+					"info",
+				);
 				return;
 			}
 			const decision = await deps.confirmContextProposal(ctx, proposal, {

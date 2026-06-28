@@ -8,6 +8,8 @@ import {
 	helperToolAllowlist,
 	isHelperAllowedForRole,
 } from "./helper-policy.ts";
+import { contractIdForHelper, type StructuredHelperResult } from "./structured-contracts.ts";
+import { requireSubprocessFinalOutput } from "./subprocess-final-output.ts";
 import {
 	type CompletionHelperFailure,
 	type CompletionHelperFailureKind,
@@ -569,6 +571,36 @@ function parseStringArrayField(value: unknown, fieldName: string): string[] {
 	return normalized;
 }
 
+function structuredHelperOutputFromPayload(payload: StructuredHelperResult): StructuredHelperOutput {
+	return {
+		summary: payload.summary,
+		evidence: payload.evidence,
+		paths: payload.paths,
+		open_questions: payload.open_questions,
+	};
+}
+
+export function resolveStructuredHelperOutput(args: {
+	helper: CompletionHelperName;
+	eventLines: string[];
+	assistantText?: string;
+}): StructuredHelperOutput {
+	const contractId = contractIdForHelper(args.helper);
+	try {
+		const { payload } = requireSubprocessFinalOutput<StructuredHelperResult>({
+			eventLines: args.eventLines,
+			contractId,
+			assistantText: args.assistantText,
+		});
+		return structuredHelperOutputFromPayload(payload);
+	} catch (error: any) {
+		throw new CompletionHelperRunnerError(
+			"invalid_output",
+			error?.message ?? "structured helper output required but missing",
+		);
+	}
+}
+
 export function parseStructuredHelperOutput(rawText: string): StructuredHelperOutput {
 	let parsed: unknown;
 	try {
@@ -826,7 +858,11 @@ export async function runCompletionHelper(args: RunCompletionHelperArgs): Promis
 				{ rawText: spawnResult.assistantText, stderr: spawnResult.stderr, exitCode: spawnResult.exitCode },
 			);
 		}
-		const output = parseStructuredHelperOutput(spawnResult.assistantText ?? "");
+		const output = resolveStructuredHelperOutput({
+			helper: args.helper,
+			eventLines: spawnResult.eventLines,
+			assistantText: spawnResult.assistantText,
+		});
 		const result: CompletionHelperResult = {
 			ok: true,
 			helper: args.helper,

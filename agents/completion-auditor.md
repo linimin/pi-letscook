@@ -74,3 +74,5 @@ Before finalizing, verify these pairs are consistent:
 - remaining work/blockers/gaps ↔ `Next mandatory slice`
 
 If no remaining gap is evident, say so plainly instead of inventing one.
+
+Structured transport: call `completion_emit_auditor_report` exactly once as the final action; do not continue after the emit tool returns.

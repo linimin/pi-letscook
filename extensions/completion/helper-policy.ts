@@ -1,7 +1,10 @@
 import {
+	HELPER_EMIT_CRITIC_TOOL,
+	HELPER_EMIT_SCOUT_TOOL,
+} from "./structured-contracts.ts";
+import {
 	type CompletionHelperName,
 	type CompletionHelperPolicy,
-	type HelperProxyToolName,
 	HELPER_PROXY_TOOL_NAMES,
 } from "./helper-types.ts";
 
@@ -17,9 +20,14 @@ const HELPER_TIMEOUTS: Record<CompletionHelperName, { defaultTimeoutMs: number; 
 	critic: { defaultTimeoutMs: 90_000, maxTimeoutMs: 180_000 },
 };
 
-const HELPER_TOOL_ALLOWLIST: Record<CompletionHelperName, HelperProxyToolName[]> = {
-	scout: [...HELPER_PROXY_TOOL_NAMES],
-	critic: [...HELPER_PROXY_TOOL_NAMES],
+const HELPER_EMIT_TOOLS: Record<CompletionHelperName, string> = {
+	scout: HELPER_EMIT_SCOUT_TOOL,
+	critic: HELPER_EMIT_CRITIC_TOOL,
+};
+
+const HELPER_TOOL_ALLOWLIST: Record<CompletionHelperName, string[]> = {
+	scout: [...HELPER_PROXY_TOOL_NAMES, HELPER_EMIT_SCOUT_TOOL],
+	critic: [...HELPER_PROXY_TOOL_NAMES, HELPER_EMIT_CRITIC_TOOL],
 };
 
 export function allowedHelpersForRole(role: string | undefined): CompletionHelperName[] {
@@ -83,7 +91,11 @@ export function clampHelperTimeoutMs(helper: CompletionHelperName, requestedTime
 	return Math.min(rounded, maxTimeout);
 }
 
-export function helperToolAllowlist(helper: CompletionHelperName): HelperProxyToolName[] {
+export function helperEmitToolName(helper: CompletionHelperName): string {
+	return HELPER_EMIT_TOOLS[helper];
+}
+
+export function helperToolAllowlist(helper: CompletionHelperName): string[] {
 	return [...HELPER_TOOL_ALLOWLIST[helper]];
 }
 

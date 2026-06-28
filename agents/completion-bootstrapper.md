@@ -37,7 +37,7 @@ These lines are for workflow observability, not hidden reasoning. Keep them brie
 
 1. Scan the repo for the strongest intent and validation surfaces.
 2. Infer project goal, operator-visible docs surfaces, and strongest validation entrypoint.
-3. If repo intent or validation entrypoint is ambiguous, ask one short clarifying question.
+3. If repo intent or validation entrypoint is ambiguous, record the ambiguity in `Canonical blockers` and emit the structured handoff anyway; do not ask clarifying questions or continue after the emit tool.
 4. Create or repair local `.agent/verify_completion_stop.sh` / `.agent/verify_completion_control_plane.sh` forwarders when they are needed for truthful local verification.
 5. Update `.gitignore` so `.agent/**` remains ignored, while keeping `.agent/current/tmp/` ignored as scratch space.
 6. Initialize missing or invalid canonical execution-state files only under `.agent/current/**` — including `.agent/current/state.json`, `.agent/current/plan.json`, and `.agent/current/active-slice.json` — when repair is required for a truthful handoff. Preserve any existing truthful execution state.
@@ -54,3 +54,5 @@ Return exactly this fixed report format:
 - `Next role to invoke: completion-regrounder`
 - `Exact handoff payload: ...`
 - `Canonical blockers: ...`
+
+Structured transport: call `completion_emit_bootstrapper_handoff` exactly once as the final action; do not continue after the emit tool returns.
