@@ -1,4 +1,4 @@
-import { getStructuredContract, type StructuredContractParseResult } from "./structured-contracts.ts";
+import { STRUCTURED_CONTRACTS, getStructuredContract, type StructuredContractParseResult } from "./structured-contracts.ts";
 import type { JsonRecord } from "./types";
 
 export type SubprocessFinalOutputSource = "structured_tool";
@@ -44,6 +44,38 @@ function parseJsonLine(line: string): JsonRecord | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+const STRUCTURED_TERMINATING_TOOL_NAMES = new Set(
+	Object.values(STRUCTURED_CONTRACTS).map((contract) => contract.terminatingToolName),
+);
+const MAX_LIVE_EVENT_PARSE_CHARS = 1_000_000;
+
+function hasJsonStringFieldText(line: string, fieldName: string, value: string): boolean {
+	return line.includes(`"${fieldName}":"${value}"`) || line.includes(`"${fieldName}": "${value}"`);
+}
+
+function hasStructuredTerminatingToolResultText(line: string): boolean {
+	const trimmed = line.trimStart();
+	if (!trimmed.startsWith("{")) return false;
+	if (!hasJsonStringFieldText(trimmed, "type", "tool_execution_end")) return false;
+	for (const toolName of STRUCTURED_TERMINATING_TOOL_NAMES) {
+		if (hasJsonStringFieldText(trimmed, "toolName", toolName)) return true;
+	}
+	return false;
+}
+
+export function shouldParseSubprocessEventLine(line: string): boolean {
+	return line.length <= MAX_LIVE_EVENT_PARSE_CHARS || hasStructuredTerminatingToolResultText(line);
+}
+
+export function shouldRetainSubprocessFinalOutputEvent(event: JsonRecord): boolean {
+	return asString(event.type) === "tool_execution_end" && STRUCTURED_TERMINATING_TOOL_NAMES.has(asString(event.toolName) ?? "");
+}
+
+export function shouldRetainSubprocessFinalOutputLine(line: string): boolean {
+	const event = parseJsonLine(line);
+	return event ? shouldRetainSubprocessFinalOutputEvent(event) : false;
 }
 
 function humanTextFromToolResult(result: unknown): string | undefined {

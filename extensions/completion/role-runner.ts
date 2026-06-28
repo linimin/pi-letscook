@@ -26,7 +26,7 @@ import {
 	type CookHandoffGenerationResult,
 } from "./structured-subprocess-wiring.ts";
 import { COMPLETION_COOK_HANDOFF_CONTRACT_ID, COMPLETION_STARTUP_ANALYSIS_CONTRACT_ID } from "./structured-contracts.ts";
-import { hasSubprocessFinalOutput } from "./subprocess-final-output.ts";
+import { hasSubprocessFinalOutput, shouldParseSubprocessEventLine, shouldRetainSubprocessFinalOutputEvent } from "./subprocess-final-output.ts";
 import { contextProposalAnalystProgressLines, primaryAgentHandoffProgressLines } from "./prompt-surfaces";
 import {
 	buildCompletionRoleSubprocessEnv,
@@ -309,9 +309,10 @@ async function runContextProposalAnalystSubprocess(
 				const messages: RoleMessage[] = [];
 				const processLine = (line: string) => {
 					if (!line.trim()) return;
-					eventLines.push(line);
+					if (!shouldParseSubprocessEventLine(line)) return;
 					try {
 						const event = JSON.parse(line) as JsonRecord;
+						if (shouldRetainSubprocessFinalOutputEvent(event)) eventLines.push(line);
 						if (applyLiveRoleEvent(liveActivity, event, messages)) updateActivity(true);
 					} catch {
 						// ignore malformed lines
@@ -519,9 +520,10 @@ async function runPrimaryAgentHandoffSubprocess(params: GenerateCookHandoffWithA
 				const messages: RoleMessage[] = [];
 				const processLine = (line: string) => {
 					if (!line.trim()) return;
-					eventLines.push(line);
+					if (!shouldParseSubprocessEventLine(line)) return;
 					try {
 						const event = JSON.parse(line) as JsonRecord;
+						if (shouldRetainSubprocessFinalOutputEvent(event)) eventLines.push(line);
 						if (applyLiveRoleEvent(liveActivity, event, messages)) updateActivity(true);
 					} catch {
 						// ignore malformed lines
@@ -914,9 +916,10 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 
 				const processLine = (line: string) => {
 					if (!line.trim()) return;
-					eventLines.push(line);
+					if (!shouldParseSubprocessEventLine(line)) return;
 					try {
 						const event = JSON.parse(line) as JsonRecord;
+						if (shouldRetainSubprocessFinalOutputEvent(event)) eventLines.push(line);
 						if (params.applyLiveRoleEvent(liveActivity, event, messages)) params.onUpdate?.(liveActivity);
 					} catch {
 						// ignore malformed lines

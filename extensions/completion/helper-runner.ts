@@ -9,7 +9,12 @@ import {
 	isHelperAllowedForRole,
 } from "./helper-policy.ts";
 import { contractIdForHelper, type StructuredHelperResult } from "./structured-contracts.ts";
-import { requireSubprocessFinalOutput } from "./subprocess-final-output.ts";
+import {
+	requireSubprocessFinalOutput,
+	shouldParseSubprocessEventLine,
+	shouldRetainSubprocessFinalOutputEvent,
+	shouldRetainSubprocessFinalOutputLine,
+} from "./subprocess-final-output.ts";
 import {
 	type CompletionHelperFailure,
 	type CompletionHelperFailureKind,
@@ -49,6 +54,7 @@ export type CompletionHelperSpawnSpec = {
 	cwd: string;
 	env: NodeJS.ProcessEnv;
 	signal: AbortSignal;
+	onStdoutLine?: (rawLine: string) => void;
 	onJsonEvent?: (event: JsonRecord, rawLine: string) => void;
 };
 
@@ -318,6 +324,22 @@ async function writeJsonArtifact(artifactDir: string, fileName: string, value: R
 	await writeTextArtifact(artifactDir, fileName, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+async function endArtifactStream(stream: fs.WriteStream): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		const handleError = (error: Error) => {
+			stream.off("finish", handleFinish);
+			reject(error);
+		};
+		const handleFinish = () => {
+			stream.off("error", handleError);
+			resolve();
+		};
+		stream.on("error", handleError);
+		stream.on("finish", handleFinish);
+		stream.end();
+	});
+}
+
 async function tryWriteTextArtifact(artifactDir: string, fileName: string, content: string | undefined): Promise<void> {
 	if (typeof content !== "string") return;
 	try {
@@ -461,16 +483,38 @@ function helperSpawnTestOverride(): HelperSpawnTestOverride | undefined {
 	}
 }
 
+function appendUnrepresentedLines(target: string[], candidateLines: string[]): string[] {
+	const remaining = new Map<string, number>();
+	for (const line of target) remaining.set(line, (remaining.get(line) ?? 0) + 1);
+	const appended: string[] = [];
+	for (const line of candidateLines) {
+		const existingCount = remaining.get(line) ?? 0;
+		if (existingCount > 0) {
+			remaining.set(line, existingCount - 1);
+			continue;
+		}
+		target.push(line);
+		appended.push(line);
+	}
+	return appended;
+}
+
 export async function defaultHelperSubprocessRunner(spec: CompletionHelperSpawnSpec): Promise<CompletionHelperSpawnResult> {
 	const testOverride = helperSpawnTestOverride();
 	if (testOverride) {
 		const eventLines: string[] = [];
+		const transcriptLines: string[] = [];
 		for (const event of testOverride.events ?? []) {
 			const rawLine = JSON.stringify(event);
-			eventLines.push(rawLine);
+			transcriptLines.push(rawLine);
+			spec.onStdoutLine?.(rawLine);
+			if (shouldRetainSubprocessFinalOutputEvent(event)) eventLines.push(rawLine);
 			spec.onJsonEvent?.(event, rawLine);
 		}
-		if (testOverride.eventLines?.length) eventLines.push(...testOverride.eventLines);
+		if (testOverride.eventLines?.length) {
+			for (const line of appendUnrepresentedLines(transcriptLines, testOverride.eventLines)) spec.onStdoutLine?.(line);
+			eventLines.push(...testOverride.eventLines.filter(shouldRetainSubprocessFinalOutputLine));
+		}
 		return {
 			exitCode: testOverride.exitCode ?? 0,
 			stderr: testOverride.stderr,
@@ -492,10 +536,12 @@ export async function defaultHelperSubprocessRunner(spec: CompletionHelperSpawnS
 
 		const processLine = (line: string) => {
 			if (!line.trim()) return;
-			eventLines.push(line);
+			spec.onStdoutLine?.(line);
+			if (!shouldParseSubprocessEventLine(line)) return;
 			try {
 				const parsed = JSON.parse(line);
 				if (isRecord(parsed)) {
+					if (shouldRetainSubprocessFinalOutputEvent(parsed)) eventLines.push(line);
 					spec.onJsonEvent?.(parsed, line);
 					if (asString(parsed.type) === "message_end" && isRecord(parsed.message)) {
 						assistantText = assistantTextFromMessage(parsed.message) ?? assistantText;
@@ -707,6 +753,7 @@ export async function runCompletionHelper(args: RunCompletionHelperArgs): Promis
 	let lockHeld = false;
 	let timeoutTriggered = false;
 	let externalAbortTriggered = false;
+	let closeEventArtifactStream: (() => Promise<void>) | undefined;
 	let timer: NodeJS.Timeout | undefined;
 	let unlinkAbort: (() => void) | undefined;
 	const onProgress = args.onProgress;
@@ -817,23 +864,47 @@ export async function runCompletionHelper(args: RunCompletionHelperArgs): Promis
 			abortController.abort();
 		}, timeoutMs);
 		const subprocessRunner = args.subprocessRunner ?? defaultHelperSubprocessRunner;
+		const eventArtifactStream = fs.createWriteStream(path.join(artifactDir, "events.jsonl"), { encoding: "utf8", mode: 0o600 });
+		let eventArtifactStreamClosed = false;
+		let eventArtifactStreamError: Error | undefined;
+		let wroteTranscriptLines = false;
+		eventArtifactStream.on("error", (error) => {
+			eventArtifactStreamError = error;
+		});
+		closeEventArtifactStream = async () => {
+			if (eventArtifactStreamClosed) return;
+			eventArtifactStreamClosed = true;
+			if (!eventArtifactStream.writableEnded && !eventArtifactStream.destroyed) {
+				await endArtifactStream(eventArtifactStream);
+			}
+			if (eventArtifactStreamError) throw eventArtifactStreamError;
+		};
 		const spawnResult = await subprocessRunner({
 			command: invocation.command,
 			args: invocation.args,
 			cwd: resolvedCwd,
 			env: fixedEnv,
 			signal: abortController.signal,
+			onStdoutLine: (rawLine) => {
+				if (eventArtifactStreamError) return;
+				wroteTranscriptLines = true;
+				eventArtifactStream.write(`${rawLine}\n`);
+			},
 			onJsonEvent: (event, rawLine) => {
 				const progressEvent = progressEventFromJsonEvent(event);
 				if (progressEvent) emitProgress(onProgress, progressEvent);
 				void rawLine;
 			},
 		});
+		if (!wroteTranscriptLines && spawnResult.eventLines.length > 0) {
+			for (const line of spawnResult.eventLines) eventArtifactStream.write(`${line}\n`);
+		}
+		await closeEventArtifactStream();
+		closeEventArtifactStream = undefined;
 		if (timer) clearTimeout(timer);
 		timer = undefined;
 		unlinkAbort?.();
 		unlinkAbort = undefined;
-		await writeTextArtifact(artifactDir, "events.jsonl", `${spawnResult.eventLines.join("\n")}${spawnResult.eventLines.length ? "\n" : ""}`);
 		if (spawnResult.stderr) await writeTextArtifact(artifactDir, "stderr.txt", spawnResult.stderr);
 		if (spawnResult.assistantText) await writeTextArtifact(artifactDir, "assistant-output.txt", spawnResult.assistantText);
 
@@ -886,6 +957,17 @@ export async function runCompletionHelper(args: RunCompletionHelperArgs): Promis
 		});
 		return result;
 	} catch (error: any) {
+		if (closeEventArtifactStream) {
+			try {
+				await closeEventArtifactStream();
+			} catch (streamError: any) {
+				error = error instanceof Error ? error : new Error(String(error));
+				if (!error.message.includes("events.jsonl")) {
+					error.message = `${error.message}; failed to finalize events.jsonl: ${streamError?.message ?? streamError}`;
+				}
+			}
+			closeEventArtifactStream = undefined;
+		}
 		if (timer) clearTimeout(timer);
 		timer = undefined;
 		unlinkAbort?.();
