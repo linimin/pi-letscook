@@ -246,6 +246,10 @@ function completionTestCookHandoffReminderPath(): string | undefined {
 	return asString(process.env.PI_COMPLETION_TEST_COOK_HANDOFF_REMINDER_PATH);
 }
 
+function completionTestStaleDriverSuppressionCapturePath(): string | undefined {
+	return asString(process.env.PI_COMPLETION_TEST_STALE_DRIVER_SUPPRESSION_CAPTURE_PATH);
+}
+
 function maybeWriteTestSnapshot(targetPath: string | undefined, content: string): void {
 	if (!targetPath) return;
 	try {
@@ -323,24 +327,43 @@ function extractWorkflowSessionIdFromPrompt(text: string): string | undefined {
 	return match?.[1]?.trim() || undefined;
 }
 
+function isCompletionDriverPromptText(text: string): boolean {
+	const trimmed = text.trim();
+	if (!trimmed) return false;
+	if (/^\/skill:completion-protocol\b/.test(trimmed)) return true;
+	if (!/^COMPLETION WORKFLOW DRIVER\b/m.test(trimmed)) return false;
+	return /(?:Start or continue the completion workflow for this repo\.|Resume the completion workflow from canonical state\.)/.test(trimmed);
+}
+
+function isWorkflowClosedForDriverContinuation(snapshot: CompletionStateSnapshot | undefined): boolean {
+	if (!snapshot || isWorkflowDone(snapshot)) return true;
+	const status = workflowEntryStatus(snapshot);
+	return status === "parked" || status === "cancelled";
+}
+
+function isAuthoritativeQueuedCompletionDriverPrompt(snapshot: CompletionStateSnapshot | undefined, text: string): boolean {
+	if (!snapshot || !/^COMPLETION WORKFLOW DRIVER\b/m.test(text)) return false;
+	if (isWorkflowClosedForDriverContinuation(snapshot)) return false;
+	if (!hasActiveWorkflowEntry(snapshot)) return false;
+	const canonicalSessionId = asString(snapshot.state?.workflow_session_id);
+	const promptSessionId = extractWorkflowSessionIdFromPrompt(text);
+	if (canonicalSessionId && promptSessionId && canonicalSessionId !== promptSessionId) return false;
+	const queuedPrompt = queuedDriverPromptMetadata(snapshot);
+	if (asString(queuedPrompt?.kind) === "superseded") return false;
+	const queuedPromptHash = asString(queuedPrompt?.prompt_hash);
+	if (!queuedPromptHash || queuedPromptHash !== hashDriverPrompt(text)) return false;
+	const queuedSessionId = asString(queuedPrompt?.workflow_session_id);
+	if (canonicalSessionId && queuedSessionId && queuedSessionId !== canonicalSessionId) return false;
+	return true;
+}
+
 function isCompletionDriverPromptTurn(snapshot: CompletionStateSnapshot | undefined, ctx: { sessionManager?: any }): boolean {
 	const latest = latestUserOrCustomTurnText(ctx);
 	if (!latest) return false;
-	const canonicalSessionId = asString(snapshot?.state?.workflow_session_id);
-	const promptSessionId = extractWorkflowSessionIdFromPrompt(latest);
-	if (canonicalSessionId && promptSessionId && canonicalSessionId !== promptSessionId) return false;
-	const queuedPrompt = queuedDriverPromptMetadata(snapshot);
-	const queuedPromptHash = asString(queuedPrompt?.prompt_hash);
-	if (queuedPromptHash && queuedPromptHash === hashDriverPrompt(latest)) {
-		const queuedSessionId = asString(queuedPrompt?.workflow_session_id);
-		if (canonicalSessionId && queuedSessionId && queuedSessionId !== canonicalSessionId) return false;
-		return true;
+	if (/^\/skill:completion-protocol\b/.test(latest.trim())) {
+		return hasActiveWorkflowEntry(snapshot);
 	}
-	const isLegacySkillPrompt = /^\/skill:completion-protocol\b/.test(latest);
-	const isWorkflowDriverPrompt = /^COMPLETION WORKFLOW DRIVER\b/m.test(latest);
-	if (!isLegacySkillPrompt && !isWorkflowDriverPrompt) return false;
-	if (!/(?:Start or continue the completion workflow for this repo\.|Resume the completion workflow from canonical state\.)/.test(latest)) return false;
-	return true;
+	return isAuthoritativeQueuedCompletionDriverPrompt(snapshot, latest);
 }
 
 function workflowContinuationIntentText(text: string | undefined): string {
@@ -1165,7 +1188,7 @@ function completionKickoff(
 
 function completionResumePrompt(taskType: string, evaluationProfile: string, workflowSessionId?: string): string {
 	const sessionBlock = workflowSessionId ? `Workflow session:\n- workflow_session_id: ${workflowSessionId}\n\n` : "";
-	return `COMPLETION WORKFLOW DRIVER\nResume the completion workflow from canonical state.\n\n${completionProtocolReadBlock("driver")}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}Resume instructions:\n- Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting.\n- If canonical state is missing, invalid, contradictory, stale, or ambiguous, route to completion-regrounder first.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional *_hint fields remain advisory until completion-regrounder authors canonical slices.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Continue from next_mandatory_role and next_mandatory_action.\n- If requires_reground == true and next_mandatory_role == completion-regrounder, treat that as a continue-state auto-reground handoff unless canonical state also proves a real external blocker.\n- When canonical state is stopped (await_user_input, blocked, or paused), rerun /cook or /cook resume to continue, /cook park to record a parked paused posture for ordinary direct edits after canonical state is updated, or /cook cancel to close the workflow.\n- Use completion_role for all completion-* role work.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- If canonical closeout cleanup removes repo-local .agent/ after the workflow reaches done or cancelled, treat that disappearance as expected final cleanup rather than as a missing tracked-file anomaly, and do not recreate local helper forwarders merely to narrate completion.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
+	return `COMPLETION WORKFLOW DRIVER\nResume the completion workflow from canonical state.\n\n${completionProtocolReadBlock("driver")}\n\nCanonical routing profile:\n- task_type: ${taskType}\n- evaluation_profile: ${evaluationProfile}\n\n${sessionBlock}Resume instructions:\n- Re-read .agent/current/state.json, .agent/current/startup-brief.json, .agent/current/plan.json, .agent/current/active-slice.json, and .agent/current/verification-evidence.json before acting.\n- If canonical state is missing, invalid, contradictory, stale, or ambiguous, route to completion-regrounder first.\n- Treat .agent/current/startup-brief.json as canonical intake, not as the canonical slice plan. Mission, scope, constraints, acceptance, risks, and notes there are workflow-level startup intent. Optional *_hint fields remain advisory until completion-regrounder authors canonical slices.\n- For selected, in-progress, committed, or done slices, treat .agent/current/active-slice.json as the canonical implementation contract and route to completion-regrounder if it drifts from the selected plan slice or the exact handoff is unclear.\n- Consume .agent/current/verification-evidence.json instead of temp-only verification summaries when it is populated.\n- Continue from next_mandatory_role and next_mandatory_action.\n- If requires_reground == true and next_mandatory_role == completion-regrounder, treat that as a continue-state auto-reground handoff unless canonical state also proves a real external blocker.\n- /cook park is available anytime an active workflow exists, including while continuation_policy is continue, to record a parked paused posture for ordinary direct edits; resume still requires canonical reground.\n- When canonical state is stopped (await_user_input, blocked, or paused), rerun /cook or /cook resume to continue, or /cook cancel to close the workflow.\n- Use completion_role for all completion-* role work.\n- Continue dispatching mandatory roles while continuation_policy == continue.\n- If canonical closeout cleanup removes repo-local .agent/ after the workflow reaches done or cancelled, treat that disappearance as expected final cleanup rather than as a missing tracked-file anomaly, and do not recreate local helper forwarders merely to narrate completion.\n- Only stop for the user when continuation_policy is await_user_input, blocked, paused, or done.`;
 }
 
 export default function completionExtension(pi: ExtensionAPI) {
@@ -1181,7 +1204,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: start or replace workflow by asking the primary agent to synthesize a startup handoff from the current task context or inline prompt (fail closed when no startable handoff is produced); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit stopped-workflow controls",
+			description: "/cook workflow: start or replace workflow by asking the primary agent to synthesize a startup handoff from the current task context or inline prompt (fail closed when no startable handoff is produced); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit workflow controls (/cook park anytime while a workflow is active; resume and cancel when stopped or parked)",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,
@@ -1218,6 +1241,24 @@ export default function completionExtension(pi: ExtensionAPI) {
 				await autoContinueWorkflowIfNeeded(pi, ctx, driverDeps);
 			}
 		}
+	});
+
+	pi.on("input", async (event, ctx) => {
+		if (event.source !== "extension") return;
+		const text = typeof event.text === "string" ? event.text : "";
+		if (!isCompletionDriverPromptText(text) || /^\/skill:completion-protocol\b/.test(text.trim())) return;
+		const snapshot = await loadCompletionSnapshot(getCtxCwd(ctx));
+		if (isAuthoritativeQueuedCompletionDriverPrompt(snapshot, text)) return;
+		maybeWriteTestSnapshot(
+			completionTestStaleDriverSuppressionCapturePath(),
+			`${JSON.stringify({ suppressed: true, workflow_entry_status: asString(snapshot?.state?.workflow_entry_status) ?? null }, null, 2)}\n`,
+		);
+		emitCommandText(
+			ctx,
+			"Ignored stale completion workflow driver prompt because canonical state no longer authorizes auto-resume or continuation.",
+			"info",
+		);
+		return { action: "handled" as const };
 	});
 
 	pi.on("turn_end", async (_event, ctx) => {

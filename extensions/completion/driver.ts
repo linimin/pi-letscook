@@ -198,17 +198,29 @@ function parkedPlanSnapshot(plan: JsonRecord | undefined): JsonRecord | undefine
 	};
 }
 
-async function parkStoppedWorkflow(snapshot: CompletionStateSnapshot): Promise<CompletionStateSnapshot | undefined> {
+async function supersedeQueuedDriverPromptMetadata(snapshot: CompletionStateSnapshot, reason: string): Promise<void> {
+	await fsp.mkdir(path.dirname(snapshot.files.driverPromptPath), { recursive: true });
+	await writeJsonFile(snapshot.files.driverPromptPath, {
+		kind: "superseded",
+		superseded_at: new Date().toISOString(),
+		superseded_reason: reason,
+		workflow_session_id: asString(snapshot.state?.workflow_session_id) ?? null,
+	});
+}
+
+async function parkWorkflow(snapshot: CompletionStateSnapshot): Promise<CompletionStateSnapshot | undefined> {
 	const missionAnchor = currentMissionAnchor(snapshot);
 	const taskType = currentTaskType(snapshot);
 	const evaluationProfile = currentEvaluationProfile(snapshot);
+	const wasActivelyContinuing = asString(snapshot.state?.continuation_policy) === "continue";
 	const nextState = {
 		...(snapshot.state ?? {}),
 		workflow_entry_status: "parked",
 		current_phase: "awaiting_user",
 		continuation_policy: "paused",
-		continuation_reason:
-			"Workflow parked via /cook park. Ordinary chat may edit directly; rerun /cook or /cook resume to re-enter completion after canonical reground.",
+		continuation_reason: wasActivelyContinuing
+			? "Workflow parked via /cook park while continuation_policy was continue. Auto-resume is disabled; ordinary chat may edit directly; rerun /cook or /cook resume to re-enter completion after canonical reground."
+			: "Workflow parked via /cook park. Ordinary chat may edit directly; rerun /cook or /cook resume to re-enter completion after canonical reground.",
 		requires_reground: true,
 		next_mandatory_role: "completion-regrounder",
 		next_mandatory_action: "Reconcile canonical state from current repo truth before resuming the parked workflow.",
@@ -226,6 +238,7 @@ async function parkStoppedWorkflow(snapshot: CompletionStateSnapshot): Promise<C
 		writeJsonFile(snapshot.files.planPath, nextPlan),
 		writeJsonFile(snapshot.files.activePath, nextActive),
 		writeJsonFile(snapshot.files.verificationEvidencePath, nextEvidence),
+		supersedeQueuedDriverPromptMetadata(snapshot, "parked"),
 	]);
 	return await loadCompletionSnapshot(snapshot.files.root);
 }
@@ -272,6 +285,7 @@ async function cancelStoppedWorkflow(snapshot: CompletionStateSnapshot): Promise
 		writeJsonFile(snapshot.files.statePath, nextState),
 		writeJsonFile(snapshot.files.activePath, nextActive),
 		writeJsonFile(snapshot.files.verificationEvidencePath, nextEvidence),
+		supersedeQueuedDriverPromptMetadata(snapshot, "cancelled"),
 	]);
 }
 
@@ -697,18 +711,15 @@ export async function runCookEntry(
 			);
 			return;
 		}
-		if (!isStoppedWorkflow(snapshot)) {
-			deps.emitCommandText(
-				ctx,
-				"/cook park is only available when the current workflow is already stopped (await_user_input, blocked, or paused). Plain /cook continues the active workflow.",
-				"warning",
-			);
-			return;
-		}
-		snapshot = (await parkStoppedWorkflow(snapshot)) ?? snapshot;
+		const wasActivelyContinuing = asString(snapshot.state?.continuation_policy) === "continue";
+		const rootKey = deps.completionRootKey(snapshot, snapshot.files.root);
+		clearDriverContinuationTracker(rootKey);
+		snapshot = (await parkWorkflow(snapshot)) ?? snapshot;
 		deps.emitCommandText(
 			ctx,
-			"Parked completion workflow. Ordinary chat may edit directly; rerun /cook or /cook resume to reground and continue later.",
+			wasActivelyContinuing
+				? "Parked active completion workflow. Auto-resume is disabled; ordinary chat may edit directly; rerun /cook or /cook resume to reground and continue later."
+				: "Parked completion workflow. Ordinary chat may edit directly; rerun /cook or /cook resume to reground and continue later.",
 			"info",
 		);
 		return;
@@ -723,6 +734,8 @@ export async function runCookEntry(
 			return;
 		}
 		await cancelStoppedWorkflow(snapshot);
+		const rootKey = deps.completionRootKey(snapshot, snapshot.files.root);
+		clearDriverContinuationTracker(rootKey);
 		deps.emitCommandText(
 			ctx,
 			"Cancelled completion workflow. Canonical closeout is recorded and ordinary chat is no longer hard-locked.",

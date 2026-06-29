@@ -39,11 +39,22 @@ assertIncludes('extensions/completion/index.ts', 'const stoppedWorkflowReminder 
 assertIncludes('extensions/completion/index.ts', 'const workflowHardLockActiveNow = workflowHardLockActive(snapshot);');
 assertIncludes('extensions/completion/index.ts', 'workflowHardLockActive: workflowHardLockActiveNow,');
 assertIncludes('extensions/completion/driver.ts', 'function parseCookWorkflowControlAction(');
-assertIncludes('extensions/completion/driver.ts', 'async function parkStoppedWorkflow(');
+assertIncludes('extensions/completion/driver.ts', 'async function parkWorkflow(');
+assertIncludes('extensions/completion/driver.ts', 'async function supersedeQueuedDriverPromptMetadata(');
 assertIncludes('extensions/completion/driver.ts', 'async function reactivateParkedWorkflow(');
 assertIncludes('extensions/completion/driver.ts', 'async function cancelStoppedWorkflow(');
-assertIncludes('extensions/completion/driver.ts', '"/cook park is only available when the current workflow is already stopped');
+assertIncludes('extensions/completion/driver.ts', 'supersedeQueuedDriverPromptMetadata(snapshot, "cancelled")');
+assertIncludes('extensions/completion/driver.ts', 'clearDriverContinuationTracker(rootKey)');
+assertNotIncludes('extensions/completion/driver.ts', '"/cook park is only available when the current workflow is already stopped');
 assertIncludes('extensions/completion/driver.ts', '"/cook cancel is only available when the current workflow is already stopped');
+assertIncludes('extensions/completion/index.ts', 'function isWorkflowClosedForDriverContinuation(');
+assertIncludes('extensions/completion/index.ts', 'function isAuthoritativeQueuedCompletionDriverPrompt(');
+assertIncludes('extensions/completion/index.ts', 'function isCompletionDriverPromptText(');
+assertIncludes('extensions/completion/index.ts', 'pi.on("input"');
+assertIncludes('extensions/completion/index.ts', 'return { action: "handled" as const };');
+assertIncludes('extensions/completion/index.ts', 'Ignored stale completion workflow driver prompt because canonical state no longer authorizes auto-resume or continuation.');
+assertIncludes('extensions/completion/index.ts', '/cook park is available anytime an active workflow exists, including while continuation_policy is continue');
+assertIncludes('extensions/completion/index.ts', '/cook park anytime while a workflow is active; resume and cancel when stopped or parked');
 assertIncludes('extensions/completion/policy-guards.ts', 'workflowHardLockActive: boolean;');
 assertIncludes('extensions/completion/policy-guards.ts', 'while the completion workflow is hard-locked.');
 assertIncludes('extensions/completion/prompt-surfaces.ts', 'export function buildStoppedWorkflowBoundaryReminder(');
@@ -320,6 +331,58 @@ assert 'If requires_reground == true and next_mandatory_role == completion-regro
 assert 'Skipped completion workflow auto-resume prompt (test mode)' in output, output
 PY
 
+CONTINUE_ROOT="$TMPDIR/continue-repo"
+write_stopped_fixture "$CONTINUE_ROOT" continue implement active 'Active continue-state workflow regression fixture.' false completion-implementer 'Implement the selected fixture slice before continuing.'
+
+(
+  cd "$CONTINUE_ROOT"
+  PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+  pi -e "$ROOT" -p '/cook park' \
+    >"$TMPDIR/pi-continue-workflow-park.out" 2>"$TMPDIR/pi-continue-workflow-park.err"
+)
+
+python3 - "$CONTINUE_ROOT" "$TMPDIR/pi-continue-workflow-park.out" "$TMPDIR/pi-continue-workflow-park.err" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+output = Path(sys.argv[2]).read_text() + Path(sys.argv[3]).read_text()
+state = json.loads((root / '.agent/current/state.json').read_text())
+plan = json.loads((root / '.agent/current/plan.json').read_text())
+active = json.loads((root / '.agent/current/active-slice.json').read_text())
+evidence = json.loads((root / '.agent/current/verification-evidence.json').read_text())
+assert state['workflow_entry_status'] == 'parked', state
+assert state['continuation_policy'] == 'paused', state
+assert state['requires_reground'] is True, state
+assert state['next_mandatory_role'] == 'completion-regrounder', state
+assert 'continuation_policy was continue' in state['continuation_reason'], state
+assert active['status'] == 'idle', active
+assert active['slice_id'] is None, active
+assert plan['candidate_slices'][0]['status'] == 'planned', plan
+assert evidence['subject_type'] == 'none', evidence
+assert 'Parked active completion workflow.' in output, output
+driver_prompt = json.loads((root / '.agent/current/tmp/driver-prompt.json').read_text())
+assert driver_prompt['kind'] == 'superseded', driver_prompt
+assert driver_prompt.get('superseded_reason') == 'parked', driver_prompt
+assert driver_prompt.get('prompt_hash') is None, driver_prompt
+PY
+
+CONTINUE_PARKED_AUTO_RESUME="$TMPDIR/continue-parked-auto-resume.txt"
+(
+  cd "$CONTINUE_ROOT"
+  PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
+  PI_COMPLETION_TEST_AUTO_CONTINUE_ON_SESSION_START=1 \
+  PI_COMPLETION_TEST_AUTO_CONTINUE_PROMPT_PATH="$CONTINUE_PARKED_AUTO_RESUME" \
+  pi -e "$ROOT" -p 'Please keep going on the workflow.' \
+    >"$TMPDIR/pi-continue-parked-ordinary.out" 2>"$TMPDIR/pi-continue-parked-ordinary.err"
+)
+
+if [[ -e "$CONTINUE_PARKED_AUTO_RESUME" ]]; then
+  echo "expected /cook park from continue state to disable stale auto-resume on ordinary follow-up" >&2
+  exit 1
+fi
+
 BLOCKED_ROOT="$TMPDIR/blocked-repo"
 write_stopped_fixture "$BLOCKED_ROOT" blocked blocked active 'Blocked stopped-workflow regression fixture.'
 
@@ -472,6 +535,20 @@ PY
 
 CANCEL_ROOT="$TMPDIR/cancel-repo"
 write_stopped_fixture "$CANCEL_ROOT" blocked blocked active 'Blocked workflow that should be cancellable.'
+python3 - "$CANCEL_ROOT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+metadata = {
+    'kind': 'auto-resume',
+    'queued_at': '2026-06-11T00:00:00Z',
+    'workflow_session_id': 'stopped-workflow-fixture-session',
+    'prompt_hash': 'pre-cancel-queued-driver-prompt-hash',
+}
+(root / '.agent/current/tmp/driver-prompt.json').write_text(json.dumps(metadata, indent=2) + '\n')
+PY
 (
   cd "$CANCEL_ROOT"
   PI_COMPLETION_SKIP_DRIVER_KICKOFF=1 \
@@ -492,6 +569,12 @@ if state_path.exists():
     state = json.loads(state_path.read_text())
     assert state['continuation_policy'] == 'done', state
     assert state['workflow_entry_status'] == 'cancelled', state
+driver_prompt_path = root / '.agent/current/tmp/driver-prompt.json'
+if driver_prompt_path.exists():
+    driver_prompt = json.loads(driver_prompt_path.read_text())
+    assert driver_prompt['kind'] == 'superseded', driver_prompt
+    assert driver_prompt.get('superseded_reason') == 'cancelled', driver_prompt
+    assert driver_prompt.get('prompt_hash') is None, driver_prompt
 PY
 
 CANCEL_AUTO_RESUME="$TMPDIR/cancel-auto-resume.txt"

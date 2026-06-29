@@ -238,6 +238,7 @@ fi
 bash ./scripts/active-slice-contract-test.sh
 npm run observability-status-test
 npm run completion-role-gating-test
+npm run stale-driver-prompt-suppression-test
 npm run dirty-worktree-policy-test
 npm run stop-wave-epoch-test
 bash ./scripts/legacy-cleanup-test.sh

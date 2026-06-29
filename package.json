@@ -43,6 +43,7 @@
     "prompt-budget-test": "bash ./scripts/prompt-budget-test.sh",
     "observability-status-test": "bash ./scripts/observability-status-test.sh",
     "completion-role-gating-test": "bash ./scripts/completion-role-gating-test.sh",
+    "stale-driver-prompt-suppression-test": "bash ./scripts/stale-driver-prompt-suppression-test.sh",
     "dirty-worktree-policy-test": "bash ./scripts/dirty-worktree-policy-test.sh",
     "stop-wave-epoch-test": "bash ./scripts/stop-wave-epoch-test.sh",
     "evaluator-calibration-test": "bash ./scripts/evaluator-calibration-test.sh",
