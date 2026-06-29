@@ -18,7 +18,7 @@ startup and next-round entry stay confirm-first, following same-entry primary-ag
 
 Only explicit `/cook` enters workflow mode. In ordinary chat, do not load or follow `completion-protocol`, and do not call `completion_role`.
 
-stopped workflows now have explicit same-session controls: rerun `/cook` or `/cook resume` to continue, `/cook park` to park for ordinary direct edits with `requires_reground = true`, and `/cook cancel` to close the workflow.
+`/cook park` is available anytime an active workflow exists, including while `continuation_policy = continue`. It records a parked paused posture for ordinary direct edits with `requires_reground = true`. Stopped workflows also expose explicit same-session controls: rerun `/cook` or `/cook resume` to continue, and `/cook cancel` to close the workflow.
 
 When a workflow reaches a closed `done` or `cancelled` posture, extension cleanup may remove the entire `.agent/` directory as expected closeout behavior.
 

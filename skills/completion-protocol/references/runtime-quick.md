@@ -44,7 +44,8 @@ Read current repo truth plus these canonical workflow inputs as needed:
 - `blocked` means report the blocker and stop; reserve it for cases that still need user input or another external unblock step.
 - `paused` means the user explicitly paused the workflow.
 - `done` means final reconciliation is complete.
-- Stopped workflows resume with `/cook` or `/cook resume`; `/cook park` unlocks ordinary direct edits and forces reground; `/cook cancel` closes the workflow.
+- `/cook park` is available anytime an active workflow exists, including while `continuation_policy = continue`; resume still routes through canonical reground.
+- Stopped workflows resume with `/cook` or `/cook resume`; `/cook cancel` closes the workflow.
 - After compaction or any ambiguous state, re-read canonical `.agent/current/*.json*` inputs before continuing.
 - Enter `completion-regrounder` whenever `requires_reground` is true or unknown, the next mandatory action is ambiguous, or the active-slice contract drifts from the plan.
 

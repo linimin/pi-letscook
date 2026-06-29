@@ -6,6 +6,9 @@
 
 - clarified completion drift handling so routine implementer-discovered re-ground now stays under `continuation_policy = continue` with `requires_reground = true` and auto-dispatches `completion-regrounder`, while `blocked` remains reserved for true external or unsafe unblock cases
 - added prompt/protocol/docs/test parity for the auto-reground continuation rule so the workflow driver no longer implies that every re-ground must stop for a manual `/cook resume`
+- made `/cook park` available anytime an active workflow exists, including while `continuation_policy = continue`, so users can unlock ordinary direct edits without waiting for a stopped posture; resume still routes through canonical reground
+- suppressed stale queued `COMPLETION WORKFLOW DRIVER` follow-ups after `/cook park` by requiring authoritative driver-prompt metadata and swallowing extension follow-ups that no longer match canonical state
+- made `/cook cancel` supersede queued driver-prompt metadata and clear the in-memory continuation tracker so exact pre-cancel follow-ups cannot stay authoritative
 
 ## 0.1.91
 

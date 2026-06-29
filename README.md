@@ -48,7 +48,7 @@ Example:
 - `/cook` starts or resumes a workflow.
 - `/cook <prompt>` starts with inline task intent.
 - `/cook resume` resumes saved workflow state.
-- `/cook park` pauses a stopped workflow so you can edit normally.
+- `/cook park` pauses an active workflow so you can edit normally.
 - `/cook cancel` closes a stopped or parked workflow.
 
 `/cook` is optional. Ordinary chat still works normally and can still edit the repo directly.
