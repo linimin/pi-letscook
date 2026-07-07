@@ -5,6 +5,15 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { DynamicBorder, parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import { Container, Text } from "@mariozechner/pi-tui";
+import { runCursorCliAskRoleAttempt } from "./cursor-cli-role-runner.ts";
+import { resolveRoleBackend } from "./cursor-role-config.ts";
+import { runCursorSdkRoleAttempt } from "./cursor-sdk-role-runner.ts";
+import {
+	defaultPiRoleRunner,
+	getPiInvocation,
+	type RoleRunnerBackend,
+	type RoleSubprocessSpawnSpec,
+} from "./role-runner-backend.ts";
 import {
 	type ContextProposal,
 	type RecentDiscussionEntry,
@@ -62,6 +71,7 @@ export type RunCompletionRoleParams = {
 	applyLiveRoleEvent: (activity: LiveRoleActivity, event: JsonRecord, messages: Array<{ role: string; content: Array<{ type: string; text?: string }> }>) => boolean;
 	nowMs: () => number;
 	heartbeatMs: number;
+	subprocessRunner?: RoleRunnerBackend;
 };
 
 export type RunCompletionRoleResult = {
@@ -700,6 +710,8 @@ export async function loadAgentDefinition(cwd: string, role: CompletionRole): Pr
 			description: frontmatter.description,
 			tools: frontmatter.tools?.split(",").map((tool) => tool.trim()).filter(Boolean),
 			model: frontmatter.model,
+			cursorModel: frontmatter.cursor_model,
+			roleBackend: frontmatter.role_backend,
 			systemPrompt: body.trim(),
 			filePath: candidate,
 		};
@@ -727,17 +739,7 @@ export async function writeTempFile(root: string, prefix: string, content: strin
 	}
 }
 
-export function getPiInvocation(args: string[]): { command: string; args: string[] } {
-	const currentScript = process.argv[1];
-	const isBunVirtualScript = currentScript?.startsWith("/$bunfs/root/");
-	if (currentScript && !isBunVirtualScript && fs.existsSync(currentScript)) {
-		return { command: process.execPath, args: [currentScript, ...args] };
-	}
-	const execName = path.basename(process.execPath).toLowerCase();
-	const isGenericRuntime = /^(node|bun)(\.exe)?$/.test(execName);
-	if (!isGenericRuntime) return { command: process.execPath, args };
-	return { command: "pi", args };
-}
+export { getPiInvocation } from "./role-runner-backend.ts";
 
 function getInheritedHeadroomWrapPiExtensionArgs(): string[] {
 	const explicitExtensionPath = process.env.HEADROOM_PI_EXTENSION_PATH?.trim();
@@ -829,7 +831,7 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 	const roleModel = resolveEffectiveCompletionRoleModel(agent.model, params.requestedModel);
 	const effectiveToolAllowlist = effectiveRoleToolAllowlistWithStructured(params.role, agent.tools);
 	const roleEnv = buildCompletionRoleSubprocessEnv(params.role, roleModel);
-	const systemPromptTemp = await writeTempFile(params.root, "pi-completion-role-", agent.systemPrompt);
+	let systemPromptTemp: { dir: string; filePath: string } | undefined;
 	const baseTaskLines = [...params.systemPromptPreamble];
 	if (params.evaluationContextLines?.length) baseTaskLines.push("", ...params.evaluationContextLines);
 	if (params.task?.trim()) baseTaskLines.push("", "Supplemental task context:", params.task.trim());
@@ -849,6 +851,7 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 			);
 		}
 		const prompt = taskLines.join("\n");
+		const combinedPrompt = `${agent.systemPrompt}\n\n${prompt}`;
 		maybeWriteTestTextSnapshot(asString(process.env.PI_COMPLETION_TEST_ROLE_PROMPT_PATH), prompt);
 		maybeWriteTestRolePromptBundle(asString(process.env.PI_COMPLETION_TEST_ROLE_PROMPT_BUNDLE_PATH), {
 			role: params.role,
@@ -858,32 +861,7 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 			model: roleModel,
 			repairMode: Boolean(repairPrompt),
 		});
-		const args: string[] = [
-			"--mode",
-			"json",
-			"-p",
-			"--no-session",
-			"--no-extensions",
-			"--no-skills",
-			"--no-prompt-templates",
-			"--no-context-files",
-			"--append-system-prompt",
-			systemPromptTemp.filePath,
-		];
-		const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
-		if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
-		if (roleModel) args.push("--model", roleModel);
-		if (effectiveToolAllowlist && effectiveToolAllowlist.length > 0) args.push("--tools", effectiveToolAllowlist.join(","));
-		const roleArgs = appendStructuredToolsToPiArgs(
-			args,
-			effectiveToolAllowlist?.filter((tool) => tool.startsWith("completion_emit_")) ?? [],
-		);
-		roleArgs.push(prompt);
-
-		const invocation = getPiInvocation(roleArgs);
-		let stderr = "";
-		const messages: Array<{ role: string; content: Array<{ type: string; text?: string }> }> = [];
-		const eventLines: string[] = [];
+		const backend = resolveRoleBackend(params.role, agent);
 		const liveActivity = params.createLiveRoleActivity(params.role);
 		params.onUpdate?.(liveActivity);
 		if (process.env.PI_COMPLETION_TEST_CAPTURE_ROLE_PROMPT_ONLY === "1") {
@@ -902,54 +880,89 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 				activity: params.cloneLiveRoleActivity(liveActivity, { status: "ok" }),
 			};
 		}
+		params.onConsoleMessage?.("info", `Running ${params.role} via ${backend}.`);
 		const heartbeat = setInterval(() => params.onUpdate?.(liveActivity), params.heartbeatMs);
 
 		try {
-			const exitCode = await new Promise<number>((resolve) => {
-				const proc = spawn(invocation.command, invocation.args, {
+			let exitCode = 0;
+			let stderr = "";
+			const messages: Array<{ role: string; content: Array<{ type: string; text?: string }> }> = [];
+			const eventLines: string[] = [];
+
+			if (backend === "cursor-sdk") {
+				const cursorResult = await runCursorSdkRoleAttempt({
+					root: params.root,
+					role: params.role,
+					combinedPrompt,
+					cursorModel: agent.cursorModel,
+					signal: params.signal,
+					onUpdate: params.onUpdate,
+				});
+				exitCode = cursorResult.exitCode;
+				stderr = cursorResult.stderr ?? "";
+				if (cursorResult.assistantText) {
+					liveActivity.lastAssistantText = cursorResult.assistantText;
+					liveActivity.assistantSummary = cursorResult.assistantText;
+				}
+			} else if (backend === "cursor-cli-ask") {
+				const cursorResult = await runCursorCliAskRoleAttempt({
+					root: params.root,
+					role: params.role,
+					combinedPrompt,
+					cursorModel: agent.cursorModel,
+					signal: params.signal,
+					onUpdate: params.onUpdate,
+				});
+				exitCode = cursorResult.exitCode;
+				stderr = cursorResult.stderr ?? "";
+				if (cursorResult.assistantText) {
+					liveActivity.lastAssistantText = cursorResult.assistantText;
+					liveActivity.assistantSummary = cursorResult.assistantText;
+				}
+			} else {
+				systemPromptTemp ??= await writeTempFile(params.root, "pi-completion-role-", agent.systemPrompt);
+				const args: string[] = [
+					"--mode",
+					"json",
+					"-p",
+					"--no-session",
+					"--no-extensions",
+					"--no-skills",
+					"--no-prompt-templates",
+					"--no-context-files",
+					"--append-system-prompt",
+					systemPromptTemp.filePath,
+				];
+				const inheritedHeadroomExtensionArgs = getInheritedHeadroomWrapPiExtensionArgs();
+				if (inheritedHeadroomExtensionArgs.length > 0) args.push(...inheritedHeadroomExtensionArgs);
+				if (roleModel) args.push("--model", roleModel);
+				if (effectiveToolAllowlist && effectiveToolAllowlist.length > 0) args.push("--tools", effectiveToolAllowlist.join(","));
+				const roleArgs = appendStructuredToolsToPiArgs(
+					args,
+					effectiveToolAllowlist?.filter((tool) => tool.startsWith("completion_emit_")) ?? [],
+				);
+				roleArgs.push(prompt);
+				const invocation = getPiInvocation(roleArgs);
+				const spawnSpec: RoleSubprocessSpawnSpec = {
+					command: invocation.command,
+					args: invocation.args,
 					cwd: params.root,
 					env: roleEnv,
-					stdio: ["ignore", "pipe", "pipe"],
-					shell: false,
-				});
-				let buffer = "";
-
-				const processLine = (line: string) => {
-					if (!line.trim()) return;
-					if (!shouldParseSubprocessEventLine(line)) return;
-					try {
-						const event = JSON.parse(line) as JsonRecord;
-						if (shouldRetainSubprocessFinalOutputEvent(event)) eventLines.push(line);
+					signal: params.signal,
+					onJsonEvent: (event, rawLine) => {
 						if (params.applyLiveRoleEvent(liveActivity, event, messages)) params.onUpdate?.(liveActivity);
-					} catch {
-						// ignore malformed lines
-					}
+					},
 				};
-
-				proc.stdout.on("data", (chunk) => {
-					buffer += chunk.toString();
-					const lines = buffer.split("\n");
-					buffer = lines.pop() ?? "";
-					for (const line of lines) processLine(line);
-				});
-
-				proc.stderr.on("data", (chunk) => {
-					stderr += chunk.toString();
-				});
-
-				proc.on("close", (code) => {
-					if (buffer.trim()) processLine(buffer);
-					resolve(code ?? 0);
-				});
-
-				proc.on("error", () => resolve(1));
-
-				if (params.signal) {
-					const abort = () => proc.kill("SIGTERM");
-					if (params.signal.aborted) abort();
-					else params.signal.addEventListener("abort", abort, { once: true });
+				const subprocessRunner = params.subprocessRunner ?? defaultPiRoleRunner;
+				const spawnResult = await subprocessRunner(spawnSpec);
+				exitCode = spawnResult.exitCode;
+				stderr = spawnResult.stderr ?? "";
+				eventLines.push(...spawnResult.eventLines);
+				if (spawnResult.assistantText) {
+					liveActivity.lastAssistantText = spawnResult.assistantText;
+					liveActivity.assistantSummary = spawnResult.assistantText;
 				}
-			});
+			}
 
 			const fallbackOutput = liveActivity.lastAssistantText || stderr.trim() || `${params.role} finished with no text output.`;
 			let resolved;
@@ -959,6 +972,7 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 					assistantText: liveActivity.lastAssistantText,
 					eventLines,
 					fallbackOutput,
+					allowTextFallback: backend !== "pi",
 				});
 			} catch (error) {
 				const message =
@@ -1018,8 +1032,15 @@ export async function runCompletionRole(params: RunCompletionRoleParams): Promis
 		}
 		if (result.transcription?.appended.length) params.onConsoleMessage?.("info", `Completion transcription appended: ${result.transcription.appended.join(", ")}`);
 		if (result.transcription?.errors.length) params.onConsoleMessage?.("warning", `Completion transcription warning: ${result.transcription.errors.join(" | ")}`);
+		if (result.exitCode === 0 && (result.transcription?.errors.length ?? 0) > 0) {
+			result = {
+				...result,
+				ok: false,
+				activity: params.cloneLiveRoleActivity(result.activity, { status: "error" }),
+			};
+		}
 		return result;
 	} finally {
-		await fsp.rm(systemPromptTemp.dir, { recursive: true, force: true });
+		if (systemPromptTemp) await fsp.rm(systemPromptTemp.dir, { recursive: true, force: true });
 	}
 }

@@ -156,6 +156,8 @@ export function resolveRoleSubprocessOutput(args: {
 	assistantText?: string;
 	eventLines?: string[];
 	fallbackOutput: string;
+	/** When false, missing structured emit output fails closed (Pi subprocess path). */
+	allowTextFallback?: boolean;
 }): ResolvedRoleSubprocessOutput {
 	const contractId = contractIdForCompletionRole(args.role);
 	if (!contractId) {
@@ -163,27 +165,34 @@ export function resolveRoleSubprocessOutput(args: {
 		return { output, reportFields: roleReporting.parseReportFields(output) };
 	}
 
-	const { payload } = requireSubprocessFinalOutput<StructuredEvaluatorReport | StructuredRoleHandoffReport>({
-		eventLines: args.eventLines,
-		contractId,
-		assistantText: args.assistantText,
-	});
+	try {
+		const { payload } = requireSubprocessFinalOutput<StructuredEvaluatorReport | StructuredRoleHandoffReport>({
+			eventLines: args.eventLines,
+			contractId,
+			assistantText: args.assistantText,
+		});
 
-	if ("rubric" in payload && Array.isArray(payload.rubric)) {
-		const structured = payload as StructuredEvaluatorReport;
-		const output = renderEvaluatorReport(structured);
+		if ("rubric" in payload && Array.isArray(payload.rubric)) {
+			const structured = payload as StructuredEvaluatorReport;
+			const output = renderEvaluatorReport(structured);
+			return {
+				output,
+				reportFields: roleReporting.parseReportFields(output),
+				structuredEvaluatorReport: structured,
+			};
+		}
+
+		const structured = payload as StructuredRoleHandoffReport;
+		const output = renderRoleHandoffReport(structured);
 		return {
 			output,
 			reportFields: roleReporting.parseReportFields(output),
-			structuredEvaluatorReport: structured,
+			structuredRoleHandoffReport: structured,
 		};
+	} catch (error) {
+		if (!(error instanceof StructuredSubprocessOutputError)) throw error;
+		if (!args.allowTextFallback) throw error;
+		const output = args.assistantText || args.fallbackOutput;
+		return { output, reportFields: roleReporting.parseReportFields(output) };
 	}
-
-	const structured = payload as StructuredRoleHandoffReport;
-	const output = renderRoleHandoffReport(structured);
-	return {
-		output,
-		reportFields: roleReporting.parseReportFields(output),
-		structuredRoleHandoffReport: structured,
-	};
 }

@@ -14,6 +14,8 @@ Preview `/cook` capsules in ordinary chat may still help the conversation, but `
 
 `/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation.
 
+`/cook import` reads a `cook_handoff` JSON file (default: `.agent/tmp/cursor-handoff.json`) for Cursor IDE → Pi handoff. See `docs/CURSOR_HANDOFF.md`.
+
 startup and next-round entry stay confirm-first, following same-entry primary-agent handoff synthesis -> fail closed.
 
 Only explicit `/cook` enters workflow mode. In ordinary chat, do not load or follow `completion-protocol`, and do not call `completion_role`.
@@ -87,6 +89,12 @@ Deterministic active-slice contract regression now lives in `bash scripts/active
 Deterministic verification for this packaged contract also lives in `npm run rubric-contract-test`, which now exercises reviewer, auditor, and stop-judge transcription paths while the bootstrap/refocus/context regressions plus control-plane verifier fail closed when required canonical signaling is missing.
 
 Active `/cook` workflows now also auto-reconcile routine unrelated tracked worktree dirt instead of bouncing that decision back to the user. When the dirty tracked files are outside the latest slice or current reconciliation surfaces and can be isolated safely, the workflow should preserve them with a reversible mechanism such as a named git stash plus a `.agent/current/tmp/dirty-worktree-autostash.json` note, continue the mandatory step on a clean worktree, and restore them before handing control back. Only overlapping changes, ownership ambiguity, or stash/restore conflicts should force a user-facing decision.
+
+## Optional Cursor role backends
+
+When `PI_COMPLETION_CURSOR_ENABLED=1`, completion roles may execute through Cursor instead of Pi subprocesses while the Pi driver and `.agent/**` control plane stay unchanged. Default mapping: implementer via `@cursor/sdk`, reviewer/auditor/stop-judge via Cursor CLI `--mode=ask`, regrounder/bootstrapper/helpers remain on Pi. See `docs/CURSOR_BACKEND.md`.
+
+For Cursor-backed roles only, `resolveRoleSubprocessOutput` falls back to fixed text report parsing when structured emit tool events are absent, so Cursor eval roles can still pass canonical transcription when reports match the packaged rubric format. Pi subprocess roles do not use this fallback.
 
 ## Canonical Files
 

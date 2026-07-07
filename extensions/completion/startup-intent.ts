@@ -28,6 +28,8 @@ export type CookProposalDeps = {
 export type CookContextProposalResult = {
 	proposal?: ContextProposal;
 	handoffSynthesis?: CookHandoffGenerationResult;
+	importHandoffPath?: string;
+	importHandoffError?: string;
 };
 
 export type StartupIntentHints = {
@@ -235,6 +237,8 @@ export function buildCookSynthesisContext(args: {
 
 export async function deriveCookContextProposalWithSynthesis(args: {
 	inlinePrompt?: string;
+	importedHandoffProposal?: ContextProposal;
+	importHandoffPath?: string;
 	recentMessages: RecentSessionMessage[];
 	snapshot?: CompletionStateSnapshot;
 	projectName: string;
@@ -247,6 +251,12 @@ export async function deriveCookContextProposalWithSynthesis(args: {
 	const workflowContext = workflowContextFromSnapshot(args.snapshot);
 	const annotateProposal = (proposal: ContextProposal | undefined): ContextProposal | undefined =>
 		proposal ? annotateActiveWorkflowRoutingProposal(proposal, workflowContext, args.deps) : undefined;
+	if (args.importedHandoffProposal) {
+		return {
+			proposal: annotateProposal(args.importedHandoffProposal),
+			importHandoffPath: args.importHandoffPath,
+		};
+	}
 	const synthesisContext = buildCookSynthesisContext({
 		inlinePrompt: args.inlinePrompt,
 		recentMessages: args.recentMessages,

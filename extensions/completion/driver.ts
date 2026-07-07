@@ -19,6 +19,7 @@ import {
 	writeJsonFile,
 } from "./state-store";
 import { buildAdvisoryStartupBrief } from "./startup-intent";
+import { consumeCursorHandoffFile, quarantineCursorHandoffFile } from "./cursor-handoff.ts";
 import type { CookContextProposalResult, CookHandoffGenerationResult } from "./startup-intent";
 import type {
 	ContextProposal,
@@ -78,6 +79,7 @@ type DriverContext = {
 	model?: any;
 	modelRegistry?: any;
 	cookInlinePrompt?: string;
+	cookImportHandoffPath?: string;
 };
 
 type DriverContinuationTracker = {
@@ -689,6 +691,7 @@ export async function runCookEntry(
 	let kickoffIntent: "auto" | "continue" | "refocus" = "auto";
 	let kickoffMissionAnchor = snapshot ? currentMissionAnchor(snapshot) : undefined;
 	let kickoffAnalysis: ContextProposalAnalysis | undefined;
+	let pendingImportHandoffPath: string | undefined;
 
 	if (snapshot && !workflowDone && cookControlAction === "resume") {
 		if (isWorkflowParked(snapshot)) {
@@ -750,7 +753,12 @@ export async function runCookEntry(
 		const derived = await deps.deriveCookContextProposal(ctx, projectName);
 		const proposal = derived.proposal;
 		if (!proposal) {
-			deps.emitCommandText(ctx, buildCookStartupBriefRequiredMessage(deps, undefined, derived.handoffSynthesis), "info");
+			const importFailure = ctx.cookImportHandoffPath
+				? derived.importHandoffError
+					? `/cook import failed: ${derived.importHandoffError}`
+					: "/cook import failed: could not load a startable cook_handoff from the imported file. Confirm the JSON matches the cook_handoff schema and rerun /cook import."
+				: buildCookStartupBriefRequiredMessage(deps, undefined, derived.handoffSynthesis);
+			deps.emitCommandText(ctx, importFailure, "info");
 			return;
 		}
 		const decision = await deps.confirmContextProposal(ctx, proposal, {
@@ -779,6 +787,11 @@ export async function runCookEntry(
 			"info",
 		);
 		snapshot = await loadCompletionSnapshot(root);
+		if (!snapshot) {
+			deps.emitCommandText(ctx, "Failed to load completion workflow state after startup scaffold.", "error");
+			return;
+		}
+		pendingImportHandoffPath = derived.importHandoffPath;
 	}
 	if (!snapshot) {
 		deps.emitCommandText(ctx, "Failed to load completion workflow state", "error");
@@ -900,13 +913,35 @@ export async function runCookEntry(
 		asString(snapshot.state?.workflow_session_id),
 	);
 	await queueCompletionDriverPrompt(pi, ctx, kickoffPrompt, "kickoff", deps);
+	if (pendingImportHandoffPath) {
+		try {
+			const consumedPath = await consumeCursorHandoffFile(pendingImportHandoffPath);
+			deps.emitCommandText(ctx, `Consumed Cursor handoff import file (${consumedPath}).`, "info");
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			const quarantinedPath = await quarantineCursorHandoffFile(pendingImportHandoffPath);
+			deps.emitCommandText(
+				ctx,
+				quarantinedPath
+					? `Completion workflow started, but Cursor handoff cleanup failed (${message}). The handoff was quarantined to ${quarantinedPath} to prevent accidental /cook import reuse.`
+					: `Completion workflow started, but Cursor handoff cleanup failed (${message}). Remove ${pendingImportHandoffPath} manually before re-importing.`,
+				"warning",
+			);
+		}
+	}
 }
 
 export function registerCookCommand(pi: ExtensionAPI, deps: CompletionDriverDeps): void {
 	pi.registerCommand("cook", {
 		description: deps.cookCommandSpec.description,
 		handler: async (args, ctx) => {
-			const inlinePrompt = asString(args);
+			const raw = asString(args)?.trim() ?? "";
+			if (raw === "import" || raw.startsWith("import ")) {
+				const importPath = raw === "import" ? "default" : raw.slice("import ".length).trim() || "default";
+				await runCookEntry(pi, { ...ctx, cookImportHandoffPath: importPath }, deps);
+				return;
+			}
+			const inlinePrompt = raw.length > 0 ? raw : undefined;
 			await runCookEntry(pi, { ...ctx, cookInlinePrompt: inlinePrompt }, deps);
 		},
 	});

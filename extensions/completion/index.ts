@@ -43,6 +43,7 @@ import {
 	maybeWriteContextProposalConfirmationSnapshot,
 	maybeWriteContextProposalSnapshot,
 } from "./prompt-surfaces";
+import { loadCursorHandoffProposal } from "./cursor-handoff.ts";
 import { deriveCookContextProposalWithSynthesis } from "./startup-intent";
 import type { CookContextProposalResult, CookProposalDeps } from "./startup-intent";
 import { toolCallBlockReason } from "./policy-guards";
@@ -587,6 +588,7 @@ type CookProposalContext = {
 	model?: any;
 	modelRegistry?: any;
 	cookInlinePrompt?: string;
+	cookImportHandoffPath?: string;
 };
 
 function cookInlinePromptFromContext(ctx: { cookInlinePrompt?: string }): string | undefined {
@@ -612,8 +614,26 @@ async function deriveCookContextProposal(
 	const inlinePrompt = cookInlinePromptFromContext(ctx);
 	const recentMessages = collectRecentSessionMessages(ctx, { isRecord, asString, asNumber, isStaleContextError });
 	const snapshot = await loadCompletionSnapshot(getCtxCwd(ctx));
+	const root = getCtxCwd(ctx);
+	let importedHandoffProposal: ContextProposal | undefined;
+	let importHandoffPath: string | undefined;
+	if (ctx.cookImportHandoffPath) {
+		const explicitPath = ctx.cookImportHandoffPath === "default" ? undefined : ctx.cookImportHandoffPath;
+		const loaded = await loadCursorHandoffProposal(root, projectName, cookProposalDeps(), explicitPath);
+		if (!loaded.proposal) {
+			return {
+				handoffSynthesis: { kind: "failed" },
+				importHandoffPath: loaded.handoffPath,
+				importHandoffError: loaded.error,
+			};
+		}
+		importedHandoffProposal = loaded.proposal;
+		importHandoffPath = loaded.handoffPath;
+	}
 	return await deriveCookContextProposalWithSynthesis({
 		inlinePrompt,
+		importedHandoffProposal,
+		importHandoffPath,
 		recentMessages,
 		snapshot,
 		projectName,
@@ -1204,7 +1224,7 @@ export default function completionExtension(pi: ExtensionAPI) {
 		structuredDiscussionFailureDetail: COOK_STRUCTURED_DISCUSSION_FAILURE_DETAIL,
 		mainChatRerunGuidance: COOK_MAIN_CHAT_RERUN_GUIDANCE,
 		cookCommandSpec: {
-			description: "/cook workflow: start or replace workflow by asking the primary agent to synthesize a startup handoff from the current task context or inline prompt (fail closed when no startable handoff is produced); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit workflow controls (/cook park anytime while a workflow is active; resume and cancel when stopped or parked)",
+			description: "/cook workflow: start or replace workflow by asking the primary agent to synthesize a startup handoff from the current task context, inline prompt, or /cook import (fail closed when no startable handoff is produced); resume the current workflow from canonical state, or use /cook resume|park|cancel|import for explicit workflow controls (/cook park anytime while a workflow is active; resume and cancel when stopped or parked)",
 		},
 		buildContextProposalContinuationReason,
 		completionKickoff,

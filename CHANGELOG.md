@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- added optional Cursor role backends: Pi driver unchanged; `completion-implementer` can run via `@cursor/sdk`, evaluator roles via Cursor CLI `--mode=ask` when `PI_COMPLETION_CURSOR_ENABLED=1`
+- added `RoleRunnerBackend` spawn abstraction in `role-runner-backend.ts` with `PI_COMPLETION_TEST_ROLE_SPAWN_RESULT_JSON` fixture support
+- added Cursor desktop handoff via `/cook import` and `.agent/tmp/cursor-handoff.json`, plus companion `cursor/skills/cursor-handoff` and `cursor/commands/prepare-cook-handoff.md`
+- added `docs/CURSOR_BACKEND.md` and `docs/CURSOR_HANDOFF.md`
+
 ### Fixed
 
 - clarified completion drift handling so routine implementer-discovered re-ground now stays under `continuation_policy = continue` with `requires_reground = true` and auto-dispatches `completion-regrounder`, while `blocked` remains reserved for true external or unsafe unblock cases

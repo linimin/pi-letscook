@@ -78,6 +78,8 @@ export type AgentDefinition = {
 	description?: string;
 	tools?: string[];
 	model?: string;
+	cursorModel?: string;
+	roleBackend?: string;
 	systemPrompt: string;
 	filePath: string;
 };

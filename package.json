@@ -26,6 +26,7 @@
     "skills",
     "agents",
     "helpers",
+    "cursor",
     "scripts",
     "docs",
     "README.md",
@@ -58,6 +59,13 @@
     "helper-observability-test": "bash ./scripts/helper-observability-test.sh",
     "helper-runtime-contract-test": "bash ./scripts/helper-runtime-contract-test.sh",
     "subprocess-structured-output-test": "bash ./scripts/subprocess-structured-output-test.sh",
+    "cursor-role-config-test": "bash ./scripts/cursor-role-config-test.sh",
+    "cursor-role-runner-contract-test": "bash ./scripts/cursor-role-runner-contract-test.sh",
+    "cursor-role-output-test": "bash ./scripts/cursor-role-output-test.sh",
+    "cursor-handoff-import-test": "bash ./scripts/cursor-handoff-import-test.sh",
+    "cursor-cli-live-test": "bash ./scripts/cursor-cli-live-test.sh",
+    "cursor-sdk-live-test": "bash ./scripts/cursor-sdk-live-test.sh",
+    "cursor-release-check": "bash ./scripts/cursor-release-check.sh",
     "release-check": "bash ./scripts/release-check.sh",
     "worktree-root-boundary-test": "bash ./scripts/worktree-root-boundary-test.sh"
   },
@@ -68,7 +76,13 @@
     "@mariozechner/pi-ai": "*",
     "@mariozechner/pi-coding-agent": "*",
     "@mariozechner/pi-tui": "*",
+    "@cursor/sdk": "*",
     "typebox": "*"
+  },
+  "peerDependenciesMeta": {
+    "@cursor/sdk": {
+      "optional": true
+    }
   },
   "pi": {
     "extensions": [

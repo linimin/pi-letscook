@@ -15,6 +15,11 @@ cleanup_release_check_agent_dir() {
 trap cleanup_release_check_agent_dir EXIT
 export PI_COMPLETION_RUNNING_RELEASE_CHECK=1
 
+if ! command -v pi >/dev/null 2>&1; then
+  echo "[release-check] pi is not on PATH. Install pi for the full release gate, or run: npm run cursor-release-check" >&2
+  exit 1
+fi
+
 echo "[release-check] running control-plane validation, helper runtime capability probe, packaged helper smoke, helper authority-boundary, artifact-layout, runtime-contract, role-gating, structured-output, observability regressions, local .agent runtime parity, package-owned verifier entrypoint parity, role/protocol path parity, slice-surface parity, explicit-/cook parity, startup/refocus/context/worktree-root regressions, prompt-budget coverage, agent_end auto-resume delivery coverage, basis-regression proof, canonical evidence artifact, active-slice contract, observability, completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, evaluator calibration, structured-report repair coverage, and rubric contract coverage"
 npm run verify-completion-control-plane
 bash ./scripts/helper-runtime-capability-test.sh
@@ -116,7 +121,7 @@ checks = {
     ],
     "extensions/completion/index.ts": [
         '"/cook failed closed because the primary-agent startup step could not prepare a workflow startup brief from the current task context. Clarify the mission, repo-change intent, or key constraints in the main chat, then rerun /cook."',
-        'description: "/cook workflow: start or replace workflow by asking the primary agent to synthesize a startup handoff from the current task context or inline prompt (fail closed when no startable handoff is produced); resume the current workflow from canonical state, or use /cook resume|park|cancel for explicit workflow controls (/cook park anytime while a workflow is active; resume and cancel when stopped or parked)"',
+        'description: "/cook workflow: start or replace workflow by asking the primary agent to synthesize a startup handoff from the current task context, inline prompt, or /cook import (fail closed when no startable handoff is produced); resume the current workflow from canonical state, or use /cook resume|park|cancel|import for explicit workflow controls (/cook park anytime while a workflow is active; resume and cancel when stopped or parked)"',
         '/cook park is available anytime an active workflow exists, including while continuation_policy is continue, to record a parked paused posture for ordinary direct edits; resume still requires canonical reground.',
         'Ignored stale completion workflow driver prompt because canonical state no longer authorizes auto-resume or continuation.',
         'function isAuthoritativeQueuedCompletionDriverPrompt(',
@@ -243,6 +248,10 @@ npm run context-proposal-test
 npm run prompt-budget-test
 npm run worktree-root-boundary-test
 bash ./scripts/role-runner-contract-test.sh
+bash ./scripts/cursor-role-config-test.sh
+bash ./scripts/cursor-role-runner-contract-test.sh
+bash ./scripts/cursor-role-output-test.sh
+bash ./scripts/cursor-handoff-import-test.sh
 bash ./scripts/basis-regression-proof-test.sh
 if [[ "${PI_COMPLETION_SKIP_CANONICAL_EVIDENCE_ARTIFACT_TEST:-}" != "1" ]]; then
   bash ./scripts/canonical-evidence-artifact-test.sh
