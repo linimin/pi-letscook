@@ -1,26 +1,29 @@
 ---
 name: cursor-handoff
-description: Prepare a cook_handoff JSON file for Pi /cook import after planning in Cursor IDE.
+description: Prepare a cook_handoff for Pi /cook via MCP with a dedicated cook worktree, chat confirmation, and monitoring.
 ---
 
-# Cursor Handoff for Pi /cook
+# Cursor Handoff for Pi /cook (MCP + worktree)
 
-Use this when the user has finished planning in Cursor and wants to hand off to the Pi long-running `/cook` workflow in the same repository.
+Use when the user finished planning in Cursor and wants a long-running Pi `/cook` workflow without blocking their main checkout.
 
 ## What to do
 
-1. Read the user's planning context: mission, scope, constraints, acceptance criteria, risks, and optional first-slice hints.
-2. Write a valid `cook_handoff` JSON file to `.agent/tmp/cursor-handoff.json` in the repo root.
-3. Ensure `.agent/tmp/` exists.
-4. Tell the user to open a terminal in this repo, run `pi`, then `/cook import`.
+1. Call MCP `ensure_cook_worktree` with a `slug` and `branch` (e.g. `auth-refactor`, `cook/auth-refactor`).
+2. Call `prepare_cook_handoff` with `workspace_root` from the worktree result and a valid `cook_handoff` capsule.
+3. Call `preview_cook_handoff_confirmation` with the same `workspace_root` and show the startup brief in chat.
+4. On user **Start**, call `start_cook_workflow` with `workspace_root`, `confirmation_id`, and `action: "start"`.
+5. Follow the `cursor-handoff-monitor` skill in the same chat after kickoff.
 
 ## Required JSON shape
+
+See `get_cook_handoff_schema` or:
 
 ```json
 {
   "kind": "cook_handoff",
   "source": "primary_agent",
-  "captured_at": "<ISO-8601 timestamp>",
+  "captured_at": "<ISO-8601>",
   "source_turn_id": "cursor-handoff",
   "mission": "<concise implementation mission>",
   "scope": ["..."],
@@ -36,17 +39,16 @@ Use this when the user has finished planning in Cursor and wants to hand off to 
 }
 ```
 
-Optional hints: `first_slice_goal`, `implementation_surfaces`, `verification_commands`, `why_this_slice_first`.
-
 ## Rules
 
-- Do not start the Pi workflow from Cursor. Only write the handoff file.
+- Always thread the same `workspace_root` through prepare → start → monitor.
+- Do not start Pi manually unless MCP spawn fails; then run the returned `command` in the integrated terminal (worktree cwd).
+- When `start_cook_workflow` returns `terminal.launch_required: true`, run the returned `command` in the integrated Terminal panel.
 - Mission must be concrete and repo-change oriented.
-- Acceptance criteria must be verifiable.
 - `handoff_kind` must be `implementation_workflow_handoff`.
 
 ## Closing instruction
 
-After writing the file, say:
+After `prepare_cook_handoff`, say:
 
-> Handoff saved to `.agent/tmp/cursor-handoff.json`. Open a terminal in this repo, run `pi`, then `/cook import` to enter workflow mode with Start/Cancel confirmation.
+> Handoff saved in the cook worktree. Review the startup brief above and reply **Start** or **Cancel**. On Start I will launch Pi in the worktree and monitor progress here.

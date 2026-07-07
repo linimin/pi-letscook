@@ -1,80 +1,77 @@
 # Cursor IDE → Pi /cook Handoff
 
-Pi `/cook` cannot read Cursor IDE chat history. Hand off planning work with an explicit file or inline prompt in the same repository.
+Pi `/cook` cannot read Cursor IDE chat history. Hand off planning work with the **cook-handoff MCP**, a dedicated **git worktree**, or legacy file/inline paths.
 
-## Quick handoff
+## Recommended flow (MCP + worktree)
 
-1. Plan in Cursor (Agent, Plan, or Ask mode).
-2. Open a terminal in the **same repo**.
-3. Run `pi`, then:
+1. Plan in Cursor on your **main checkout**.
+2. Use the **cook-handoff MCP** (see [CURSOR_HANDOFF_MCP.md](CURSOR_HANDOFF_MCP.md)):
+   - `ensure_cook_worktree` → `.worktrees/cook-<slug>/`
+   - `prepare_cook_handoff` → handoff file + pending sidecar
+   - `preview_cook_handoff_confirmation` → startup brief in chat
+   - User **Start** → `start_cook_workflow` returns a launch command; run it in the integrated Terminal (worktree cwd)
+3. Monitor in the same chat via `poll_cook_workflow_updates` (see `cursor-handoff-monitor` skill).
 
 ```text
-/cook <one-line mission from Cursor>
+main checkout/                 .worktrees/cook-feature/
+Cursor plans & edits      →    Pi /cook + .agent/current/
 ```
 
-## Planned handoff (recommended)
-
-### 1. Install the companion Cursor assets
+## Install Cursor assets
 
 ```bash
-mkdir -p .cursor/skills .cursor/commands
+mkdir -p .cursor/skills .cursor/commands .cursor/mcp
 cp -r node_modules/@linimin/pi-letscook/cursor/skills/cursor-handoff .cursor/skills/
+cp -r node_modules/@linimin/pi-letscook/cursor/skills/cursor-handoff-monitor .cursor/skills/
 cp node_modules/@linimin/pi-letscook/cursor/commands/prepare-cook-handoff.md .cursor/commands/
+cp node_modules/@linimin/pi-letscook/cursor/mcp/cook-handoff.json.example .cursor/mcp/cook-handoff.json
 ```
 
-Or copy from a local checkout of this package under `cursor/`.
+Adjust MCP config paths for your install.
 
-### 2. Prepare the handoff in Cursor
+## Legacy / fallback paths
 
-Run the **Prepare cook handoff** command (or invoke the `cursor-handoff` skill). Cursor writes:
+### Plain `/cook` auto-detect
 
-```text
-.agent/tmp/cursor-handoff.json
-```
-
-### 3. Start workflow in Pi
+If `.agent/tmp/cursor-handoff.json` exists and is fresh, plain `/cook` picks it up only while the MCP sidecar is still `pending_review` (or for legacy file-only handoffs with a fresh `captured_at`). After MCP **Start**, `/cook` and `/cook <prompt>` fail closed with a message to run the terminal command. Stale or unusable handoff files also fail closed instead of silently synthesizing a new brief.
 
 ```bash
 pi
-/cook import
+/cook
 ```
 
-Review the startup brief, then choose **Start** or **Cancel**.
-
-Optional explicit path:
+### Explicit import
 
 ```text
+/cook import
 /cook import path/to/handoff.json
 ```
 
-Override default path with `PI_COMPLETION_CURSOR_HANDOFF_PATH`.
-
-After a successful import, Pi consumes or quarantines the handoff file so `/cook import` cannot accidentally reuse the same JSON. Archived `cursor-handoff.consumed.*` and `cursor-handoff.quarantined.*` files are rejected even when imported by explicit path.
-
-## Plan doc handoff
-
-Export a plan to `docs/plans/<name>.md`, then in Pi:
+### Inline prompt
 
 ```text
-/cook implement per docs/plans/<name>.md
+/cook <one-line mission>
 ```
 
 ## After workflow starts
 
-- `/cook resume` — continue from `.agent/` state
-- `/cook park` — pause for ordinary Cursor edits, then `/cook resume`
+- `/cook resume` — continue from `.agent/` state (in the **worktree** when using worktree flow)
+- `/cook park` — pause for edits, then `/cook resume`
 - `/cook cancel` — close the workflow
 
 ## Division of labor
 
 | Surface | Role |
 |---------|------|
-| Cursor IDE | Explore, plan, write handoff file, quick edits while parked |
-| Pi `/cook` | Durable mission, slices, dispatch, review/audit/stop |
+| Cursor chat | Plan, confirm handoff, monitor progress |
+| Cook worktree | Pi `/cook` execution + `.agent/current/**` |
+| Main checkout | Ordinary edits while cook runs on worktree |
 | Cursor SDK/CLI (optional) | Implementer and evaluator execution |
 
 ## What handoff does not do
 
-- Does not auto-start workflow from Cursor (Start/Cancel gate still required).
-- Does not sync live Cursor chat into Pi after workflow starts.
-- Does not replace regrounder — file hints are advisory; regrounder authors canonical slices from repo truth.
+- Does not auto-start without explicit Start (chat or Pi UI).
+- Does not sync live Cursor chat into Pi after kickoff.
+- Does not replace regrounder — file hints are advisory.
+
+See also: [CURSOR_HANDOFF_MCP.md](CURSOR_HANDOFF_MCP.md), [CURSOR_BACKEND.md](CURSOR_BACKEND.md).

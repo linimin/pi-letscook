@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cook-handoff": {
+      "command": "npm",
+      "args": ["run", "start", "--prefix", "mcp/cook-handoff"],
+      "env": {
+        "PI_LETSCOOK_EXTENSION_PATH": "."
+      }
+    }
+  }
+}

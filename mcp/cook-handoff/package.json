@@ -1,0 +1,22 @@
+{
+  "name": "@linimin/cook-handoff-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server for Cursor → Pi /cook handoff with worktree support",
+  "bin": {
+    "cook-handoff-mcp": "./src/server.ts"
+  },
+  "scripts": {
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

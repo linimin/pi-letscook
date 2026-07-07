@@ -35,7 +35,9 @@ const assertNotIncludes = (file, snippet) => {
 assertNotIncludes('extensions/completion/index.ts', 'consumeCursorHandoffFile');
 assertIncludes('extensions/completion/startup-intent.ts', 'importedHandoffProposal');
 assertIncludes('cursor/skills/cursor-handoff/SKILL.md', 'cook_handoff');
-assertIncludes('cursor/commands/prepare-cook-handoff.md', '/cook import');
+assertIncludes('cursor/skills/cursor-handoff/SKILL.md', 'ensure_cook_worktree');
+assertIncludes('cursor/commands/prepare-cook-handoff.md', 'start_cook_workflow');
+assertIncludes('extensions/completion/cursor-handoff-service.ts', 'readPendingCookHandoff');
 
 function cookHandoffBlockFromJsonText(raw) {
   const trimmed = raw.trim();

@@ -4,6 +4,9 @@
 
 ### Added
 
+- added cook-handoff MCP (`mcp/cook-handoff/`) with worktree-first flow: `ensure_cook_worktree`, prepare/preview/start tools, and chat monitoring via `get_cook_workflow_status` / `poll_cook_workflow_updates`
+- added `cursor-handoff-service.ts`, plain `/cook` auto-detect for pending `.agent/tmp/cursor-handoff.json`, and `PI_COMPLETION_CURSOR_HANDOFF_CONFIRMED` to skip duplicate Pi confirm after Cursor Start
+- added `cursor/skills/cursor-handoff-monitor`, `docs/CURSOR_HANDOFF_MCP.md`, and handoff regression scripts wired into `cursor-release-check`
 - added optional Cursor role backends: Pi driver unchanged; `completion-implementer` can run via `@cursor/sdk`, evaluator roles via Cursor CLI `--mode=ask` when `PI_COMPLETION_CURSOR_ENABLED=1`
 - added `RoleRunnerBackend` spawn abstraction in `role-runner-backend.ts` with `PI_COMPLETION_TEST_ROLE_SPAWN_RESULT_JSON` fixture support
 - added Cursor desktop handoff via `/cook import` and `.agent/tmp/cursor-handoff.json`, plus companion `cursor/skills/cursor-handoff` and `cursor/commands/prepare-cook-handoff.md`
@@ -11,7 +14,7 @@
 
 ### Fixed
 
-- clarified completion drift handling so routine implementer-discovered re-ground now stays under `continuation_policy = continue` with `requires_reground = true` and auto-dispatches `completion-regrounder`, while `blocked` remains reserved for true external or unsafe unblock cases
+- hardened cook-handoff MCP: require `workspace_root`, bind confirmation to `handoff_sha256`, honest agent-terminal launch (`launch_required`), optional verified background spawn, cancel clears pending state, stricter stale-handoff TTL, workflow event sync for monitoring deltas, `awaiting_terminal_launch` sidecar status, idempotent start guards, legacy file-only auto-detect, dry-run without sidecar mutation, plain `/cook` and inline `/cook <prompt>` fail-closed after MCP start, stale handoff fail-closed, deferred monitoring until workflow exists, preview integrity checks, spawn-failure sidecar recovery, and stale kickoff_started recovery
 - added prompt/protocol/docs/test parity for the auto-reground continuation rule so the workflow driver no longer implies that every re-ground must stop for a manual `/cook resume`
 - made `/cook park` available anytime an active workflow exists, including while `continuation_policy = continue`, so users can unlock ordinary direct edits without waiting for a stopped posture; resume still routes through canonical reground
 - suppressed stale queued `COMPLETION WORKFLOW DRIVER` follow-ups after `/cook park` by requiring authoritative driver-prompt metadata and swallowing extension follow-ups that no longer match canonical state

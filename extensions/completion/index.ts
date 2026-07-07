@@ -44,6 +44,12 @@ import {
 	maybeWriteContextProposalSnapshot,
 } from "./prompt-surfaces";
 import { loadCursorHandoffProposal } from "./cursor-handoff.ts";
+import {
+	consumeCursorConfirmedKickoffEnv,
+	CURSOR_HANDOFF_CONFIRMED_ENV,
+	readPendingCookHandoff,
+	resolvePlainCookPendingImport,
+} from "./cursor-handoff-service.ts";
 import { deriveCookContextProposalWithSynthesis } from "./startup-intent";
 import type { CookContextProposalResult, CookProposalDeps } from "./startup-intent";
 import { toolCallBlockReason } from "./policy-guards";
@@ -629,6 +635,20 @@ async function deriveCookContextProposal(
 		}
 		importedHandoffProposal = loaded.proposal;
 		importHandoffPath = loaded.handoffPath;
+	} else {
+		const pending = await readPendingCookHandoff(root, projectName, cookProposalDeps());
+		const decision = resolvePlainCookPendingImport(pending, { hasActiveWorkflow: Boolean(snapshot) });
+		if (decision.kind === "fail") {
+			return {
+				handoffSynthesis: { kind: "failed" },
+				importHandoffPath: decision.handoffPath,
+				importHandoffError: decision.error,
+			};
+		}
+		if (!inlinePrompt && decision.kind === "import") {
+			importedHandoffProposal = decision.proposal;
+			importHandoffPath = decision.handoffPath;
+		}
 	}
 	return await deriveCookContextProposalWithSynthesis({
 		inlinePrompt,
@@ -655,7 +675,7 @@ async function deriveCookContextProposal(
 }
 
 async function confirmContextProposal(
-	ctx: { hasUI: boolean; ui: any },
+	ctx: { hasUI: boolean; ui: any; cwd?: string },
 	proposal: ContextProposal,
 	options: ContextProposalConfirmOptions,
 ): Promise<ContextProposalDecision | undefined> {
@@ -663,6 +683,13 @@ async function confirmContextProposal(
 	const actionOverride = completionTestContextProposalActionOverride();
 	if (actionOverride === "cancel") return undefined;
 	if (actionOverride === "accept") {
+		return resolveContextProposalConfirmationAction(proposal, "start");
+	}
+	const cursorConfirmed = await consumeCursorConfirmedKickoffEnv(
+		getCtxCwd(ctx as CookProposalContext),
+		process.env[CURSOR_HANDOFF_CONFIRMED_ENV],
+	);
+	if (cursorConfirmed.accepted) {
 		return resolveContextProposalConfirmationAction(proposal, "start");
 	}
 	const layout = buildContextProposalConfirmationLayout(options.title, proposal);

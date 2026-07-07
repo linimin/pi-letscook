@@ -50,13 +50,13 @@ Example:
 - `/cook resume` resumes saved workflow state.
 - `/cook park` pauses an active workflow so you can edit normally.
 - `/cook cancel` closes a stopped or parked workflow.
-- `/cook import` starts from `.agent/tmp/cursor-handoff.json` (see [docs/CURSOR_HANDOFF.md](docs/CURSOR_HANDOFF.md)).
+- `/cook import` imports an explicit handoff file (legacy; plain `/cook` auto-detects `.agent/tmp/cursor-handoff.json` too) — see [docs/CURSOR_HANDOFF.md](docs/CURSOR_HANDOFF.md)
 
 `/cook` is optional. Ordinary chat still works normally and can still edit the repo directly.
 
 ## Using with Cursor IDE
 
-- **Handoff:** plan in Cursor, then Pi `/cook <mission>` or `/cook import` — see [docs/CURSOR_HANDOFF.md](docs/CURSOR_HANDOFF.md)
+- **Handoff:** plan in Cursor, use cook-handoff MCP + worktree, or Pi `/cook` / `/cook import` — see [docs/CURSOR_HANDOFF.md](docs/CURSOR_HANDOFF.md) and [docs/CURSOR_HANDOFF_MCP.md](docs/CURSOR_HANDOFF_MCP.md)
 - **Role backends:** route implementer/evaluator roles to Cursor SDK/CLI — see [docs/CURSOR_BACKEND.md](docs/CURSOR_BACKEND.md)
 
 ```bash

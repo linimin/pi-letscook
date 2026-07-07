@@ -20,6 +20,9 @@ import {
 } from "./state-store";
 import { buildAdvisoryStartupBrief } from "./startup-intent";
 import { consumeCursorHandoffFile, quarantineCursorHandoffFile } from "./cursor-handoff.ts";
+import { clearPendingSidecar, CURSOR_HANDOFF_CONFIRMED_ENV, markHandoffKickoffStarted } from "./cursor-handoff-service.ts";
+import { appendWorkflowEvent } from "./workflow-events.ts";
+import { syncWorkflowEventsFromSnapshot } from "./workflow-event-sync.ts";
 import type { CookContextProposalResult, CookHandoffGenerationResult } from "./startup-intent";
 import type {
 	ContextProposal,
@@ -242,7 +245,15 @@ async function parkWorkflow(snapshot: CompletionStateSnapshot): Promise<Completi
 		writeJsonFile(snapshot.files.verificationEvidencePath, nextEvidence),
 		supersedeQueuedDriverPromptMetadata(snapshot, "parked"),
 	]);
-	return await loadCompletionSnapshot(snapshot.files.root);
+	const parked = await loadCompletionSnapshot(snapshot.files.root);
+	if (parked) {
+		try {
+			await syncWorkflowEventsFromSnapshot(parked.files.root, parked);
+		} catch {
+			// workflow event logging is best-effort
+		}
+	}
+	return parked;
 }
 
 async function reactivateParkedWorkflow(snapshot: CompletionStateSnapshot): Promise<CompletionStateSnapshot | undefined> {
@@ -259,7 +270,15 @@ async function reactivateParkedWorkflow(snapshot: CompletionStateSnapshot): Prom
 		contract_status: "parked_workflow_resumed_pending_reground",
 	};
 	await writeJsonFile(snapshot.files.statePath, nextState);
-	return await loadCompletionSnapshot(snapshot.files.root);
+	const resumed = await loadCompletionSnapshot(snapshot.files.root);
+	if (resumed) {
+		try {
+			await syncWorkflowEventsFromSnapshot(resumed.files.root, resumed);
+		} catch {
+			// workflow event logging is best-effort
+		}
+	}
+	return resumed;
 }
 
 async function cancelStoppedWorkflow(snapshot: CompletionStateSnapshot): Promise<void> {
@@ -289,6 +308,16 @@ async function cancelStoppedWorkflow(snapshot: CompletionStateSnapshot): Promise
 		writeJsonFile(snapshot.files.verificationEvidencePath, nextEvidence),
 		supersedeQueuedDriverPromptMetadata(snapshot, "cancelled"),
 	]);
+	try {
+		await syncWorkflowEventsFromSnapshot(snapshot.files.root, {
+			...snapshot,
+			state: nextState,
+			active: nextActive,
+			verificationEvidence: nextEvidence,
+		});
+	} catch {
+		// workflow event logging is best-effort
+	}
 }
 
 export function completionContinuationFingerprint(snapshot: CompletionStateSnapshot): string | undefined {
@@ -757,12 +786,16 @@ export async function runCookEntry(
 				? derived.importHandoffError
 					? `/cook import failed: ${derived.importHandoffError}`
 					: "/cook import failed: could not load a startable cook_handoff from the imported file. Confirm the JSON matches the cook_handoff schema and rerun /cook import."
-				: buildCookStartupBriefRequiredMessage(deps, undefined, derived.handoffSynthesis);
+				: derived.importHandoffError
+					? `Pending Cursor handoff could not start workflow: ${derived.importHandoffError}`
+					: buildCookStartupBriefRequiredMessage(deps, undefined, derived.handoffSynthesis);
 			deps.emitCommandText(ctx, importFailure, "info");
 			return;
 		}
 		const decision = await deps.confirmContextProposal(ctx, proposal, {
-			title: "Start a completion workflow from this startup brief?",
+			title: derived.importHandoffPath
+				? "Start a completion workflow from this Cursor handoff?"
+				: "Start a completion workflow from this startup brief?",
 		});
 		if (!decision) {
 			deps.emitCommandText(ctx, buildCookCancellationMessage("Cancelled startup workflow proposal", deps), "info");
@@ -786,6 +819,19 @@ export async function runCookEntry(
 			`Started completion workflow for: ${kickoffMissionAnchor ?? projectName}. Saved canonical startup brief in ${created.root}/.agent/current/startup-brief.json; completion-regrounder will derive the initial slice plan from repo truth.${created.created.length > 0 ? ` (${created.created.length} files created)` : ""}`,
 			"info",
 		);
+		try {
+			await appendWorkflowEvent(created.root, {
+				kind: "kickoff_started",
+				headline: `Kickoff started for ${kickoffMissionAnchor ?? projectName}`,
+				detail: goal ?? kickoffMissionAnchor ?? projectName,
+			});
+			const kickoffSnapshot = await loadCompletionSnapshot(created.root);
+			if (kickoffSnapshot) {
+				await syncWorkflowEventsFromSnapshot(created.root, kickoffSnapshot);
+			}
+		} catch {
+			// workflow event logging is best-effort
+		}
 		snapshot = await loadCompletionSnapshot(root);
 		if (!snapshot) {
 			deps.emitCommandText(ctx, "Failed to load completion workflow state after startup scaffold.", "error");
@@ -914,8 +960,14 @@ export async function runCookEntry(
 	);
 	await queueCompletionDriverPrompt(pi, ctx, kickoffPrompt, "kickoff", deps);
 	if (pendingImportHandoffPath) {
+		const workflowRoot = snapshot.files.root;
 		try {
 			const consumedPath = await consumeCursorHandoffFile(pendingImportHandoffPath);
+			const confirmationId = process.env[CURSOR_HANDOFF_CONFIRMED_ENV];
+			if (confirmationId) {
+				await markHandoffKickoffStarted(workflowRoot, confirmationId);
+			}
+			await clearPendingSidecar(workflowRoot);
 			deps.emitCommandText(ctx, `Consumed Cursor handoff import file (${consumedPath}).`, "info");
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
