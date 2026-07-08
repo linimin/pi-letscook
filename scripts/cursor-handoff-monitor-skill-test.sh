@@ -15,7 +15,7 @@ need('cursor/skills/cursor-handoff-monitor/SKILL.md', 'awaiting_background_spawn
 need('cursor/skills/cursor-handoff/SKILL.md', 'ensure_cook_worktree');
 need('cursor/skills/cursor-handoff/SKILL.md', 'start_cook_workflow');
 need('mcp/cook-handoff/src/tools.ts', 'poll_cook_workflow_updates');
-need('docs/CURSOR_HANDOFF_MCP.md', 'workspace_root');
+need('docs/integrations/cursor.md', 'workspace_root');
 
 console.log('cursor-handoff-monitor-skill-test passed');
 NODE

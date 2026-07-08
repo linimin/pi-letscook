@@ -200,16 +200,16 @@ const assertSectionIncludes = (file, heading, snippet) => {
   }
 };
 
-assertIncludes('docs/PROTOCOL.md', '.agent/current/verification-evidence.json');
-assertIncludes('docs/PROTOCOL.md', 'Fresh scaffolds create an idle placeholder');
-assertIncludes('docs/PROTOCOL.md', 'bash scripts/canonical-evidence-artifact-test.sh');
-assertIncludes('docs/PROTOCOL.md', '`evidence_quality`');
-assertIncludes('docs/PROTOCOL.md', '`command_results`');
-assertIncludes('docs/PROTOCOL.md', '`basis_regression_artifact_paths`');
-assertIncludes('docs/PROTOCOL.md', 'bash scripts/run-basis-regression-check.sh');
-assertIncludes('docs/PROTOCOL.md', 'failed_on_basis');
-assertIncludes('docs/PROTOCOL.md', 'not_run');
-assertIncludes('docs/PROTOCOL.md', 'not_applicable');
+assertIncludes('docs/maintainer/protocol.md', '.agent/current/verification-evidence.json');
+assertIncludes('docs/maintainer/protocol.md', 'Fresh scaffolds create an idle placeholder');
+assertIncludes('docs/maintainer/protocol.md', 'bash scripts/canonical-evidence-artifact-test.sh');
+assertIncludes('docs/maintainer/protocol.md', '`evidence_quality`');
+assertIncludes('docs/maintainer/protocol.md', '`command_results`');
+assertIncludes('docs/maintainer/protocol.md', '`basis_regression_artifact_paths`');
+assertIncludes('docs/maintainer/protocol.md', 'bash scripts/run-basis-regression-check.sh');
+assertIncludes('docs/maintainer/protocol.md', 'failed_on_basis');
+assertIncludes('docs/maintainer/protocol.md', 'not_run');
+assertIncludes('docs/maintainer/protocol.md', 'not_applicable');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Files', '- `.agent/current/verification-evidence.json`');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- package defaults for task_type, evaluation_profile, and stop policy');
 assertSectionIncludes('skills/completion-protocol/SKILL.md', '## Canonical Inputs', '- `.agent/current/verification-evidence.json`');

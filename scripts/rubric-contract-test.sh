@@ -67,15 +67,15 @@ for (const file of [
   }
 }
 
-assertIncludes('docs/PROTOCOL.md', '## Structured Evaluation Rubrics');
-assertIncludes('docs/PROTOCOL.md', '- `task_type: completion-workflow`');
-assertIncludes('docs/PROTOCOL.md', '- `evaluation_profile: completion-rubric-v1`');
-assertIncludes('docs/PROTOCOL.md', 'kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.');
-assertIncludes('docs/PROTOCOL.md', 'Reviewer, auditor, and stop-judge dispatch/reminder surfaces now thread canonical `evaluation_profile` plus direct-read pointers for the active-slice implementation contract and verification evidence');
-assertIncludes('docs/PROTOCOL.md', 'Canonical reviewer/auditor/stop-judge transcription now fails closed on malformed rubric-bearing reports');
-assertIncludes('docs/PROTOCOL.md', 'npm run rubric-contract-test`, which now exercises reviewer, auditor, and stop-judge transcription paths');
+assertIncludes('docs/maintainer/protocol.md', '## Structured Evaluation Rubrics');
+assertIncludes('docs/maintainer/protocol.md', '- `task_type: completion-workflow`');
+assertIncludes('docs/maintainer/protocol.md', '- `evaluation_profile: completion-rubric-v1`');
+assertIncludes('docs/maintainer/protocol.md', 'kickoff/reminder/resume text and reviewer/auditor/stop-judge evaluation handoffs so downstream roles can rely on canonical signaling instead of prose inference alone.');
+assertIncludes('docs/maintainer/protocol.md', 'Reviewer, auditor, and stop-judge dispatch/reminder surfaces now thread canonical `evaluation_profile` plus direct-read pointers for the active-slice implementation contract and verification evidence');
+assertIncludes('docs/maintainer/protocol.md', 'Canonical reviewer/auditor/stop-judge transcription now fails closed on malformed rubric-bearing reports');
+assertIncludes('docs/maintainer/protocol.md', 'npm run rubric-contract-test`, which now exercises reviewer, auditor, and stop-judge transcription paths');
 for (const dimension of rubricDimensions) {
-  assertIncludes('docs/PROTOCOL.md', `- \`${dimension}\``);
+  assertIncludes('docs/maintainer/protocol.md', `- \`${dimension}\``);
 }
 
 assertIncludes('CHANGELOG.md', 'shared structured evaluation-rubric contract');

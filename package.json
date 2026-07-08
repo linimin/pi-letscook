@@ -32,7 +32,6 @@
     "docs",
     "README.md",
     "CHANGELOG.md",
-    "PUBLISHING.md",
     "LICENSE"
   ],
   "scripts": {

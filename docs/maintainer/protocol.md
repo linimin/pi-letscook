@@ -14,7 +14,7 @@ Preview `/cook` capsules in ordinary chat may still help the conversation, but `
 
 `/cook <prompt>` lets you provide explicit startup intent inline without bypassing synthesis or confirmation.
 
-`/cook import` reads a `cook_handoff` JSON file (default: `.agent/tmp/cursor-handoff.json`) for Cursor IDE → Pi handoff. See `docs/CURSOR_HANDOFF.md`.
+`/cook import` reads a `cook_handoff` JSON file (default: `.agent/tmp/cursor-handoff.json`) for Cursor IDE → Pi handoff. See `docs/integrations/cursor.md`.
 
 startup and next-round entry stay confirm-first, following same-entry primary-agent handoff synthesis -> fail closed.
 
@@ -92,7 +92,7 @@ Active `/cook` workflows now also auto-reconcile routine unrelated tracked workt
 
 ## Optional Cursor role backends
 
-When `PI_COMPLETION_CURSOR_ENABLED=1`, completion roles may execute through Cursor instead of Pi subprocesses while the Pi driver and `.agent/**` control plane stay unchanged. Default mapping: implementer via `@cursor/sdk`, reviewer/auditor/stop-judge via Cursor CLI `--mode=ask`, regrounder/bootstrapper/helpers remain on Pi. See `docs/CURSOR_BACKEND.md`.
+When `PI_COMPLETION_CURSOR_ENABLED=1`, completion roles may execute through Cursor instead of Pi subprocesses while the Pi driver and `.agent/**` control plane stay unchanged. Default mapping: implementer via `@cursor/sdk`, reviewer/auditor/stop-judge via Cursor CLI `--mode=ask`, regrounder/bootstrapper/helpers remain on Pi. See `docs/integrations/cursor.md`.
 
 For Cursor-backed roles only, `resolveRoleSubprocessOutput` falls back to fixed text report parsing when structured emit tool events are absent, so Cursor eval roles can still pass canonical transcription when reports match the packaged rubric format. Pi subprocess roles do not use this fallback.
 
@@ -156,5 +156,5 @@ npm run verify-completion-stop
 npm run release-check
 ```
 
-`npm run release-check` is the broad packaged-release verifier. It begins with `npm run verify-completion-control-plane`, then runs the helper runtime capability probe plus packed-artifact helper smoke so package-installed `pi -e ...` loading, the required helper CLI flag set, published helper assets, and JSON-mode progress/final-result capture fail closed before the broader suite continues. After that it asserts the shipped `/cook` public parity surfaces in `docs/PROTOCOL.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context/worktree-root checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes prompt-budget coverage, agent-end auto-resume delivery coverage, basis-regression proof, deterministic canonical evidence artifact coverage, and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression. It also covers completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, structured-report repair coverage, and finishes with `npm pack --dry-run`.
+`npm run release-check` is the broad packaged-release verifier. It begins with `npm run verify-completion-control-plane`, then runs the helper runtime capability probe plus packed-artifact helper smoke so package-installed `pi -e ...` loading, the required helper CLI flag set, published helper assets, and JSON-mode progress/final-result capture fail closed before the broader suite continues. After that it asserts the shipped `/cook` public parity surfaces in `docs/maintainer/protocol.md`, `CHANGELOG.md`, and the `/cook` help/fail-closed copy in `extensions/completion/index.ts`, reruns the startup/refocus/context/worktree-root checks — including the critique-aware `/cook` confirmation regression and the smoke auto-resume prompt path — includes prompt-budget coverage, agent-end auto-resume delivery coverage, basis-regression proof, deterministic canonical evidence artifact coverage, and includes deterministic active-slice contract coverage plus observability coverage, evaluator calibration, and the rubric-contract regression. It also covers completion-role gating, dirty-worktree policy, stop-wave epoch, legacy cleanup, structured-report repair coverage, and finishes with `npm pack --dry-run`.
 

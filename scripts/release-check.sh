@@ -36,7 +36,7 @@ python3 - <<'PY'
 from pathlib import Path
 
 checks = {
-    'docs/PROTOCOL.md': [
+    'docs/maintainer/protocol.md': [
         'The canonical storage contract is package-owned defaults plus ignored `.agent/**` runtime state.',
         'thin `.agent/verify_completion_*.sh` forwarders',
         'npm run verify-completion-control-plane',
@@ -76,7 +76,7 @@ python3 - <<'PY'
 from pathlib import Path
 
 checks = {
-    "docs/PROTOCOL.md": [
+    "docs/maintainer/protocol.md": [
         "You can still implement directly in ordinary chat when you do not need workflow state.",
         "When you explicitly run `/cook`, it calls a same-entry primary-agent handoff synthesis step from the current task context or inline `/cook` prompt, then asks you to **Start** or **Cancel** before rewriting canonical workflow state.",
         "If no primary-agent-generated handoff is startable, `/cook` fails closed before showing **Start** or **Cancel**.",
@@ -188,7 +188,7 @@ checks = {
 }
 
 forbidden = {
-    "docs/PROTOCOL.md": [
+    "docs/maintainer/protocol.md": [
         "asks the primary agent to prepare one in the main chat and leaves canonical state unchanged until you rerun /cook",
         "Explicit `/cook` capsules are the required startup intake for new-workflow, next-round, and replacement entry.",
         "If the primary-agent handoff step still cannot prepare a concrete workflow startup brief, `/cook` fails closed, leaves canonical `.agent/**` state unchanged, and tells you to refine the mission, repo-change intent, or key constraints in the main chat before rerunning `/cook`.",

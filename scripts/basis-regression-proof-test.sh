@@ -23,11 +23,11 @@ const assertIncludes = (file, snippet) => {
   }
 };
 
-assertIncludes('docs/PROTOCOL.md', 'bash scripts/run-basis-regression-check.sh');
-assertIncludes('docs/PROTOCOL.md', 'failed_on_basis');
-assertIncludes('docs/PROTOCOL.md', 'passed_on_basis');
-assertIncludes('docs/PROTOCOL.md', 'not_run');
-assertIncludes('docs/PROTOCOL.md', 'not_applicable');
+assertIncludes('docs/maintainer/protocol.md', 'bash scripts/run-basis-regression-check.sh');
+assertIncludes('docs/maintainer/protocol.md', 'failed_on_basis');
+assertIncludes('docs/maintainer/protocol.md', 'passed_on_basis');
+assertIncludes('docs/maintainer/protocol.md', 'not_run');
+assertIncludes('docs/maintainer/protocol.md', 'not_applicable');
 assertIncludes('skills/completion-protocol/SKILL.md', 'run-basis-regression-check.sh');
 assertIncludes('skills/completion-protocol/SKILL.md', 'failed_on_basis');
 assertIncludes('skills/completion-protocol/SKILL.md', 'not_run');
